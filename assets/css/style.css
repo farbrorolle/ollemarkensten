@@ -254,9 +254,6 @@ nav.primary-nav a.active{
   padding:0;
 }
 
-.media-post-media.detail-media iframe{ display:block; }
-.media-post-media.detail-media iframe + iframe{ margin-top: 12px; }
-
 .media-post-body h2{
   font-family: var(--serif);
   font-weight: 500;
