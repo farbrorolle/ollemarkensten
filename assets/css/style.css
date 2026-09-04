@@ -274,6 +274,8 @@ nav.primary-nav a.active{
 
 @media (max-width: 860px){
   .media-post{ grid-template-columns: 1fr; gap: 22px; padding: 40px 0; }
+  .media-post-body{ order: 1; }
+  .media-post-media{ order: 2; }
 }
 
 /* ---------- media detail ---------- */
