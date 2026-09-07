@@ -286,6 +286,7 @@ nav.primary-nav a.active{
   font-size: 17px;
   margin: -10px 0 40px;
 }
+.detail-meta a{ color: var(--accent); border-bottom: 1px solid currentColor; }
 
 .detail-media{
   max-width: 920px;
