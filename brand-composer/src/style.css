@@ -254,6 +254,28 @@ body {
 }
 
 /* Timeline / arrangement */
+.timeline-palette {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.timeline-palette-chip {
+  background: var(--bg);
+  border: 1px dashed var(--panel-border);
+  color: var(--text-dim);
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.timeline-palette-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .timeline-ruler {
   position: relative;
   height: 16px;
@@ -285,10 +307,65 @@ body {
   color: var(--accent);
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 4px;
   padding-left: 6px;
+  padding-right: 2px;
   overflow: hidden;
   white-space: nowrap;
   box-sizing: border-box;
+  cursor: grab;
+  user-select: none;
+}
+
+.timeline-section-block:active {
+  cursor: grabbing;
+}
+
+.timeline-section-dragging {
+  opacity: 0.4;
+}
+
+.timeline-section-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timeline-section-remove {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  line-height: 14px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.timeline-section-remove:hover {
+  background: var(--accent);
+  color: white;
+}
+
+.timeline-section-resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+}
+
+.timeline-drop-indicator {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--text);
+  pointer-events: none;
 }
 
 .timeline-body {

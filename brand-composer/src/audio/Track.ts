@@ -126,6 +126,20 @@ export class Track {
     return Array.from(this.takes.keys());
   }
 
+  /**
+   * Clears every section-take player's recorded start/stop state and resets
+   * its fade gain to silent. Call before re-scheduling a changed arrangement
+   * (ArrangementManager.schedule only ever *adds* start/stop points; without
+   * this, an edited arrangement would pile new ones on top of stale old ones).
+   */
+  resyncSectionTakes(): void {
+    for (const take of this.takes.values()) {
+      take.player.unsync().sync();
+      take.takeGain.gain.cancelScheduledValues(0);
+      take.takeGain.gain.value = 0;
+    }
+  }
+
   /** A representative player for waveform display / metering (legacy player, or the first section take). */
   get displayPlayer(): Tone.Player {
     if (this.legacyPlayer) return this.legacyPlayer;

@@ -4,7 +4,7 @@ import { Track } from "./Track.ts";
 import { Sidechain } from "./Sidechain.ts";
 import type { SidechainTarget } from "./Sidechain.ts";
 import { ArrangementManager } from "./ArrangementManager.ts";
-import type { ProjectConfig } from "../project/types.ts";
+import type { CueConfig, ProjectConfig, SectionConfig } from "../project/types.ts";
 
 /**
  * Owns Tone.Transport, the MasterBus (-> Limiter -> speakers) and every
@@ -20,6 +20,7 @@ export class AudioEngine {
   readonly arrangement = new ArrangementManager();
 
   private projectTitle = "";
+  private sectionsById = new Map<string, SectionConfig>();
 
   constructor() {
     this.masterBus = new Bus("master", "MasterBus");
@@ -158,19 +159,34 @@ export class AudioEngine {
     }
 
     // Arrangement: schedule every cue up front (fixed positions, not a live-triggered thing).
-    const sections = new Map((config.sections ?? []).map((section) => [section.id, section]));
+    this.sectionsById = new Map((config.sections ?? []).map((section) => [section.id, section]));
     if (config.arrangement && config.loopBars) {
-      this.arrangement.schedule(config.arrangement, config.loopBars, sections, Array.from(this.tracks.values()));
+      this.applyArrangement(config.arrangement, config.loopBars);
     } else {
       // No arrangement given: fall back to a static initial section, no scheduling.
       const initialSection = config.initialSection ?? config.sections?.[0]?.id;
-      const section = initialSection ? sections.get(initialSection) : undefined;
+      const section = initialSection ? this.sectionsById.get(initialSection) : undefined;
       if (section) {
         for (const track of this.tracks.values()) {
           if (!track.isSectioned) track.sectionGain.gain.value = section.activeTracks.includes(track.id) ? 1 : 0;
         }
       }
     }
+  }
+
+  /**
+   * (Re-)schedules the arrangement on the current project's tracks -- used
+   * both for the initial load and whenever the timeline UI edits the song
+   * form (reorder/resize/add/remove a section). Rewinds the transport to
+   * bar 1 and clears any previously scheduled cues/take start-stop state
+   * before scheduling the new one, so edits never leave stale automation
+   * or a section-take player started twice.
+   */
+  applyArrangement(cues: CueConfig[], loopBars: number): void {
+    Tone.getTransport().stop(); // also resets position to 0
+    Tone.getTransport().cancel(0);
+    for (const track of this.tracks.values()) track.resyncSectionTakes();
+    this.arrangement.schedule(cues, loopBars, this.sectionsById, Array.from(this.tracks.values()));
   }
 
   dispose(): void {
