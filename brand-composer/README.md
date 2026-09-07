@@ -32,18 +32,22 @@ src/
                              är med i) eller en Player per sektion (olika
                              ljudfil per sektion, samma spårnamn/mixerkanal)
     ArrangementManager.ts   Schemalägger hela arrangemanget en gång vid
-                             inläsning: fasta cue-punkter (takt -> sektion),
-                             inga live-triggade övergångar
+                             inläsning: fasta cue-punkter (takt -> sektion,
+                             + övergångstyp), inga live-triggade övergångar
+    TransitionFx.ts          Delade synthesnoder för övergångstyperna
+                             "filter-sweep" och "riser" (masterfilter +
+                             brus-riser), triggas av ArrangementManager
     Sidechain.ts            Envelope-follower-baserad ducking (threshold/ratio/
                              attack/release), realtidsjusterbar
+    wav.ts                  WAV-encoding + nedladdning för stereo-export
   project/
     types.ts                 ProjectConfig-typerna (bpm, tracks, buses,
-                             sidechains, sections, arrangement)
+                             sidechains, sections, arrangement, transition)
     loadProjectFromConfig.ts  Läser in ett projekt från ett config-objekt/JSON-fil
                              och sätter Tone.Transport.bpm därefter
-  ui/                       Enkelt vanilla-TS test-UI: transport, tidslinje
-                             (arrangemang + waveforms), mixerkanaler,
-                             master-limiter-mätare, sidechain-reglage
+  ui/                       Enkelt vanilla-TS test-UI: transport, redigerbar
+                             tidslinje (arrangemang + waveforms), mixerkanaler,
+                             master-limiter-mätare + export, sidechain-reglage
   main.ts                   Startpunkt: laddar public/config/demo-project.json
 ```
 
@@ -68,6 +72,45 @@ Ett spår kan vara med i flera sektioner på två sätt:
   sin taktgräns, med en kort klickfri urblandning (`takeGain`). Demots
   `bass`-spår använder detta: `bass_verse.wav` i versen, `bass_chorus.wav`
   (en piggare åttondelspumpande basgång) i refrängen, samma mixerkanal.
+
+### Redigera arrangemanget i tidslinjen
+
+Tidslinjen är inte bara en visualisering — sektionsblocken går att redigera
+direkt, drag-and-drop:
+- **Dra ett block** för att flytta det till en annan plats i arrangemanget.
+- **Dra högerkanten** på ett block för att ändra dess längd i takter.
+- **× i hörnet** tar bort en sektion (minst en måste finnas kvar).
+- **Chips** ovanför tidslinjen lägger till en ny instans av valfri sektionstyp
+  i slutet.
+
+Varje ändring bygger om cue-listan från blockens aktuella ordning/längder och
+skickar den direkt till `AudioEngine.applyArrangement()` — ingen separat
+"spara". Den metoden är säker att anropa upprepade gånger: den stoppar
+transporten (spolar till takt 1), rensar all schemalagd cue/gain-automation,
+och synkar om varje sektionerat spårs per-sektion-spelare
+(`Track.resyncSectionTakes` — unsync+sync rensar en `Player`s inspelade
+start/stopp-tillstånd) innan det nya arrangemanget schemaläggs, så upprepade
+redigeringar aldrig lämnar kvar gammal automation eller dubbelschemalagda
+spelare.
+
+### Övergångar mellan sektioner
+
+Varje cue (utom arrangemangets första) har en övergångstyp, redigerbar via en
+liten meny i sektionsblocket i tidslinjen:
+
+- **Cut** — nästan momentant byte, ingen hörbar toning.
+- **Crossfade** (standard) — kort musikalisk toning (en åttondel) mellan
+  utgående/inkommande.
+- **Filter sweep** — som crossfade, plus att master-lowpass-filtret sveper
+  igen en takt innan cuen och poppar upp igen exakt på den.
+- **Riser** — som crossfade, plus ett syntetiskt brus-riser (`Tone.Noise` +
+  bandpass-filter) som bygger upp och kulminerar exakt på cuen.
+
+Cut/crossfade avgör bara hur långa de befintliga gain-rampningarna
+(`sectionGain`/`takeGain`) är — samma schemaläggningskod som redan fanns.
+Filter sweep/riser lägger till ett extra, återanvändbart effektlager
+(`TransitionFx`) ovanpå det, inkopplat i masterkedjan (`masterBus -> filter
+-> limiter`) respektive mixat in i master-kanalen.
 
 ### Varför spåren håller sig fassynkade
 
@@ -99,6 +142,22 @@ Web Audio har ingen riktig sidechain-ingång på `DynamicsCompressorNode`, så
 `Sidechain.ts` använder en `Tone.Meter` som envelope-follower på källspåret
 och rampar målets gain-nod i realtid utifrån threshold/ratio (klassisk
 kompressorformel) med separata attack-/release-ramptider.
+
+### Exportera till stereo-WAV
+
+**Exportera stereo-WAV**-knappen i Master Chain-panelen bouncar hela mixen —
+precis som den låter just nu (volym/pan/mute/solo, lokalt utbytta filer,
+sidechain, övergångar, allt) — till en nedladdningsbar 44.1kHz/16-bit
+stereo-WAV, en hel loop från takt 1.
+
+Det här är en **realtidsinspelning**, inte ett offline-render: `Tone.Recorder`
+(byggd på `MediaRecorder`) tappar av master-utgången medan arrangemanget
+faktiskt spelas upp, och exporten tar därför lika lång tid som låten är. Det
+är ett medvetet val — sidechain-duckningen bygger på `Tone.Meter`/
+`AnalyserNode`, som bara ger meningsfulla värden mot en live `AudioContext`;
+ett offline-render (`Tone.Offline`) hade tystat duckningen helt. Efter
+inspelningen avkodas den (webm/opus) och skrivs om till en ren WAV-fil
+(`src/audio/wav.ts`) för maximal kompatibilitet med andra DAW:ar.
 
 ## Demo-projekt
 

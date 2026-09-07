@@ -1,7 +1,7 @@
 import * as Tone from "tone";
 import type { AudioEngine } from "../audio/AudioEngine.ts";
 import type { Track } from "../audio/Track.ts";
-import type { CueConfig, SectionConfig } from "../project/types.ts";
+import type { CueConfig, SectionConfig, TransitionType } from "../project/types.ts";
 
 export interface TimelineHandle {
   update(): void;
@@ -12,11 +12,19 @@ export interface TimelineHandle {
 interface EditableSegment {
   sectionId: string;
   lengthBars: number;
+  /** Transition used entering this segment. Meaningless (and hidden) for whichever segment is currently first. */
+  transition: TransitionType;
 }
 
 const LANE_HEIGHT = 40;
 const WAVE_COLOR = "#7c5cff";
 const DEFAULT_NEW_SEGMENT_BARS = 4;
+const TRANSITION_LABELS: Record<TransitionType, string> = {
+  cut: "Cut",
+  crossfade: "Crossfade",
+  "filter-sweep": "Filter sweep",
+  riser: "Riser",
+};
 
 function drawWaveformSlice(ctx: CanvasRenderingContext2D, data: Float32Array, x0: number, x1: number, height: number): void {
   const w = Math.max(1, Math.round(x1) - Math.round(x0));
@@ -65,6 +73,7 @@ export function mountTimeline(root: HTMLElement, engine: AudioEngine, sections: 
   let editableSegments: EditableSegment[] = segments.map((s) => ({
     sectionId: s.sectionId,
     lengthBars: s.endBar - s.startBar,
+    transition: s.transition,
   }));
 
   root.innerHTML = `
@@ -91,7 +100,7 @@ export function mountTimeline(root: HTMLElement, engine: AudioEngine, sections: 
     chip.textContent = `+ ${section.name}`;
     chip.title = `Lägg till en ${section.name}-sektion i slutet av arrangemanget`;
     chip.addEventListener("click", () => {
-      editableSegments.push({ sectionId: section.id, lengthBars: DEFAULT_NEW_SEGMENT_BARS });
+      editableSegments.push({ sectionId: section.id, lengthBars: DEFAULT_NEW_SEGMENT_BARS, transition: "crossfade" });
       commit();
     });
     palette.appendChild(chip);
@@ -221,6 +230,27 @@ export function mountTimeline(root: HTMLElement, engine: AudioEngine, sections: 
       label.textContent = sectionNameById.get(seg.sectionId) ?? seg.sectionId;
       block.appendChild(label);
 
+      if (index > 0) {
+        const transitionSelect = document.createElement("select");
+        transitionSelect.className = "timeline-section-transition";
+        transitionSelect.title = "Övergång in i den här sektionen";
+        transitionSelect.draggable = false;
+        for (const [value, text] of Object.entries(TRANSITION_LABELS)) {
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = text;
+          if (value === seg.transition) option.selected = true;
+          transitionSelect.appendChild(option);
+        }
+        transitionSelect.addEventListener("pointerdown", (e) => e.stopPropagation());
+        transitionSelect.addEventListener("dragstart", (e) => e.preventDefault());
+        transitionSelect.addEventListener("change", () => {
+          editableSegments[index]!.transition = transitionSelect.value as TransitionType;
+          commit();
+        });
+        block.appendChild(transitionSelect);
+      }
+
       if (editableSegments.length > 1) {
         const removeBtn = document.createElement("button");
         removeBtn.type = "button";
@@ -299,7 +329,7 @@ export function mountTimeline(root: HTMLElement, engine: AudioEngine, sections: 
   function commit(): void {
     let bar = 1;
     const cues: CueConfig[] = editableSegments.map((seg) => {
-      const cue = { bar, section: seg.sectionId };
+      const cue: CueConfig = { bar, section: seg.sectionId, transition: seg.transition };
       bar += seg.lengthBars;
       return cue;
     });

@@ -4,15 +4,18 @@ import { Track } from "./Track.ts";
 import { Sidechain } from "./Sidechain.ts";
 import type { SidechainTarget } from "./Sidechain.ts";
 import { ArrangementManager } from "./ArrangementManager.ts";
+import { TransitionFx } from "./TransitionFx.ts";
+import { reencodeBlobAsWav } from "./wav.ts";
 import type { CueConfig, ProjectConfig, SectionConfig } from "../project/types.ts";
 
 /**
- * Owns Tone.Transport, the MasterBus (-> Limiter -> speakers) and every
- * Track/Bus/Sidechain in the currently loaded project.
+ * Owns Tone.Transport, the MasterBus (-> filter -> Limiter -> speakers) and
+ * every Track/Bus/Sidechain in the currently loaded project.
  */
 export class AudioEngine {
   readonly masterBus: Bus;
   readonly limiter: Tone.Limiter;
+  readonly transitionFx: TransitionFx;
 
   readonly buses = new Map<string, Bus>();
   readonly tracks = new Map<string, Track>();
@@ -25,8 +28,12 @@ export class AudioEngine {
   constructor() {
     this.masterBus = new Bus("master", "MasterBus");
     this.limiter = new Tone.Limiter(-1);
-    this.masterBus.connect(this.limiter);
+    this.transitionFx = new TransitionFx();
+
+    this.masterBus.connect(this.transitionFx.filter);
+    this.transitionFx.filter.connect(this.limiter);
     this.limiter.connect(Tone.getDestination());
+    this.transitionFx.connectRiser(this.masterBus.channel);
 
     Tone.getTransport().bpm.value = 120;
   }
@@ -186,12 +193,64 @@ export class AudioEngine {
     Tone.getTransport().stop(); // also resets position to 0
     Tone.getTransport().cancel(0);
     for (const track of this.tracks.values()) track.resyncSectionTakes();
-    this.arrangement.schedule(cues, loopBars, this.sectionsById, Array.from(this.tracks.values()));
+    this.arrangement.schedule(cues, loopBars, this.sectionsById, Array.from(this.tracks.values()), this.transitionFx);
+  }
+
+  /**
+   * Bounces the current mix (whatever the live mixer/arrangement state
+   * actually sounds like right now -- mute/solo, volume/pan, local file
+   * swaps, sidechain, transitions, the works) down to a stereo WAV, by
+   * recording the real master output for exactly one loop from the top.
+   *
+   * This is a real-time capture (MediaRecorder via Tone.Recorder), not an
+   * offline render: sidechain ducking depends on Tone.Meter/AnalyserNode,
+   * which only produces meaningful readings against a live AudioContext --
+   * an OfflineAudioContext render would silently drop the ducking. The
+   * tradeoff is the export takes as long as the arrangement itself (and is
+   * audible while it runs), which also makes "what you hear is what you get"
+   * an accurate description.
+   */
+  async exportStereoMix(onProgress?: (fraction: number) => void): Promise<Blob> {
+    if (!Tone.Recorder.supported) {
+      throw new Error("Den här webbläsaren saknar stöd för MediaRecorder, kan inte exportera.");
+    }
+    const loopBars = this.arrangement.totalBars;
+    if (!loopBars) throw new Error("Inget arrangemang att exportera.");
+
+    await this.unlockAudio();
+    const loopSeconds = Tone.Time(`${loopBars}m`).toSeconds();
+
+    const recorder = new Tone.Recorder();
+    this.limiter.connect(recorder);
+
+    this.stop(); // rewind to bar 1 so the export always captures exactly one full loop from the top
+    await recorder.start();
+    this.play();
+
+    const startedAt = performance.now();
+    await new Promise<void>((resolve) => {
+      const interval = window.setInterval(() => {
+        const elapsed = (performance.now() - startedAt) / 1000;
+        onProgress?.(Math.min(1, elapsed / loopSeconds));
+        if (elapsed >= loopSeconds) {
+          window.clearInterval(interval);
+          resolve();
+        }
+      }, 100);
+    });
+
+    this.pause();
+    const recordedBlob = await recorder.stop();
+    this.limiter.disconnect(recorder);
+    recorder.dispose();
+
+    return reencodeBlobAsWav(recordedBlob);
   }
 
   dispose(): void {
     this.clearProject();
     this.masterBus.dispose();
     this.limiter.dispose();
+    this.transitionFx.dispose();
   }
 }

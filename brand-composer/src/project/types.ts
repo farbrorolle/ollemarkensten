@@ -64,12 +64,23 @@ export interface SectionConfig {
   activeTracks: string[];
 }
 
+/**
+ * How playback bridges into a cue:
+ * - "cut": near-instant switch, no blend.
+ * - "crossfade": a short musical blend (outgoing fades out / incoming fades in).
+ * - "filter-sweep": the master lowpass filter sweeps closed then pops back open, on top of a crossfade.
+ * - "riser": a synthesized noise riser builds and peaks at the cue, on top of a crossfade.
+ */
+export type TransitionType = "cut" | "crossfade" | "filter-sweep" | "riser";
+
 /** A fixed point in the arrangement where playback switches to a different section. */
 export interface CueConfig {
   /** 1-indexed bar number, absolute from the start of the arrangement. */
   bar: number;
   /** Section id (from `sections`) that becomes active at this bar. */
   section: string;
+  /** Transition into this cue. Ignored for the arrangement's first cue. Defaults to "crossfade". */
+  transition?: TransitionType;
 }
 
 export interface ProjectConfig {

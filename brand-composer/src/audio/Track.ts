@@ -1,9 +1,6 @@
 import * as Tone from "tone";
 import type { TrackConfig } from "../project/types.ts";
 
-/** Short crossfade between section takes at a cue boundary, so switches never click. */
-export const TAKE_FADE_SECONDS = 0.008;
-
 interface SectionTake {
   readonly sectionId: string;
   readonly player: Tone.Player;
