@@ -52,7 +52,10 @@ body {
 
 .layout {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  /* minmax(0, 1fr), not plain 1fr: otherwise a child's intrinsic content
+     (range inputs, canvases, grid rows with fixed-px columns) can force
+     the whole grid wider than the viewport instead of wrapping/shrinking. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -238,7 +241,7 @@ body {
 /* Sidechain */
 .sidechain-row {
   display: grid;
-  grid-template-columns: 100px repeat(4, 1fr);
+  grid-template-columns: 100px repeat(4, minmax(0, 1fr));
   gap: 10px;
   align-items: center;
   padding: 8px 0;
@@ -437,6 +440,7 @@ body {
   flex: 1;
   width: 100%;
   height: 100%;
+  min-width: 0; /* replaced elements ignore flex-shrink for their auto min-width otherwise, forcing overflow */
   display: block;
 }
 
@@ -449,10 +453,65 @@ body {
   pointer-events: none;
 }
 
+/* Mobile-friendly section editor: same edits as the draggable blocks above
+   (length/order/remove), but as plain buttons so touch devices work too. */
+.timeline-segment-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: 10px;
+}
+
+.segment-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--panel-border);
+}
+
+.segment-row:first-child {
+  border-top: none;
+}
+
+.segment-row-name {
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 70px;
+}
+
+.segment-row-length,
+.segment-row-move {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.segment-row-bars {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  min-width: 62px;
+  text-align: center;
+}
+
+.btn-step {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.btn-step:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
 /* Tracks */
 .track-list-header {
   display: grid;
-  grid-template-columns: 140px 1fr 120px 40px 40px;
+  grid-template-columns: 140px minmax(0, 1fr) 120px 40px 40px;
   gap: 12px;
   padding: 0 4px 8px;
   font-size: 11px;
@@ -463,7 +522,7 @@ body {
 
 .track-row {
   display: grid;
-  grid-template-columns: 140px 1fr 120px 40px 40px;
+  grid-template-columns: 140px minmax(0, 1fr) 120px 40px 40px;
   gap: 12px;
   align-items: center;
   padding: 8px 4px;
@@ -517,4 +576,33 @@ body {
 
 .track-row-local-file .track-name {
   color: var(--green);
+}
+
+/* Mobile: stack the two-column layout, and shrink grid rows whose fixed-px
+   columns (track mixer, sidechain params) don't otherwise fit a narrow
+   screen. Placed last in the file so it wins over the base rules above at
+   equal specificity. */
+@media (max-width: 640px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .track-list-header,
+  .track-row {
+    grid-template-columns: 84px minmax(0, 1fr) 64px 34px 34px;
+    gap: 6px;
+  }
+
+  .track-name-cell {
+    overflow: hidden;
+  }
+
+  .sidechain-row {
+    grid-template-columns: 1fr 1fr;
+    row-gap: 4px;
+  }
+
+  .sidechain-name {
+    grid-column: 1 / -1;
+  }
 }

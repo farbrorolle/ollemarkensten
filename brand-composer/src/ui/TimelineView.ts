@@ -84,6 +84,7 @@ export function mountTimeline(root: HTMLElement, engine: AudioEngine, sections: 
       <div class="timeline-lanes" data-lanes></div>
       <div class="timeline-playhead" data-playhead></div>
     </div>
+    <div class="timeline-segment-list" data-segment-list></div>
   `;
 
   const palette = root.querySelector<HTMLElement>("[data-palette]")!;
@@ -92,6 +93,7 @@ export function mountTimeline(root: HTMLElement, engine: AudioEngine, sections: 
   const body = root.querySelector<HTMLElement>("[data-body]")!;
   const lanesEl = root.querySelector<HTMLElement>("[data-lanes]")!;
   const playhead = root.querySelector<HTMLElement>("[data-playhead]")!;
+  const segmentList = root.querySelector<HTMLElement>("[data-segment-list]")!;
 
   for (const section of sections) {
     const chip = document.createElement("button");
@@ -280,6 +282,92 @@ export function mountTimeline(root: HTMLElement, engine: AudioEngine, sections: 
     });
   }
 
+  /**
+   * A plain, full-width list mirroring the timeline blocks with the same
+   * edits (length, order, remove) as normal buttons -- unlike the drag
+   * gestures on the blocks above, this works reliably on touch/mobile.
+   */
+  function renderSegmentList(): void {
+    segmentList.innerHTML = "";
+    editableSegments.forEach((seg, index) => {
+      const row = document.createElement("div");
+      row.className = "segment-row";
+
+      const name = document.createElement("span");
+      name.className = "segment-row-name";
+      name.textContent = sectionNameById.get(seg.sectionId) ?? seg.sectionId;
+      row.appendChild(name);
+
+      const lengthGroup = document.createElement("span");
+      lengthGroup.className = "segment-row-length";
+      const decBtn = document.createElement("button");
+      decBtn.type = "button";
+      decBtn.className = "btn btn-step";
+      decBtn.textContent = "−";
+      decBtn.title = "Korta av en takt";
+      decBtn.addEventListener("click", () => {
+        seg.lengthBars = Math.max(1, seg.lengthBars - 1);
+        commit();
+      });
+      const barsLabel = document.createElement("span");
+      barsLabel.className = "segment-row-bars";
+      barsLabel.textContent = `${seg.lengthBars} takt${seg.lengthBars === 1 ? "" : "er"}`;
+      const incBtn = document.createElement("button");
+      incBtn.type = "button";
+      incBtn.className = "btn btn-step";
+      incBtn.textContent = "+";
+      incBtn.title = "Förläng en takt";
+      incBtn.addEventListener("click", () => {
+        seg.lengthBars += 1;
+        commit();
+      });
+      lengthGroup.append(decBtn, barsLabel, incBtn);
+      row.appendChild(lengthGroup);
+
+      const moveGroup = document.createElement("span");
+      moveGroup.className = "segment-row-move";
+      const leftBtn = document.createElement("button");
+      leftBtn.type = "button";
+      leftBtn.className = "btn btn-step";
+      leftBtn.textContent = "◀";
+      leftBtn.title = "Flytta tidigare i arrangemanget";
+      leftBtn.disabled = index === 0;
+      leftBtn.addEventListener("click", () => {
+        if (index === 0) return;
+        [editableSegments[index - 1], editableSegments[index]] = [editableSegments[index]!, editableSegments[index - 1]!];
+        commit();
+      });
+      const rightBtn = document.createElement("button");
+      rightBtn.type = "button";
+      rightBtn.className = "btn btn-step";
+      rightBtn.textContent = "▶";
+      rightBtn.title = "Flytta senare i arrangemanget";
+      rightBtn.disabled = index === editableSegments.length - 1;
+      rightBtn.addEventListener("click", () => {
+        if (index === editableSegments.length - 1) return;
+        [editableSegments[index], editableSegments[index + 1]] = [editableSegments[index + 1]!, editableSegments[index]!];
+        commit();
+      });
+      moveGroup.append(leftBtn, rightBtn);
+      row.appendChild(moveGroup);
+
+      if (editableSegments.length > 1) {
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "btn btn-step";
+        removeBtn.textContent = "×";
+        removeBtn.title = "Ta bort sektion";
+        removeBtn.addEventListener("click", () => {
+          editableSegments.splice(index, 1);
+          commit();
+        });
+        row.appendChild(removeBtn);
+      }
+
+      segmentList.appendChild(row);
+    });
+  }
+
   function drawTrackLane(track: Track, canvas: HTMLCanvasElement): void {
     const width = canvas.clientWidth || 800;
     canvas.width = width;
@@ -341,6 +429,7 @@ export function mountTimeline(root: HTMLElement, engine: AudioEngine, sections: 
 
     renderRuler();
     renderSections();
+    renderSegmentList();
     for (const track of tracks) {
       const entry = lanesByTrack.get(track.id);
       if (entry) drawTrackLane(track, entry.canvas);
@@ -349,6 +438,7 @@ export function mountTimeline(root: HTMLElement, engine: AudioEngine, sections: 
 
   renderRuler();
   renderSections();
+  renderSegmentList();
 
   body.addEventListener("click", (event) => {
     const rect = body.getBoundingClientRect();
