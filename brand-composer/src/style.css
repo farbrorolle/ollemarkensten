@@ -277,11 +277,40 @@ body {
   border-top: none;
 }
 
+.track-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .track-name {
   font-size: 14px;
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn-file {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+  flex: 0 0 auto;
 }
 
 .track-row input[type="range"] {
   width: 100%;
+}
+
+.track-row-drag-over {
+  outline: 1px dashed var(--accent);
+  outline-offset: -1px;
+  background: var(--accent-dim);
+}
+
+.track-row-local-file .track-name {
+  color: var(--green);
 }

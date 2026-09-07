@@ -25,6 +25,9 @@ export class Track {
 
   private _mute: boolean;
   private _solo: boolean;
+  private objectUrl: string | null = null;
+  /** True once a local file (drag-and-drop / file picker) has replaced the config-provided stem. */
+  isLocalFile = false;
 
   constructor(config: TrackConfig) {
     this.id = config.id;
@@ -49,6 +52,16 @@ export class Track {
 
   async load(url: string): Promise<void> {
     await this.player.load(url);
+  }
+
+  /** Loads a local audio file (from a <input type="file"> or a drag-and-drop) as this track's stem. */
+  async loadFromFile(file: File): Promise<void> {
+    const url = URL.createObjectURL(file);
+    await this.player.load(url);
+    const previous = this.objectUrl;
+    this.objectUrl = url;
+    this.isLocalFile = true;
+    if (previous) URL.revokeObjectURL(previous);
   }
 
   /** Node a Sidechain instance can duck to affect only this track. */
@@ -109,5 +122,6 @@ export class Track {
     this.sidechainGain.dispose();
     this.sectionGain.dispose();
     this.channel.dispose();
+    if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
   }
 }
