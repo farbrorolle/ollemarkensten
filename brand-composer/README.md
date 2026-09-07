@@ -81,3 +81,25 @@ syntetiskt genererade loopar (120 BPM, 4 takter, fassynkade) via
 Byt ut `public/config/demo-project.json` och `public/audio/*.wav` mot
 riktiga stems exporterade från Logic Pro för att använda motorn på ett
 riktigt projekt; `loadProjectFromConfig` kräver ingen annan kodändring.
+
+## Extern lagring för riktiga stems (Supabase Storage)
+
+`file` i `ProjectConfig` är bara en URL, så motorn bryr sig inte om en stem
+ligger lokalt i `public/audio/` eller på en extern server. Riktiga Logic
+Pro-stems (ofta 30–50MB/spår) hör inte hemma i git-repot — GitHub har en
+hård gräns på 100MB per fil och repot blir snabbt segt att klona.
+
+Ett Supabase Storage-projekt (`OlleMan`, ref `oztzxrxfwvvccrqzhiry`) är
+redan förberett med en publik bucket `stems` (public read-policy skapad).
+`public/config/demo-project.supabase.json` är samma demoprojekt fast med
+stems-URL:er som pekar dit — öppna appen med `?config=supabase` i URL:en
+för att testa den varianten.
+
+Så lägger du in riktiga låtar:
+1. Ladda upp WAV-filerna via Supabase-dashboarden → projektet "OlleMan" →
+   **Storage → stems** (drag-and-drop). Den här sandlådans nätverkspolicy
+   tillåter inte att jag laddar upp filer dit programmatiskt, så det steget
+   görs manuellt i dashboarden.
+2. Filens publika URL blir
+   `https://oztzxrxfwvvccrqzhiry.supabase.co/storage/v1/object/public/stems/<filnamn>.wav`
+3. Peka `file` i en ny `ProjectConfig`/JSON på den URL:en. Klart.

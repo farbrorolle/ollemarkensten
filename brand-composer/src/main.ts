@@ -16,7 +16,11 @@ const sidechainRoot = document.querySelector<HTMLElement>("#sidechain-panel")!;
 const transitionBtn = document.querySelector<HTMLButtonElement>("#transition-btn")!;
 
 async function bootstrap(): Promise<void> {
-  const config = await loadProjectFromUrl(engine, "/config/demo-project.json");
+  // ?config=supabase loads the same demo project with stems served from Supabase
+  // Storage instead of the bundled local WAV files -- see public/config/demo-project.supabase.json.
+  const useSupabase = new URLSearchParams(location.search).get("config") === "supabase";
+  const configUrl = useSupabase ? "/config/demo-project.supabase.json" : "/config/demo-project.json";
+  const config = await loadProjectFromUrl(engine, configUrl);
   titleEl.textContent = config.title;
 
   const transportPanel = mountTransportPanel(transportRoot, engine);
