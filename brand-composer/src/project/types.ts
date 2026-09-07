@@ -13,8 +13,20 @@ export interface BusConfig {
 export interface TrackConfig {
   id: string;
   name: string;
-  /** Path to the WAV stem, relative to the app root (e.g. exported from Logic Pro). */
-  file: string;
+  /**
+   * Path to the WAV stem, relative to the app root (e.g. exported from Logic Pro).
+   * Use this for a track whose audio is identical across every section it appears
+   * in (it just gets muted/unmuted per section). Omit in favor of `sections` when
+   * the track plays genuinely different audio per section (e.g. a different
+   * bassline in the chorus).
+   */
+  file?: string;
+  /**
+   * Per-section audio for this track: section id -> WAV file. A section id not
+   * present here means this track is silent during that section. Takes
+   * precedence over `file` when set.
+   */
+  sections?: Record<string, string>;
   /** Bus id this track routes into. Omit (or "master") to route straight to MasterBus. */
   bus?: string;
   volume?: number; // dB, default 0
@@ -39,11 +51,25 @@ export interface SidechainConfig {
   release: number;
 }
 
-/** A named arrangement section: which tracks are audible while it's active. */
+/**
+ * A named arrangement section (Verse, Chorus, ...). For tracks that use a
+ * single `file` across sections, `activeTracks` says which of them are
+ * audible while this section plays. Tracks that use `sections` (per-section
+ * audio) don't need to be listed here -- their membership in a section is
+ * implied by having a file entry for it.
+ */
 export interface SectionConfig {
   id: string;
   name: string;
   activeTracks: string[];
+}
+
+/** A fixed point in the arrangement where playback switches to a different section. */
+export interface CueConfig {
+  /** 1-indexed bar number, absolute from the start of the arrangement. */
+  bar: number;
+  /** Section id (from `sections`) that becomes active at this bar. */
+  section: string;
 }
 
 export interface ProjectConfig {
@@ -55,6 +81,18 @@ export interface ProjectConfig {
   tracks: TrackConfig[];
   sidechains?: SidechainConfig[];
   sections?: SectionConfig[];
-  /** Section id active immediately on load. Defaults to the first entry in `sections`. */
+  /**
+   * The song's arrangement as a sorted list of cues, e.g.
+   * [{bar: 1, section: "verse"}, {bar: 9, section: "chorus"}]. Scheduled once
+   * at load time on Tone.Transport -- no live triggering needed. Requires
+   * `loopBars` so the transport knows where the arrangement repeats.
+   */
+  arrangement?: CueConfig[];
+  /** Total arrangement length in bars; Tone.Transport loops [0, loopBars) when `arrangement` is set. */
+  loopBars?: number;
+  /**
+   * Section id active immediately on load when no `arrangement` is given
+   * (legacy/live mode). Defaults to the first entry in `sections`.
+   */
   initialSection?: string;
 }

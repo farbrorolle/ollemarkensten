@@ -10,21 +10,21 @@
     <div id="app">
       <header class="app-header">
         <h1 data-title>Brand Composer</h1>
-        <span class="subtitle">Web-DAW-motor · Tone.js · takt-synkade övergångar</span>
+        <span class="subtitle">Web-DAW-motor · Tone.js · arrangerade takt-synkade sektioner</span>
       </header>
 
       <main class="layout">
         <section class="panel panel-transport" id="transport-panel"></section>
 
+        <section class="panel panel-timeline">
+          <h2>Arrangemang</h2>
+          <p class="hint">Fasta cue-punkter, schemalagda vid inläsning — klicka i tidslinjen för att hoppa.</p>
+          <div id="timeline-view"></div>
+        </section>
+
         <section class="panel panel-master">
           <h2>Master Chain</h2>
           <div id="master-panel"></div>
-        </section>
-
-        <section class="panel panel-transition">
-          <h2>Övergång (ELIAS-logik)</h2>
-          <p class="hint">Kö:ar sektionsbyte till nästa hela takt (Transport +1m) — 100% fassynkat, inga spår startas om.</p>
-          <button id="transition-btn" class="btn btn-accent">Queue transition (+1 bar)</button>
         </section>
 
         <section class="panel panel-sidechain">

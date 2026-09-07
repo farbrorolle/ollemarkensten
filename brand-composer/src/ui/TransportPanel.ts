@@ -47,7 +47,7 @@ export function mountTransportPanel(root: HTMLElement, engine: AudioEngine): Tra
     if (Number.isFinite(value) && value > 0) engine.setBpm(value);
   });
 
-  engine.transitions.setOnSectionChange((sectionId) => {
+  engine.arrangement.setOnSectionChange((sectionId) => {
     sectionEl.textContent = sectionId;
   });
 

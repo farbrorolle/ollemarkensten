@@ -1,14 +1,22 @@
 import type { AudioEngine } from "../audio/AudioEngine.ts";
 import type { Track } from "../audio/Track.ts";
 
-function mountTrackRow(container: HTMLElement, track: Track, engine: AudioEngine): void {
+function mountTrackRow(
+  container: HTMLElement,
+  track: Track,
+  engine: AudioEngine,
+  onTrackChanged?: (trackId: string) => void,
+): void {
   const row = document.createElement("div");
   row.className = "track-row";
+  const loadControls = track.isSectioned
+    ? `<span class="track-name-hint" title="Spår med olika ljud per sektion kan inte ersättas med en enda lokal fil">per sektion</span>`
+    : `<button data-load class="btn btn-file" title="Ladda lokal WAV-fil (eller dra och släpp)">📁</button>
+       <input data-file-input type="file" accept="audio/*" hidden />`;
   row.innerHTML = `
     <span class="track-name-cell">
       <span class="track-name" data-name>${track.name}</span>
-      <button data-load class="btn btn-file" title="Ladda lokal WAV-fil (eller dra och släpp)">📁</button>
-      <input data-file-input type="file" accept="audio/*" hidden />
+      ${loadControls}
     </span>
     <input data-volume type="range" min="-60" max="6" step="0.5" title="Volume (dB)" />
     <input data-pan type="range" min="-1" max="1" step="0.05" title="Pan" />
@@ -18,8 +26,8 @@ function mountTrackRow(container: HTMLElement, track: Track, engine: AudioEngine
   container.appendChild(row);
 
   const nameEl = row.querySelector<HTMLElement>("[data-name]")!;
-  const loadBtn = row.querySelector<HTMLButtonElement>("[data-load]")!;
-  const fileInput = row.querySelector<HTMLInputElement>("[data-file-input]")!;
+  const loadBtn = row.querySelector<HTMLButtonElement>("[data-load]");
+  const fileInput = row.querySelector<HTMLInputElement>("[data-file-input]");
   const volumeInput = row.querySelector<HTMLInputElement>("[data-volume]")!;
   const panInput = row.querySelector<HTMLInputElement>("[data-pan]")!;
   const muteBtn = row.querySelector<HTMLButtonElement>("[data-mute]")!;
@@ -43,18 +51,21 @@ function mountTrackRow(container: HTMLElement, track: Track, engine: AudioEngine
     engine.refreshSoloState();
   });
 
+  if (track.isSectioned) return; // no single-file replacement for a per-section track
+
   const loadLocalFile = async (file: File): Promise<void> => {
     engine.pause(); // buffer swaps don't retrigger an already-playing source; force a clean restart
     await track.loadFromFile(file);
     nameEl.textContent = `${track.name} (lokal fil)`;
     row.classList.add("track-row-local-file");
+    onTrackChanged?.(track.id);
   };
 
-  loadBtn.addEventListener("click", () => fileInput.click());
-  fileInput.addEventListener("change", () => {
-    const file = fileInput.files?.[0];
+  loadBtn!.addEventListener("click", () => fileInput!.click());
+  fileInput!.addEventListener("change", () => {
+    const file = fileInput!.files?.[0];
     if (file) void loadLocalFile(file);
-    fileInput.value = "";
+    fileInput!.value = "";
   });
 
   row.addEventListener("dragover", (event) => {
@@ -70,7 +81,7 @@ function mountTrackRow(container: HTMLElement, track: Track, engine: AudioEngine
   });
 }
 
-export function mountTrackList(root: HTMLElement, engine: AudioEngine): void {
+export function mountTrackList(root: HTMLElement, engine: AudioEngine, onTrackChanged?: (trackId: string) => void): void {
   root.innerHTML = "";
-  for (const track of engine.tracks.values()) mountTrackRow(root, track, engine);
+  for (const track of engine.tracks.values()) mountTrackRow(root, track, engine, onTrackChanged);
 }

@@ -1,9 +1,28 @@
 import * as Tone from "tone";
 import type { TrackConfig } from "../project/types.ts";
 
+/** Short crossfade between section takes at a cue boundary, so switches never click. */
+export const TAKE_FADE_SECONDS = 0.008;
+
+interface SectionTake {
+  readonly sectionId: string;
+  readonly player: Tone.Player;
+  /** Per-take gain, ramped 0<->1 at cue boundaries by ArrangementManager. */
+  readonly takeGain: Tone.Gain;
+}
+
 /**
- * A single WAV stem. Signal chain:
- * player -> sidechainGain (ducking insert point) -> sectionGain (transition gate) -> channel (volume/pan/mute) -> bus
+ * A single logical stem (e.g. "Bass"). Signal chain:
+ * player(s) -> sidechainGain (ducking insert point) -> sectionGain (legacy on/off gate) -> channel (volume/pan/mute) -> bus
+ *
+ * Two modes, chosen by the project config:
+ * - Legacy (`TrackConfig.file`): one continuously-looping Player, gated on/off
+ *   per section via `sectionGain` automation (same audio everywhere it's active).
+ * - Sectioned (`TrackConfig.sections`): one Player per section, each holding
+ *   that section's own audio file. Only the active section's player is ever
+ *   started; ArrangementManager schedules each one's start/stop bar range in
+ *   advance and they repeat automatically as the transport loops. `takeGain`
+ *   gives each a short click-free fade at its cue boundaries.
  *
  * Mute/solo are tracked here as plain booleans; AudioEngine resolves the
  * *effective* mute across all tracks (own mute OR "someone else is soloed")
@@ -16,10 +35,14 @@ export class Track {
   readonly id: string;
   readonly name: string;
   readonly busId: string;
+  readonly isSectioned: boolean;
 
-  readonly player: Tone.Player;
+  private readonly legacyPlayer: Tone.Player | null = null;
+  private readonly legacyFile: string | null = null;
+  private readonly takes = new Map<string, SectionTake>();
+
   private readonly sidechainGain: Tone.Gain;
-  /** Gain gate driven by TransitionManager, scheduled sample-accurately on bar boundaries. */
+  /** Gain gate driven by ArrangementManager for legacy tracks, scheduled sample-accurately on cue bars. */
   readonly sectionGain: Tone.Gain;
   readonly channel: Tone.Channel;
 
@@ -33,35 +56,82 @@ export class Track {
     this.id = config.id;
     this.name = config.name;
     this.busId = config.bus ?? "master";
+    this.isSectioned = !!config.sections;
 
-    this.player = new Tone.Player({ loop: true, fadeIn: 0.002, fadeOut: 0.01 });
     this.sidechainGain = new Tone.Gain(1);
     this.sectionGain = new Tone.Gain(1);
     this.channel = new Tone.Channel({
       volume: config.volume ?? 0,
       pan: config.pan ?? 0,
     });
-
-    this.player.connect(this.sidechainGain);
     this.sidechainGain.connect(this.sectionGain);
     this.sectionGain.connect(this.channel);
+
+    if (config.sections) {
+      for (const [sectionId, file] of Object.entries(config.sections)) {
+        const player = new Tone.Player({ loop: true, fadeIn: 0.002, fadeOut: 0.01 });
+        const takeGain = new Tone.Gain(0);
+        player.connect(takeGain);
+        takeGain.connect(this.sidechainGain);
+        this.takes.set(sectionId, { sectionId, player, takeGain });
+        // stash the file on the take via a side map since Player has no public "pending url"
+        pendingFiles.set(player, file);
+      }
+    } else {
+      this.legacyPlayer = new Tone.Player({ loop: true, fadeIn: 0.002, fadeOut: 0.01 });
+      this.legacyPlayer.connect(this.sidechainGain);
+      this.legacyFile = config.file ?? null;
+    }
 
     this._mute = config.mute ?? false;
     this._solo = config.solo ?? false;
   }
 
-  async load(url: string): Promise<void> {
-    await this.player.load(url);
+  /** Loads every player this track needs (its single file, or one per section). */
+  async load(): Promise<void> {
+    if (this.legacyPlayer) {
+      if (this.legacyFile) await this.legacyPlayer.load(this.legacyFile);
+      return;
+    }
+    await Promise.all(
+      Array.from(this.takes.values()).map(async (take) => {
+        const file = pendingFiles.get(take.player);
+        if (file) await take.player.load(file);
+      }),
+    );
   }
 
   /** Loads a local audio file (from a <input type="file"> or a drag-and-drop) as this track's stem. */
   async loadFromFile(file: File): Promise<void> {
+    if (!this.legacyPlayer) throw new Error(`Track "${this.id}" has per-section audio; can't replace it with a single file.`);
     const url = URL.createObjectURL(file);
-    await this.player.load(url);
+    await this.legacyPlayer.load(url);
     const previous = this.objectUrl;
     this.objectUrl = url;
     this.isLocalFile = true;
     if (previous) URL.revokeObjectURL(previous);
+  }
+
+  /** The player for a given section id, if this is a sectioned track. */
+  takeFor(sectionId: string): Tone.Player | undefined {
+    return this.takes.get(sectionId)?.player;
+  }
+
+  /** The per-take fade gain for a given section id, if this is a sectioned track. */
+  takeGainFor(sectionId: string): Tone.Gain | undefined {
+    return this.takes.get(sectionId)?.takeGain;
+  }
+
+  get sectionIds(): string[] {
+    return Array.from(this.takes.keys());
+  }
+
+  /** A representative player for waveform display / metering (legacy player, or the first section take). */
+  get displayPlayer(): Tone.Player {
+    if (this.legacyPlayer) return this.legacyPlayer;
+    const first = this.takes.values().next().value as SectionTake | undefined;
+    if (!first) throw new Error(`Track "${this.id}" has no audio source`);
+    return first.player;
   }
 
   /** Node a Sidechain instance can duck to affect only this track. */
@@ -79,9 +149,10 @@ export class Track {
     return this;
   }
 
-  /** Starts playback synced to Tone.Transport so every track stays sample-locked. */
+  /** Starts the legacy player synced to Tone.Transport (sectioned tracks are started/stopped by ArrangementManager instead). */
   syncToTransport(): void {
-    this.player.sync().start(0);
+    this.legacyPlayer?.sync().start(0);
+    for (const take of this.takes.values()) take.player.sync();
   }
 
   set volume(db: number) {
@@ -118,10 +189,16 @@ export class Track {
   }
 
   dispose(): void {
-    this.player.dispose();
+    this.legacyPlayer?.dispose();
+    for (const take of this.takes.values()) {
+      take.player.dispose();
+      take.takeGain.dispose();
+    }
     this.sidechainGain.dispose();
     this.sectionGain.dispose();
     this.channel.dispose();
     if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
   }
 }
+
+const pendingFiles = new WeakMap<Tone.Player, string>();

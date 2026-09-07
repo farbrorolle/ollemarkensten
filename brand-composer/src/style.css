@@ -57,6 +57,7 @@ body {
 }
 
 .panel-tracks,
+.panel-timeline,
 .panel-transport {
   grid-column: 1 / -1;
 }
@@ -252,6 +253,96 @@ body {
   width: 100%;
 }
 
+/* Timeline / arrangement */
+.timeline-ruler {
+  position: relative;
+  height: 16px;
+  margin-bottom: 2px;
+}
+
+.timeline-tick {
+  position: absolute;
+  font-size: 10px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-sections {
+  position: relative;
+  height: 22px;
+  margin-bottom: 6px;
+}
+
+.timeline-section-block {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  padding-left: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.timeline-body {
+  position: relative;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.timeline-lane {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  border-top: 1px solid var(--panel-border);
+  padding: 0 4px;
+  transition: opacity 0.15s;
+}
+
+.timeline-lane:first-child {
+  border-top: none;
+}
+
+.timeline-lane-muted {
+  opacity: 0.35;
+}
+
+.timeline-lane-name {
+  width: 90px;
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeline-lane canvas {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.timeline-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--red);
+  pointer-events: none;
+}
+
 /* Tracks */
 .track-list-header {
   display: grid;
@@ -289,6 +380,13 @@ body {
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track-name-hint {
+  font-size: 10px;
+  color: var(--text-dim);
+  flex: 0 0 auto;
   white-space: nowrap;
 }
 

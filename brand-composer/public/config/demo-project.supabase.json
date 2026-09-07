@@ -12,7 +12,16 @@
     { "id": "kick", "name": "Kick", "file": "https://oztzxrxfwvvccrqzhiry.supabase.co/storage/v1/object/public/stems/kick.wav", "bus": "drums", "volume": -2 },
     { "id": "snare", "name": "Snare", "file": "https://oztzxrxfwvvccrqzhiry.supabase.co/storage/v1/object/public/stems/snare.wav", "bus": "drums", "volume": -4 },
     { "id": "hihat", "name": "Hi-Hats", "file": "https://oztzxrxfwvvccrqzhiry.supabase.co/storage/v1/object/public/stems/hihat.wav", "bus": "drums", "volume": -10, "pan": 0.15 },
-    { "id": "bass", "name": "Bass", "file": "https://oztzxrxfwvvccrqzhiry.supabase.co/storage/v1/object/public/stems/bass.wav", "bus": "bass", "volume": -3 },
+    {
+      "id": "bass",
+      "name": "Bass",
+      "bus": "bass",
+      "volume": -3,
+      "sections": {
+        "verse": "https://oztzxrxfwvvccrqzhiry.supabase.co/storage/v1/object/public/stems/bass_verse.wav",
+        "chorus": "https://oztzxrxfwvvccrqzhiry.supabase.co/storage/v1/object/public/stems/bass_chorus.wav"
+      }
+    },
     { "id": "keys", "name": "Keys", "file": "https://oztzxrxfwvvccrqzhiry.supabase.co/storage/v1/object/public/stems/keys.wav", "bus": "synth", "volume": -6, "pan": -0.2 },
     { "id": "synth", "name": "Synth", "file": "https://oztzxrxfwvvccrqzhiry.supabase.co/storage/v1/object/public/stems/synth.wav", "bus": "synth", "volume": -5, "pan": 0.2 },
     { "id": "pad", "name": "Pad", "file": "https://oztzxrxfwvvccrqzhiry.supabase.co/storage/v1/object/public/stems/pad.wav", "bus": "synth", "volume": -8 },
@@ -23,8 +32,12 @@
     { "id": "kick-to-synth", "source": "kick", "target": "synth", "threshold": -20, "ratio": 4, "attack": 0.015, "release": 0.35 }
   ],
   "sections": [
-    { "id": "verse", "name": "Verse", "activeTracks": ["kick", "snare", "hihat", "bass", "keys"] },
-    { "id": "chorus", "name": "Chorus", "activeTracks": ["kick", "snare", "hihat", "bass", "keys", "synth", "pad", "fx"] }
+    { "id": "verse", "name": "Verse", "activeTracks": ["kick", "snare", "hihat", "keys"] },
+    { "id": "chorus", "name": "Chorus", "activeTracks": ["kick", "snare", "hihat", "keys", "synth", "pad", "fx"] }
   ],
-  "initialSection": "verse"
+  "arrangement": [
+    { "bar": 1, "section": "verse" },
+    { "bar": 9, "section": "chorus" }
+  ],
+  "loopBars": 16
 }

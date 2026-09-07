@@ -130,18 +130,38 @@ for (let bar = 0; bar < BARS; bar++) {
 }
 save("hihat", hihat);
 
-// ---- Bass: root note per bar, matching the Keys progression ---------------
+// ---- Bass: two different takes for the "sectioned track" demo -------------
+// Same root progression, but genuinely different playing -- verse is calm
+// sustained notes, chorus is a busier octave-popping eighth-note pattern.
+// These are what a "different audio per section, same track name" track
+// looks like (see brand-composer-demo's "bass" TrackConfig.sections).
 const progressionRoots = [65.41, 87.31, 98.0, 65.41]; // C2 F2 G2 C2
-const bass = newBuffer();
+
+const bassVerse = newBuffer();
 for (let bar = 0; bar < BARS; bar++) {
-  addTone(bass, bar * BAR, BAR - 0.03, progressionRoots[bar], {
+  addTone(bassVerse, bar * BAR, BAR - 0.03, progressionRoots[bar], {
     amp: 0.55,
     attack: 0.015,
     release: 0.05,
     harmonics: [1, 0.4],
   });
 }
-save("bass", bass);
+save("bass_verse", bassVerse);
+
+const bassChorus = newBuffer();
+for (let bar = 0; bar < BARS; bar++) {
+  const root = progressionRoots[bar];
+  for (let eighth = 0; eighth < 8; eighth++) {
+    const freq = eighth % 4 === 2 ? root * 2 : root; // octave pop on the "and of 2"
+    addTone(bassChorus, bar * BAR + eighth * (BEAT / 2), BEAT / 2 - 0.01, freq, {
+      amp: 0.5,
+      attack: 0.004,
+      release: 0.03,
+      harmonics: [1, 0.5, 0.2],
+    });
+  }
+}
+save("bass_chorus", bassChorus);
 
 // ---- Keys: chord stab on beat 1 of every bar -------------------------------
 const chords = [

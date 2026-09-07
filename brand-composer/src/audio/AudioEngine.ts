@@ -3,7 +3,7 @@ import { Bus } from "./Bus.ts";
 import { Track } from "./Track.ts";
 import { Sidechain } from "./Sidechain.ts";
 import type { SidechainTarget } from "./Sidechain.ts";
-import { TransitionManager } from "./TransitionManager.ts";
+import { ArrangementManager } from "./ArrangementManager.ts";
 import type { ProjectConfig } from "../project/types.ts";
 
 /**
@@ -17,7 +17,7 @@ export class AudioEngine {
   readonly buses = new Map<string, Bus>();
   readonly tracks = new Map<string, Track>();
   readonly sidechains = new Map<string, Sidechain>();
-  readonly transitions: TransitionManager;
+  readonly arrangement = new ArrangementManager();
 
   private projectTitle = "";
 
@@ -26,8 +26,6 @@ export class AudioEngine {
     this.limiter = new Tone.Limiter(-1);
     this.masterBus.connect(this.limiter);
     this.limiter.connect(Tone.getDestination());
-
-    this.transitions = new TransitionManager(() => Array.from(this.tracks.values()));
 
     Tone.getTransport().bpm.value = 120;
   }
@@ -145,9 +143,7 @@ export class AudioEngine {
       track.connect(destBus.input);
       this.tracks.set(track.id, track);
     }
-    await Promise.all(
-      config.tracks.map((trackConfig) => this.tracks.get(trackConfig.id)!.load(trackConfig.file)),
-    );
+    await Promise.all(config.tracks.map((trackConfig) => this.tracks.get(trackConfig.id)!.load()));
 
     // Start every player synced to the transport so they all stay phase-locked.
     for (const track of this.tracks.values()) track.syncToTransport();
@@ -161,10 +157,20 @@ export class AudioEngine {
       this.sidechains.set(scConfig.id, new Sidechain(scConfig.id, source, target, scConfig));
     }
 
-    // Sections / transitions.
-    for (const section of config.sections ?? []) this.transitions.registerSection(section);
-    const initialSection = config.initialSection ?? config.sections?.[0]?.id;
-    if (initialSection) this.transitions.applySectionImmediately(initialSection);
+    // Arrangement: schedule every cue up front (fixed positions, not a live-triggered thing).
+    const sections = new Map((config.sections ?? []).map((section) => [section.id, section]));
+    if (config.arrangement && config.loopBars) {
+      this.arrangement.schedule(config.arrangement, config.loopBars, sections, Array.from(this.tracks.values()));
+    } else {
+      // No arrangement given: fall back to a static initial section, no scheduling.
+      const initialSection = config.initialSection ?? config.sections?.[0]?.id;
+      const section = initialSection ? sections.get(initialSection) : undefined;
+      if (section) {
+        for (const track of this.tracks.values()) {
+          if (!track.isSectioned) track.sectionGain.gain.value = section.activeTracks.includes(track.id) ? 1 : 0;
+        }
+      }
+    }
   }
 
   dispose(): void {
