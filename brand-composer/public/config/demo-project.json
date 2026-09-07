@@ -1,0 +1,30 @@
+{
+  "title": "Brand Composer Demo",
+  "bpm": 120,
+  "timeSignature": [4, 4],
+  "buses": [
+    { "id": "drums", "name": "DrumsBus" },
+    { "id": "bass", "name": "BassBus" },
+    { "id": "synth", "name": "SynthBus" },
+    { "id": "fx", "name": "FXBus" }
+  ],
+  "tracks": [
+    { "id": "kick", "name": "Kick", "file": "/audio/kick.wav", "bus": "drums", "volume": -2 },
+    { "id": "snare", "name": "Snare", "file": "/audio/snare.wav", "bus": "drums", "volume": -4 },
+    { "id": "hihat", "name": "Hi-Hats", "file": "/audio/hihat.wav", "bus": "drums", "volume": -10, "pan": 0.15 },
+    { "id": "bass", "name": "Bass", "file": "/audio/bass.wav", "bus": "bass", "volume": -3 },
+    { "id": "keys", "name": "Keys", "file": "/audio/keys.wav", "bus": "synth", "volume": -6, "pan": -0.2 },
+    { "id": "synth", "name": "Synth", "file": "/audio/synth.wav", "bus": "synth", "volume": -5, "pan": 0.2 },
+    { "id": "pad", "name": "Pad", "file": "/audio/pad.wav", "bus": "synth", "volume": -8 },
+    { "id": "fx", "name": "FX", "file": "/audio/fx.wav", "bus": "fx", "volume": -6 }
+  ],
+  "sidechains": [
+    { "id": "kick-to-bass", "source": "kick", "target": "bass", "threshold": -24, "ratio": 6, "attack": 0.01, "release": 0.28 },
+    { "id": "kick-to-synth", "source": "kick", "target": "synth", "threshold": -20, "ratio": 4, "attack": 0.015, "release": 0.35 }
+  ],
+  "sections": [
+    { "id": "verse", "name": "Verse", "activeTracks": ["kick", "snare", "hihat", "bass", "keys"] },
+    { "id": "chorus", "name": "Chorus", "activeTracks": ["kick", "snare", "hihat", "bass", "keys", "synth", "pad", "fx"] }
+  ],
+  "initialSection": "verse"
+}

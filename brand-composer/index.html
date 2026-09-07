@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Brand Composer</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="app-header">
+        <h1 data-title>Brand Composer</h1>
+        <span class="subtitle">Web-DAW-motor · Tone.js · takt-synkade övergångar</span>
+      </header>
+
+      <main class="layout">
+        <section class="panel panel-transport" id="transport-panel"></section>
+
+        <section class="panel panel-master">
+          <h2>Master Chain</h2>
+          <div id="master-panel"></div>
+        </section>
+
+        <section class="panel panel-transition">
+          <h2>Övergång (ELIAS-logik)</h2>
+          <p class="hint">Kö:ar sektionsbyte till nästa hela takt (Transport +1m) — 100% fassynkat, inga spår startas om.</p>
+          <button id="transition-btn" class="btn btn-accent">Queue transition (+1 bar)</button>
+        </section>
+
+        <section class="panel panel-sidechain">
+          <h2>Sidechain</h2>
+          <div id="sidechain-panel"></div>
+        </section>
+
+        <section class="panel panel-tracks">
+          <h2>Spår</h2>
+          <div class="track-list-header">
+            <span></span><span>Volume</span><span>Pan</span><span>Mute</span><span>Solo</span>
+          </div>
+          <div id="track-list"></div>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
