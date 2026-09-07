@@ -163,6 +163,12 @@ nav.primary-nav a.active{
   .about-block{ grid-template-columns: 1fr; gap: 12px; }
 }
 
+/* ---------- single-scroll page sections ---------- */
+
+.page-section{
+  border-top: 1px solid var(--line);
+}
+
 /* ---------- generic page header ---------- */
 
 .page-head{
