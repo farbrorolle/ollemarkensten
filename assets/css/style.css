@@ -534,7 +534,6 @@ nav.primary-nav a.active{
 .cv-head{
   padding: 64px 0 40px;
 }
-.cv-head .eyebrow{ color: #7a8ca3; }
 .cv-head h1{
   font-size: clamp(32px,5vw,52px);
   font-weight: 900;
