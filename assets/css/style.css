@@ -320,6 +320,15 @@ nav.primary-nav a.active{
   padding: 4px 8px;
   border-radius: 2px;
 }
+.cover-play-icon{
+  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+  width:44px; height:44px; border-radius:50%;
+  background: rgba(14,13,12,0.7);
+  display:flex; align-items:center; justify-content:center;
+  transition: background .2s ease, transform .2s ease;
+}
+.cover-play-icon svg{ margin-left:2px; }
+.cover-play:hover .cover-play-icon{ background: var(--accent); transform: translate(-50%,-50%) scale(1.08); }
 .cover-item .cover-label{
   display:block;
   font-size: 11px;
