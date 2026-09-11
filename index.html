@@ -441,7 +441,7 @@ document.querySelectorAll('.cover-play[data-youtube], .cover-play[data-spotify]'
     var wrap = document.createElement('div');
     var ytId = link.getAttribute('data-youtube');
     var spotifyId = link.getAttribute('data-spotify');
-    wrap.style.cssText = 'position:relative;aspect-ratio:1/1;border-radius:4px;overflow:hidden;';
+    wrap.style.cssText = 'border-radius:4px;overflow:hidden;';
     if (ytId) {
       iframe.src = 'https://www.youtube-nocookie.com/embed/' + ytId + '?autoplay=1';
       iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture');
