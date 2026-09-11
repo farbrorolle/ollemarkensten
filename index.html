@@ -430,16 +430,6 @@
   </div>
 </footer>
 <script>
-// Stop every other iframe on the page (YouTube/Vimeo/SoundCloud/Spotify)
-// when a new one starts playing, regardless of which section it's in.
-function stopOtherFrames(exceptFrame){
-  document.querySelectorAll('iframe').forEach(function(f){
-    if (f !== exceptFrame) {
-      try { f.src = f.src; } catch(err) {}
-    }
-  });
-}
-
 document.querySelectorAll('.cover-play[data-youtube]').forEach(function(link){
   link.addEventListener('click', function(e){
     e.preventDefault();
@@ -455,18 +445,7 @@ document.querySelectorAll('.cover-play[data-youtube]').forEach(function(link){
     wrap.style.cssText = 'position:relative;aspect-ratio:1/1;border-radius:4px;overflow:hidden;';
     wrap.appendChild(iframe);
     link.replaceWith(wrap);
-    stopOtherFrames(iframe);
   });
-});
-
-// Clicking/focusing into any already-embedded iframe (Ads & audio branding,
-// Film & theatre, the full Spotify catalog player) also stops all others.
-window.addEventListener('blur', function(){
-  setTimeout(function(){
-    if (document.activeElement && document.activeElement.tagName === 'IFRAME') {
-      stopOtherFrames(document.activeElement);
-    }
-  }, 0);
 });
 </script>
 </body>
