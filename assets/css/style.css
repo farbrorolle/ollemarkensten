@@ -302,6 +302,10 @@ nav.primary-nav a.active{
   margin-top: 44px;
 }
 
+@media (max-width: 620px){
+  .cover-grid{ grid-template-columns: repeat(auto-fill, minmax(130px,1fr)); gap: 12px; }
+}
+
 .cover-item a{
   position: relative;
   aspect-ratio: 1/1;
