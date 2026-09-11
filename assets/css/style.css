@@ -314,10 +314,12 @@ nav.primary-nav a.active{
 }
 
 .cover-embed-frame{
-  position:absolute !important;
-  inset:0 !important;
+  display:block !important;
+  position:static !important;
   width:100% !important;
-  height:100% !important;
+  height:220px !important;
+  max-height:220px !important;
+  min-height:220px !important;
   border:0 !important;
 }
 
