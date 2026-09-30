@@ -98,7 +98,10 @@ export function mountMasterPanel(root: HTMLElement, engine: AudioEngine): Master
   // Limiter.
   const limHead = document.createElement("div");
   limHead.className = "creator-subhead";
-  limHead.textContent = "Limiter";
+  limHead.innerHTML = `Music limiter <label class="checkbox-row"><label><input type="checkbox" data-lim-on /> On</label></label>`;
+  const limOnBox = limHead.querySelector<HTMLInputElement>("[data-lim-on]")!;
+  limOnBox.checked = engine.isMusicLimiterOn;
+  limOnBox.addEventListener("change", () => engine.setMusicLimiterOn(limOnBox.checked));
   const limGrid = document.createElement("div");
   limGrid.className = "creator-grid";
   limGrid.append(

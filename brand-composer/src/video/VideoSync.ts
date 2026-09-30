@@ -128,7 +128,7 @@ export class VideoSync {
       const source = context.createMediaElementSource(this.video);
       this.filmGain = new Tone.Gain(Tone.dbToGain(this.filmVolumeDb));
       Tone.connect(source, this.filmGain);
-      this.filmGain.toDestination();
+      this.filmGain.connect(this.engine.outputBus); // film + music meet in the output limiter
     } catch {
       // Not supported: the film plays through the element directly (no fader).
       this.filmGain = null;

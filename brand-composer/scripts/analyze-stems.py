@@ -111,6 +111,33 @@ def main() -> None:
             boundary = n * bar - file_offset  # end of source bar n, in file seconds
             tails.append(round(tail_after(db, int(round(boundary / FRAME))), 2) if boundary > 0 else 0.0)
         track["tails"] = tails
+        # Ring-out after every beat (for the logo's hit, which lands mid-bar).
+        beat = bar / (config.get("timeSignature") or [4, 4])[0]
+        beat_tails = []
+        for k in range(1, total_bars * 4 + 1):
+            boundary = k * beat - file_offset
+            beat_tails.append(round(tail_after(db, int(round(boundary / FRAME))), 2) if boundary > 0 else 0.0)
+        track["beatTails"] = beat_tails
+        # Pickups (upbeats): sound in the bar(s) just before a section start that belongs to that
+        # section -- the track was silent before it within the previous section.
+        active = []
+        for n in range(1, total_bars + 1):
+            a = int(round(((n - 1) * bar - file_offset) / FRAME))
+            b = int(round((n * bar - file_offset) / FRAME))
+            seg = db[max(0, a) : max(0, min(len(db), b))] if b > 0 else db[0:0]
+            active.append(bool(len(seg)) and float(seg.max()) > -50)
+        pickups = {}
+        for start in sorted(r[0] for r in config["sourceRegions"].values()):
+            if start <= 2:
+                continue
+            p = 0
+            while p < 2 and start - 1 - p >= 1 and active[start - 2 - p]:
+                p += 1
+            silent_before = start - 2 - p >= 0 and not active[start - 2 - p]
+            if 1 <= p <= 2 and silent_before and active[start - 1] if start - 1 < len(active) else False:
+                pickups[str(start)] = p
+        if pickups:
+            track["pickups"] = pickups
         if track.get("role") == "swell":
             track["swellEvents"] = swell_events(db, file_offset, bar, total_bars)
             print(track["id"], track["name"], "swells:", [(e["anchorBar"], e["start"], e["end"]) for e in track["swellEvents"]])

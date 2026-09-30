@@ -60,16 +60,25 @@ async function scan(
   from: number,
   to: number,
   step: number,
-): Promise<{ t: number; diff: number }[]> {
-  const out: { t: number; diff: number }[] = [];
+): Promise<{ t: number; diff: number; frame: Float32Array }[]> {
+  const out: { t: number; diff: number; frame: Float32Array }[] = [];
   let prev = await frameAt(video, ctx, from);
+  out.push({ t: from, diff: 0, frame: prev });
   for (let t = from + step; t <= to + 1e-6; t += step) {
     const cur = await frameAt(video, ctx, t);
-    out.push({ t, diff: difference(prev, cur) });
+    out.push({ t, diff: difference(prev, cur), frame: cur });
     prev = cur;
   }
   return out;
 }
+
+const median = (values: number[]): number => {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)] ?? 0;
+};
+
+/** Frames apart (at 10 fps) for spotting dissolves: a change that is gradual frame to frame. */
+const DISSOLVE_GAP = 6;
 
 /**
  * @param url object URL of the film
@@ -93,19 +102,47 @@ export async function findLastCut(url: string, duration: number, windowSeconds =
     const end = Math.max(0, duration - 0.05);
     const start = Math.max(0, end - windowSeconds);
     const coarse = await scan(video, ctx, start, end, 0.1);
-    if (coarse.length < 5) return null;
-    const sorted = coarse.map((c) => c.diff).sort((a, b) => a - b);
-    const median = sorted[Math.floor(sorted.length / 2)]!;
-    // The latest strong change (end cards come last): clearly above the typical change.
-    const threshold = Math.max(12, median * 4);
-    const candidates = coarse.filter((c) => c.diff >= threshold);
-    if (!candidates.length) return null;
-    const best = candidates[candidates.length - 1]!;
+    if (coarse.length < DISSOLVE_GAP + 5) return null;
 
-    // Fine pass around it: 1/50 s steps over the 0.1 s interval that contained the cut.
+    // Hard cuts: one frame change far above the typical one.
+    const steps = coarse.slice(1).map((c) => c.diff);
+    const typicalStep = median(steps);
+    const hardThreshold = Math.max(12, typicalStep * 4);
+    const hard = new Set<number>();
+    coarse.forEach((c, i) => {
+      if (i > 0 && c.diff >= hardThreshold) hard.add(i);
+    });
+
+    // Dissolves / quick fades (e.g. into a dark end card): small changes frame to frame, but a
+    // big change over ~0.6 s. Found as a run where frames 0.6 s apart differ a lot and no hard
+    // cut explains it; the transition's middle is taken as the cut.
+    const wide = coarse.map((c, i) => (i >= DISSOLVE_GAP ? difference(coarse[i - DISSOLVE_GAP]!.frame, c.frame) : 0));
+    const wideThreshold = Math.max(25, median(wide.slice(DISSOLVE_GAP)) * 6);
+    type Event = { t: number; strength: number; hardIndex?: number };
+    const events: Event[] = [];
+    for (const i of hard) events.push({ t: coarse[i]!.t, strength: coarse[i]!.diff / Math.max(1, typicalStep), hardIndex: i });
+    for (let i = DISSOLVE_GAP; i < coarse.length; i++) {
+      if (wide[i]! < wideThreshold) continue;
+      let j = i;
+      while (j + 1 < coarse.length && wide[j + 1]! >= wideThreshold) j++;
+      let explained = false;
+      for (let k = i - DISSOLVE_GAP + 1; k <= j && !explained; k++) explained = hard.has(k);
+      if (!explained) {
+        let peak = i;
+        for (let k = i; k <= j; k++) if (wide[k]! > wide[peak]!) peak = k;
+        events.push({ t: coarse[peak]!.t - (DISSOLVE_GAP * 0.1) / 2, strength: wide[peak]! / Math.max(1, median(wide.slice(DISSOLVE_GAP))) });
+      }
+      i = j;
+    }
+    if (!events.length) return null;
+    // End cards come last: the latest clear change.
+    const best = events.reduce((a, b) => (b.t > a.t ? b : a));
+    if (best.hardIndex === undefined) return { time: best.t, strength: best.strength };
+
+    // Fine pass around a hard cut: 1/50 s steps over the 0.1 s interval that contained it.
     const fine = await scan(video, ctx, Math.max(0, best.t - 0.12), Math.min(end, best.t + 0.02), 0.02);
-    const peak = fine.reduce((a, b) => (b.diff > a.diff ? b : a), fine[0] ?? best);
-    return { time: peak.t, strength: best.diff / Math.max(1, median) };
+    const peak = fine.slice(1).reduce((a, b) => (b.diff > a.diff ? b : a), fine[1] ?? fine[0]!);
+    return { time: peak.t, strength: best.strength };
   } catch {
     return null;
   } finally {

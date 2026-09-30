@@ -48,7 +48,15 @@ export class AudioEngine {
   /** Gain into the limiter ("drive"): push the mix harder into the limiter. */
   readonly limiterDrive: Tone.Gain;
   readonly limiter: Tone.Limiter;
+  /** Film audio + music meet here, then go through the output limiter to the speakers. */
+  readonly outputBus: Tone.Gain;
+  /** Gain into the output limiter. */
+  readonly outputDrive: Tone.Gain;
+  readonly outputLimiter: Tone.Limiter;
   readonly loudness: LoudnessMeter;
+  private musicLimiterOn = true;
+  private musicLimiterThreshold = -1;
+  private outputLimiterOn = true;
   private compressorSettings: CompressorSettings = { ...DEFAULT_COMPRESSOR };
 
   readonly buses = new Map<string, Bus>();
@@ -83,8 +91,14 @@ export class AudioEngine {
     this.masterBus.connect(this.compressor);
     this.compressor.connect(this.limiterDrive);
     this.limiterDrive.connect(this.limiter);
-    this.limiter.connect(Tone.getDestination());
-    this.loudness = new LoudnessMeter(this.limiter);
+    this.outputBus = new Tone.Gain(1);
+    this.outputDrive = new Tone.Gain(1);
+    this.outputLimiter = new Tone.Limiter(-1);
+    this.limiter.connect(this.outputBus);
+    this.outputBus.connect(this.outputDrive);
+    this.outputDrive.connect(this.outputLimiter);
+    this.outputLimiter.connect(Tone.getDestination());
+    this.loudness = new LoudnessMeter(this.outputLimiter);
 
     Tone.getTransport().bpm.value = 120;
 
@@ -221,8 +235,35 @@ export class AudioEngine {
 
   // --- Sonic logo ---------------------------------------------------------------------------
 
+  /** A logo is configured and switched on (it can be removed and put back). */
   get hasLogo(): boolean {
-    return !!this.logoConfig && !!this.logoTrack;
+    return !!this.logoConfig && !!this.logoTrack && this.logoEnabled;
+  }
+
+  private logoEnabled = true;
+
+  get isLogoEnabled(): boolean {
+    return this.logoEnabled;
+  }
+
+  /** Removes (or puts back) the sonic logo, keeping where the music ends. */
+  setLogoEnabled(on: boolean): void {
+    if (on === this.logoEnabled || !this.logoConfig) return;
+    const end = this.arrangementSeconds;
+    this.logoEnabled = on;
+    if (this.canFit && end > 0) this.fitToAnchor(this.anchorForEnd(end));
+    else this.setLogoSettings({});
+  }
+
+  /**
+   * Where the anchor (beat `anchorBeat` of the last bar) must be for the whole thing to end at
+   * `endSeconds`: the logo's end with a logo, the end of the last bar without one.
+   */
+  anchorForEnd(endSeconds: number): number {
+    const logo = this.logoConfig;
+    if (!logo) return endSeconds;
+    if (this.hasLogo) return endSeconds - (this.logoDurationSeconds - logo.anchorSeconds);
+    return endSeconds - (this.barSeconds - (logo.anchorBeat - 1) * this.beatSeconds);
   }
 
   get logo(): Track | null {
@@ -241,6 +282,7 @@ export class AudioEngine {
   }
 
   get logoStartSeconds(): number | null {
+    if (!this.hasLogo) return null;
     const anchor = this.logoAnchorSeconds;
     return anchor === null ? null : anchor - this.logoConfig!.anchorSeconds;
   }
@@ -257,12 +299,16 @@ export class AudioEngine {
 
   /** Where the anchor should go so the logo ends exactly when a film of `filmSeconds` ends. */
   defaultAnchorForFilm(filmSeconds: number): number {
-    if (!this.logoConfig) return filmSeconds;
-    return filmSeconds - (this.logoDurationSeconds - this.logoConfig.anchorSeconds);
+    return this.anchorForEnd(filmSeconds);
+  }
+
+  /** The creator's shorten/extend rules per section (empty if the project has none). */
+  get fitTemplate(): FitConfig["template"] {
+    return this.fitConfig?.template ?? [];
   }
 
   get canFit(): boolean {
-    return !!this.fitConfig && this.hasLogo;
+    return !!this.fitConfig && !!this.logoConfig && !!this.logoTrack;
   }
 
   get arrangeMode(): "auto" | "original" {
@@ -336,7 +382,7 @@ export class AudioEngine {
     const bars = this.arrangement.totalBars;
     if (!bars) return;
     // With a film or a logo the song plays once (the logo can't loop); otherwise it loops like before.
-    const once = this.filmMode || this.hasLogo;
+    const once = this.filmMode || !!this.logoConfig;
     transport.loop = !once;
     if (once) this.endEventId = transport.schedule((time) => transport.stop(time), this.arrangementSeconds);
   }
@@ -359,11 +405,44 @@ export class AudioEngine {
   }
 
   setLimiterThreshold(db: number): void {
-    this.limiter.threshold.value = db;
+    this.musicLimiterThreshold = db;
+    this.limiter.threshold.value = this.musicLimiterOn ? db : 0;
+  }
+
+  /** Music limiter on/off ("off" = threshold 0 dBFS: it only catches overs). */
+  setMusicLimiterOn(on: boolean): void {
+    this.musicLimiterOn = on;
+    this.limiter.threshold.value = on ? this.musicLimiterThreshold : 0;
+  }
+
+  get isMusicLimiterOn(): boolean {
+    return this.musicLimiterOn;
+  }
+
+  /** The output limiter (music + film audio) -- dB of gain into it. */
+  setOutputDrive(db: number): void {
+    this.outputDrive.gain.value = Tone.dbToGain(db);
+  }
+
+  get outputDriveDb(): number {
+    return Tone.gainToDb(this.outputDrive.gain.value);
+  }
+
+  setOutputLimiterOn(on: boolean): void {
+    this.outputLimiterOn = on;
+    this.outputLimiter.threshold.value = on ? -1 : 0;
+  }
+
+  get isOutputLimiterOn(): boolean {
+    return this.outputLimiterOn;
+  }
+
+  get outputLimiterReduction(): number {
+    return this.outputLimiter.reduction;
   }
 
   get limiterThreshold(): number {
-    return this.limiter.threshold.value;
+    return this.musicLimiterThreshold;
   }
 
   /** Current gain reduction the limiter is applying, in dB (0 = no limiting). */
@@ -500,7 +579,7 @@ export class AudioEngine {
     this.endEventId = null; // cancel(0) just removed it
     this._lastFit = fit; // null = edited by hand
     for (const track of this.tracks.values()) track.resyncSectionTakes();
-    this.arrangement.swellCutoffBeat = this.logoConfig && this.logoTrack ? this.logoConfig.anchorBeat : 0;
+    this.arrangement.swellCutoffBeat = this.hasLogo ? this.logoConfig!.anchorBeat : 0;
     const ring = new Set(this.logoConfig?.ringOut ?? []);
     this.arrangement.logoRingOut = new Set(
       Array.from(this.tracks.values())
@@ -524,7 +603,7 @@ export class AudioEngine {
   /** Places the logo so its anchor hits beat `anchorBeat` of the last bar, and adds the mute/fade envelopes. */
   private scheduleLogo(): void {
     for (const track of this.tracks.values()) track.autoGain.gain.value = 1;
-    const player = this.logoTrack?.filePlayer;
+    const player = this.hasLogo ? this.logoTrack?.filePlayer : undefined;
     const logo = this.logoConfig;
     const anchor = this.logoAnchorSeconds;
     if (!player?.loaded || !logo || anchor === null) return;
@@ -634,6 +713,9 @@ export class AudioEngine {
     this.limiter.dispose();
     this.compressor.dispose();
     this.limiterDrive.dispose();
+    this.outputBus.dispose();
+    this.outputDrive.dispose();
+    this.outputLimiter.dispose();
     this.loudness.dispose();
   }
 }

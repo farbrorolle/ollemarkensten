@@ -45,6 +45,10 @@ export interface TrackConfig {
    * used for the ring-out when a section is left.
    */
   tails?: number[];
+  /** Like `tails`, per beat (index 0 = end of beat 1 of bar 1). */
+  beatTails?: number[];
+  /** Pickups (upbeats): section start bar -> how many bars before it belong to that section. */
+  pickups?: Record<string, number>;
   /** role "swell": the swell clips in this file (source seconds + the bar they lead into). */
   swellEvents?: { start: number; end: number; anchorBar: number }[];
   volume?: number; // dB, default 0

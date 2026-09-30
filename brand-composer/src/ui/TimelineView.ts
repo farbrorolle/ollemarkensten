@@ -193,12 +193,12 @@ export function mountTimeline(
         <button type="button" class="arrange-btn" data-arrange-mode="auto" title="The music is re-arranged to fit the length: sections are shortened, dropped or repeated">Auto arrange</button>
         <button type="button" class="arrange-btn" data-arrange-mode="original" title="The track plays as written and is only cut (or extended) at the end">Original form</button>
       </div>
+      <button type="button" class="btn lock-btn is-active" data-lock aria-pressed="true" hidden title="While on, adding, removing or resizing parts never changes the total length: other parts are shortened or lengthened to make room">🔒 Always lock to video length</button>
       <button type="button" class="btn" data-mode-toggle>Show sections</button>
       <span class="timeline-toolbar-status" data-status></span>
     </div>
     <div class="timeline-palette" data-palette></div>
     <div class="timeline-ruler" data-ruler></div>
-    <div class="timeline-sections" data-sections></div>
     <div class="timeline-body" data-body>
       <div class="timeline-lanes" data-lanes></div>
       <div class="timeline-overlay" data-overlay>
@@ -221,7 +221,9 @@ export function mountTimeline(
 
   const palette = root.querySelector<HTMLElement>("[data-palette]")!;
   const ruler = root.querySelector<HTMLElement>("[data-ruler]")!;
-  const sectionsRow = root.querySelector<HTMLElement>("[data-sections]")!;
+  // The form (section blocks) lives in its own lane between the film and the music.
+  const sectionsRow = document.createElement("div");
+  sectionsRow.className = "timeline-sections";
   const body = root.querySelector<HTMLElement>("[data-body]")!;
   const lanesEl = root.querySelector<HTMLElement>("[data-lanes]")!;
   const playhead = root.querySelector<HTMLElement>("[data-playhead]")!;
@@ -267,38 +269,205 @@ export function mountTimeline(
   });
   const segmentList = root.querySelector<HTMLElement>("[data-segment-list]")!;
 
-  // Section cards: drag one down into the section strip to put it there (or click to add it at the
-  // end). A new section gets its original length and starts from its own beginning.
+  // --- "Always lock to video length": while on (and a film is loaded), every edit that would
+  // change the total length is compensated by shortening/lengthening the other parts.
+  const lockBtn = root.querySelector<HTMLButtonElement>("[data-lock]")!;
+  let lockOn = true;
+  const lockActive = (): boolean => lockOn && !!film?.info;
+  lockBtn.addEventListener("click", () => {
+    lockOn = !lockOn;
+    lockBtn.classList.toggle("is-active", lockOn);
+    lockBtn.setAttribute("aria-pressed", String(lockOn));
+    lockBtn.textContent = lockOn ? "🔒 Always lock to video length" : "🔓 Always lock to video length";
+  });
+  let lockMessage = "";
+
+  const fitRule = (sectionId: string) => engine.fitTemplate.find((b) => b.section === sectionId);
+  /** Re-points a segment's source after its length changed (keeps its end unless the rules say start). */
+  const fixSource = (seg: EditableSegment): void => {
+    const region = engine.sourceRegionFor(seg.sectionId);
+    if (!region) return;
+    const regionLength = region[1] - region[0] + 1;
+    if (seg.lengthBars >= regionLength) seg.sourceBar = region[0];
+    else if (fitRule(seg.sectionId)?.keep === "start") seg.sourceBar = region[0];
+    else seg.sourceBar = keepEndSourceBar(region, seg.lengthBars);
+  };
+
+  /**
+   * Keeps the total length after an edit that changed it by `delta` bars (positive = got longer):
+   * the other parts (never `keep`) are shortened/lengthened, whole phrases first. Returns the bars
+   * that could not be compensated.
+   */
+  function compensate(delta: number, keep: EditableSegment | null): number {
+    const others = editableSegments.filter((s) => s !== keep);
+    const prio = (s: EditableSegment): number => fitRule(s.sectionId)?.priority ?? 1;
+    let left = Math.abs(delta);
+    // Whole 4-bar phrases first (passes 0-1); only the last pass moves single bars.
+    let pass = 0;
+    const take = (want: number, available: number): number => {
+      const n = Math.min(want, available);
+      if (n <= 0) return 0;
+      return pass < 2 ? n - (n % 4) : n;
+    };
+    if (delta > 0) {
+      // Shorten: the least important (then the longest) parts first, not below 4 bars.
+      const order = [...others].sort((a, b) => prio(a) - prio(b) || b.lengthBars - a.lengthBars);
+      for (pass = 0; pass < 3 && left > 0; pass++) {
+        for (const seg of order) {
+          if (left <= 0) break;
+          const min = Math.min(seg.lengthBars, Math.max(4, fitRule(seg.sectionId)?.minBars ?? 4));
+          const n = take(left, seg.lengthBars - min);
+          if (n > 0) {
+            seg.lengthBars -= n;
+            left -= n;
+            fixSource(seg);
+          }
+        }
+      }
+      // Still too long: drop whole parts the rules allow to be dropped (least important first).
+      for (const seg of order) {
+        if (left <= 0) break;
+        if ((fitRule(seg.sectionId)?.minBars ?? 1) === 0 && seg.lengthBars <= left + 3) {
+          left = Math.max(0, left - seg.lengthBars);
+          editableSegments.splice(editableSegments.indexOf(seg), 1);
+        }
+      }
+    } else if (delta < 0) {
+      // Lengthen: the most important parts in the middle first (the melody), then the ends.
+      const first = editableSegments[0];
+      const last = editableSegments[editableSegments.length - 1];
+      const order = [...others].sort(
+        (a, b) =>
+          Number(a === first || a === last) - Number(b === first || b === last) ||
+          prio(b) - prio(a) ||
+          b.lengthBars - a.lengthBars,
+      );
+      for (pass = 0; pass < 3 && left > 0; pass++) {
+        for (const seg of order) {
+          if (left <= 0) break;
+          const max = Math.max(seg.lengthBars, fitRule(seg.sectionId)?.maxBars ?? seg.lengthBars * 2);
+          const n = take(left, max - seg.lengthBars);
+          if (n > 0) {
+            seg.lengthBars += n;
+            left -= n;
+            fixSource(seg);
+          }
+        }
+      }
+    }
+    return left;
+  }
+
+  /** Commits an edit that changed the total by `delta` bars, compensating when the length is locked. */
+  function commitEdit(delta: number, keep: EditableSegment | null): void {
+    lockMessage = "";
+    if (delta !== 0 && lockActive()) {
+      const left = compensate(delta, keep);
+      if (left > 0) lockMessage = `Couldn't keep the length: ${left} bar${left === 1 ? "" : "s"} ${delta > 0 ? "longer" : "shorter"}`;
+    }
+    commit();
+  }
+
+  // Section cards: drag one down into the form lane to put it there (or click to add it at the
+  // end). Choose its length first: the full part, or cut to 8 or 4 bars (from its beginning).
+  // The card is as wide as the part will be on the timeline.
   const SECTION_MIME = "application/x-brand-section";
-  const newSegment = (sectionId: string): EditableSegment => {
+  const regionLength = (sectionId: string): number => {
+    const region = engine.sourceRegionFor(sectionId);
+    return region ? region[1] - region[0] + 1 : DEFAULT_NEW_SEGMENT_BARS;
+  };
+  const newSegment = (sectionId: string, lengthBars = regionLength(sectionId)): EditableSegment => {
     const region = engine.sourceRegionFor(sectionId);
     return {
       sectionId,
-      lengthBars: region ? region[1] - region[0] + 1 : DEFAULT_NEW_SEGMENT_BARS,
+      lengthBars,
       transition: "crossfade",
       ...(region ? { sourceBar: region[0] } : {}),
     };
   };
+  const chosenLength = new Map<string, number>();
+  const cardEls: { el: HTMLElement; sectionId: string }[] = [];
+  let paletteDrag: { sectionId: string; bars: number } | null = null;
+
+  const insertSection = (index: number, sectionId: string): void => {
+    const seg = newSegment(sectionId, chosenLength.get(sectionId));
+    editableSegments.splice(index, 0, seg);
+    commitEdit(seg.lengthBars, seg);
+  };
+
   for (const section of sections) {
-    const region = engine.sourceRegionFor(section.id);
-    const card = document.createElement("button");
-    card.type = "button";
+    const full = regionLength(section.id);
+    chosenLength.set(section.id, full);
+    const card = document.createElement("div");
     card.className = "timeline-palette-chip";
     card.draggable = true;
-    card.innerHTML = `<span class="chip-name"></span>${region ? `<span class="chip-bars">${region[1] - region[0] + 1} bars</span>` : ""}`;
+    card.tabIndex = 0;
+    card.setAttribute("role", "button");
+    card.innerHTML = `<span class="chip-name"></span><span class="chip-lengths"></span>`;
     card.querySelector(".chip-name")!.textContent = section.name;
-    card.title = `Drag ${section.name} into the timeline (or click to add it at the end)`;
+    card.title = `Drag ${section.name} into the form (or click to add it at the end)`;
+    const lengths = card.querySelector<HTMLElement>(".chip-lengths")!;
+    const options = [full, 8, 4].filter((n, i) => i === 0 || n < full);
+    for (const bars of options) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "chip-length";
+      btn.textContent = bars === full ? `${full} bars` : String(bars);
+      btn.title = bars === full ? "The whole part" : `Cut to ${bars} bars (from its beginning)`;
+      btn.classList.toggle("is-active", bars === full);
+      btn.draggable = false;
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        chosenLength.set(section.id, bars);
+        for (const b of Array.from(lengths.children)) b.classList.toggle("is-active", b === btn);
+        updatePaletteWidths();
+      });
+      lengths.appendChild(btn);
+    }
     card.addEventListener("dragstart", (e) => {
+      paletteDrag = { sectionId: section.id, bars: chosenLength.get(section.id) ?? full };
       e.dataTransfer?.setData(SECTION_MIME, section.id);
       e.dataTransfer?.setData("text/plain", section.name);
       if (e.dataTransfer) e.dataTransfer.effectAllowed = "copy";
     });
-    card.addEventListener("click", () => {
-      editableSegments.push(newSegment(section.id));
-      commit();
+    card.addEventListener("dragend", () => {
+      paletteDrag = null;
+      clearDropIndicator();
+    });
+    card.addEventListener("click", () => insertSection(editableSegments.length, section.id));
+    card.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        insertSection(editableSegments.length, section.id);
+      }
     });
     palette.appendChild(card);
+    cardEls.push({ el: card, sectionId: section.id });
   }
+
+  // "+ Logo": puts a removed sonic logo back.
+  const logoCard = document.createElement("button");
+  logoCard.type = "button";
+  logoCard.className = "timeline-palette-chip timeline-palette-logo";
+  logoCard.textContent = "+ Logo";
+  logoCard.title = "Put the sonic logo back at the end";
+  logoCard.addEventListener("click", () => engine.setLogoEnabled(true));
+  palette.appendChild(logoCard);
+  const syncLogoCard = (): void => {
+    logoCard.hidden = !engine.logoSettings || !engine.logo || engine.isLogoEnabled;
+  };
+  syncLogoCard();
+
+  /** Card widths follow the timeline's scale, so a part looks as long as it will be. */
+  function updatePaletteWidths(): void {
+    const width = sectionsRow.clientWidth;
+    if (!width) return;
+    const pxPerBar = (width * engine.barSeconds) / spanSeconds;
+    for (const { el, sectionId } of cardEls) {
+      el.style.width = `${Math.max(56, (chosenLength.get(sectionId) ?? 4) * pxPerBar)}px`;
+    }
+  }
+  new ResizeObserver(() => updatePaletteWidths()).observe(sectionsRow);
 
   /** Index to insert at for a drop at clientX: before the first block whose middle is right of it. */
   const insertIndexAt = (clientX: number): number => {
@@ -308,13 +477,26 @@ export function mountTimeline(
     }
     return blockEls.length;
   };
+  /** A ghost of the part being dragged, where (and as long as) it will land. */
+  let ghostEl: HTMLElement | null = null;
+  function showGhost(index: number, sectionId: string, bars: number): void {
+    if (!ghostEl) {
+      ghostEl = document.createElement("div");
+      ghostEl.className = "timeline-section-ghost";
+      sectionsRow.appendChild(ghostEl);
+    }
+    const startBar = 1 + editableSegments.slice(0, index).reduce((sum, s) => sum + s.lengthBars, 0);
+    ghostEl.style.left = `${xOfBar(startBar) * 100}%`;
+    ghostEl.style.width = `${(bars * engine.barSeconds * 100) / spanSeconds}%`;
+    const name = sectionNameById.get(sectionId) ?? sectionId;
+    ghostEl.textContent = `+ ${name} · ${bars} bars${lockActive() ? " (others make room)" : ""}`;
+  }
   sectionsRow.addEventListener("dragover", (e) => {
     if (!e.dataTransfer?.types.includes(SECTION_MIME)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
     const i = insertIndexAt(e.clientX);
-    const target = blockEls[Math.min(i, blockEls.length - 1)];
-    if (target) showDropIndicator(target, i < blockEls.length);
+    if (paletteDrag) showGhost(i, paletteDrag.sectionId, paletteDrag.bars);
   });
   sectionsRow.addEventListener("dragleave", (e) => {
     if (!(e.relatedTarget instanceof Node && sectionsRow.contains(e.relatedTarget))) clearDropIndicator();
@@ -325,8 +507,8 @@ export function mountTimeline(
     e.preventDefault();
     e.stopPropagation();
     clearDropIndicator();
-    editableSegments.splice(insertIndexAt(e.clientX), 0, newSegment(sectionId));
-    commit();
+    paletteDrag = null;
+    insertSection(insertIndexAt(e.clientX), sectionId);
   });
 
   function renderRuler(): void {
@@ -359,6 +541,8 @@ export function mountTimeline(
   function clearDropIndicator(): void {
     dropIndicatorEl?.remove();
     dropIndicatorEl = null;
+    ghostEl?.remove();
+    ghostEl = null;
   }
 
   /** Live, cheap re-flow of existing block elements' left/width during a resize drag (no DOM rebuild). */
@@ -507,8 +691,8 @@ export function mountTimeline(
         removeBtn.addEventListener("dragstart", (e) => e.preventDefault());
         removeBtn.addEventListener("click", (e) => {
           e.stopPropagation();
-          editableSegments.splice(index, 1);
-          commit();
+          const [removed] = editableSegments.splice(index, 1);
+          commitEdit(-(removed?.lengthBars ?? 0), null);
         });
         block.appendChild(removeBtn);
       }
@@ -525,16 +709,27 @@ export function mountTimeline(
       sectionsRow.appendChild(block);
     });
 
-    // The sonic logo as its own part of the form (moved with the green line, not dragged here).
-    const logoStart = engine.logoStartSeconds;
+    // The sonic logo as its own part of the form, from its hit (the green line) to its end. It
+    // lies under the last section, so that one stays clickable; × removes the logo.
+    const logoHit = engine.hasLogo ? engine.logoAnchorSeconds : null;
     const logoEnd = engine.logoEndSeconds;
-    if (logoStart !== null && logoEnd !== null) {
+    if (logoHit !== null && logoEnd !== null) {
       const logoBlock = document.createElement("div");
       logoBlock.className = "timeline-section-block timeline-section-logo";
-      logoBlock.style.left = `${xOfSeconds(Math.max(0, logoStart)) * 100}%`;
-      logoBlock.style.width = `${(xOfSeconds(logoEnd) - xOfSeconds(Math.max(0, logoStart))) * 100}%`;
+      logoBlock.style.left = `${xOfSeconds(logoHit) * 100}%`;
+      logoBlock.style.width = `${(xOfSeconds(logoEnd) - xOfSeconds(logoHit)) * 100}%`;
       logoBlock.title = "The sonic logo – move it with the green line";
       logoBlock.innerHTML = `<span class="timeline-section-label">Logo</span>`;
+      const removeLogo = document.createElement("button");
+      removeLogo.type = "button";
+      removeLogo.className = "timeline-section-remove";
+      removeLogo.textContent = "×";
+      removeLogo.title = "Remove the sonic logo (the music then ends on its own)";
+      removeLogo.addEventListener("click", (e) => {
+        e.stopPropagation();
+        engine.setLogoEnabled(false);
+      });
+      logoBlock.appendChild(removeLogo);
       sectionsRow.appendChild(logoBlock);
     }
   }
@@ -563,8 +758,9 @@ export function mountTimeline(
       decBtn.textContent = "−";
       decBtn.title = "One bar shorter";
       decBtn.addEventListener("click", () => {
-        seg.lengthBars = Math.max(1, seg.lengthBars - 1);
-        commit();
+        if (seg.lengthBars <= 1) return;
+        seg.lengthBars -= 1;
+        commitEdit(-1, seg);
       });
       const barsLabel = document.createElement("span");
       barsLabel.className = "segment-row-bars";
@@ -576,7 +772,7 @@ export function mountTimeline(
       incBtn.title = "One bar longer";
       incBtn.addEventListener("click", () => {
         seg.lengthBars += 1;
-        commit();
+        commitEdit(1, seg);
       });
       lengthGroup.append(decBtn, barsLabel, incBtn);
       row.appendChild(lengthGroup);
@@ -615,8 +811,8 @@ export function mountTimeline(
         removeBtn.textContent = "×";
         removeBtn.title = "Remove section";
         removeBtn.addEventListener("click", () => {
-          editableSegments.splice(index, 1);
-          commit();
+          const [removed] = editableSegments.splice(index, 1);
+          commitEdit(-(removed?.lengthBars ?? 0), null);
         });
         row.appendChild(removeBtn);
       }
@@ -702,6 +898,12 @@ export function mountTimeline(
     event.stopPropagation(); // don't also seek the transport
     film?.setAudioOn(!film.audioOn);
   });
+  const formLane = document.createElement("div");
+  formLane.className = "timeline-lane timeline-lane-form";
+  formLane.innerHTML = `<span class="timeline-lane-name">Form</span>`;
+  formLane.appendChild(sectionsRow);
+  lanesEl.appendChild(formLane);
+  formLane.addEventListener("click", (e) => e.stopPropagation()); // editing the form doesn't seek
   let filmDrawKey = "";
   let filmToggleText = "";
   let filmEndText = "";
@@ -832,6 +1034,8 @@ export function mountTimeline(
     renderRuler();
     renderSections();
     renderSegmentList();
+    syncLogoCard();
+    updatePaletteWidths();
     if (showSections) {
       for (const track of tracks) {
         const entry = lanesByTrack.get(track.id);
@@ -864,10 +1068,10 @@ export function mountTimeline(
       musicBlockHandle.removeEventListener("pointercancel", onUp);
       const end = draggingEnd;
       draggingEnd = null;
+      lockMessage = "";
       suppressClick = true;
       window.setTimeout(() => (suppressClick = false), 0);
-      const logo = engine.logoSettings;
-      if (end !== null && logo) engine.fitToAnchor(end - (engine.logoDurationSeconds - logo.anchorSeconds));
+      if (end !== null) engine.fitToAnchor(engine.anchorForEnd(end));
     };
     musicBlockHandle.addEventListener("pointermove", onMove);
     musicBlockHandle.addEventListener("pointerup", onUp);
@@ -875,6 +1079,7 @@ export function mountTimeline(
   });
 
   let lastBlockText = "";
+  let lastStatus = "";
   function updateMusicBlock(): void {
     const start = engine.musicStartSeconds;
     const end = draggingEnd ?? engine.arrangementSeconds;
@@ -884,13 +1089,19 @@ export function mountTimeline(
     musicBlock.style.width = `${Math.max(0, xOfSeconds(end) - xOfSeconds(start)) * 100}%`;
     musicBlock.classList.toggle("timeline-music-block-dragging", draggingEnd !== null);
     musicBlockHandle.hidden = !engine.canFit;
+    lockBtn.hidden = !film?.info;
+    const status = draggingEnd !== null ? "" : lockMessage || `Music ends at ${formatFilmTime(end)}`;
+    if (status !== lastStatus) {
+      statusEl.textContent = status;
+      statusEl.classList.toggle("timeline-toolbar-warning", !!lockMessage);
+      lastStatus = status;
+    }
     const text =
       draggingEnd !== null
         ? `Release to fit to ${formatFilmTime(end)}`
         : `${formatFilmTime(end - start)} · ${totalBars} bars`;
     if (text !== lastBlockText) {
       musicBlockLabel.textContent = text;
-      statusEl.textContent = draggingEnd !== null ? "" : `Music ends at ${formatFilmTime(end)}`;
       lastBlockText = text;
     }
   }
@@ -946,7 +1157,7 @@ export function mountTimeline(
 
   let lastAnchorText = "";
   function updateLogo(): void {
-    const anchor = draggingAnchor ?? engine.logoAnchorSeconds;
+    const anchor = engine.hasLogo ? (draggingAnchor ?? engine.logoAnchorSeconds) : null;
     logoAnchor.hidden = anchor === null;
     logoAnchor.classList.toggle("timeline-logo-anchor-dragging", draggingAnchor !== null);
     logoAnchor.classList.toggle("timeline-logo-anchor-fixed", !engine.canFit);

@@ -241,28 +241,49 @@ export class ArrangementManager {
       // Where the source simply continues (untouched form), join seamlessly: no ring-out, no fade.
       const continuesFromPrev = !!prevLast && prevLast.sourceBar + prevLast.bars === chunks[0]!.sourceBar;
       const continuesIntoNext = !!nextFirst && nextFirst.sourceBar === sourceEnd + 1;
+      const barSec = timing.barSeconds;
+      const beatSec = barSec / 4;
 
-      const fadeIn = index === 0 || continuesFromPrev ? CUT_FADE_SECONDS : fadeSecondsFor(segment.transition);
+      // Pickups (upbeats, e.g. the melody leading into Main motif) belong to the section they lead
+      // into. This section starts at a pickup target but the pickup wasn't just played: play it now,
+      // over the end of the previous section.
+      const firstSource = chunks[0]!.sourceBar;
+      const ownPickup = !track.isSwell && index > 0 && !continuesFromPrev ? (track.pickups[String(firstSource)] ?? 0) : 0;
+      // This section's end holds a pickup into a section that doesn't come next: silence it.
+      const strayPickup = !track.isSwell && !continuesIntoNext ? (track.pickups[String(sourceEnd + 1)] ?? 0) : 0;
+
+      const fadeIn = index === 0 || continuesFromPrev || ownPickup ? CUT_FADE_SECONDS : fadeSecondsFor(segment.transition);
       // Ring-out: let the track sound on after the section, until its next attack or silence (analysed
-      // per source bar), then fade. Swell-free tracks only; capped so sustained pads don't hang on.
+      // per source bar), then fade. Capped so sustained pads don't hang on.
       const tail = Math.min(MAX_RING_OUT_SECONDS, track.tails[sourceEnd - 1] ?? 0);
-      const ringOut = continuesIntoNext
+      let ringOut = continuesIntoNext
         ? CUT_FADE_SECONDS
         : next
           ? Math.max(CUT_FADE_SECONDS, track.tails.length ? tail : fadeSecondsFor(next.transition))
-          : Tone.Time(END_FADE).toSeconds(); // the end of the music: no ring-out, the logo stands alone
+          : Tone.Time(END_FADE).toSeconds();
       const start = this.barStartSeconds(segment.startBar);
       let end = this.barStartSeconds(segment.endBar);
-      let fadeOut = ringOut;
-      let playPastEnd = ringOut;
+      let hold = 0.5; // share of the ring-out held at full level before fading
+      if (strayPickup) {
+        // Stop before the pickup bar(s) instead (a short ring-out of what came before).
+        end -= strayPickup * barSec;
+        ringOut = Math.max(CUT_FADE_SECONDS, Math.min(MAX_RING_OUT_SECONDS, track.tails[sourceEnd - strayPickup - 1] ?? 0));
+      }
+      let playPastEnd = Math.max(0, end + ringOut - this.barStartSeconds(segment.endBar));
+
       const hit = !next ? this.logoHitSeconds(timing) : null;
       if (hit !== null) {
-        // The last section meets the logo: stop at the logo's hit -- except the tracks chosen to
-        // ring out (swells, sonar ...), which fade away under the logo.
-        const ring = this.logoRingOut.has(track.id) ? LOGO_RING_OUT_SECONDS : CUT_FADE_SECONDS * 10;
-        playPastEnd = Math.max(0, hit + ring - end);
+        // The music meets the logo. Grooves/beats fade out quickly at the hit; tracks chosen to ring
+        // out may let what is already sounding decay naturally into the logo (until their next attack
+        // in the bounce, analysed per beat) -- nothing new starts under the logo.
+        const beatsIn = Math.round((hit - this.barStartSeconds(lastChunk.startBar)) / beatSec);
+        const sourceBeat = (lastChunk.sourceBar - 1) * 4 + beatsIn; // beat boundary in the bounce
+        const natural = Math.min(LOGO_RING_OUT_SECONDS, track.beatTails[sourceBeat - 1] ?? 0);
+        const rings = this.logoRingOut.has(track.id) && natural > 0.05;
         end = hit;
-        fadeOut = ring;
+        ringOut = rings ? natural : Tone.Time(END_FADE).toSeconds();
+        hold = rings ? 0.7 : 0;
+        playPastEnd = Math.max(0, hit + ringOut - this.barStartSeconds(segment.endBar));
       }
 
       chunks.forEach((chunk, chunkIndex) => {
@@ -277,19 +298,28 @@ export class ArrangementManager {
           bars -= skip;
         }
         if (bars <= 0) return;
-        const offset = (fromBar - track.fileStartBar) * timing.barSeconds;
+        const offset = (fromBar - track.fileStartBar) * barSec;
         if (offset >= bufferSeconds) return;
         // The section's last chunk rings on (the bounce's own continuation after that bar).
         const ringOn = chunkIndex === chunks.length - 1 ? playPastEnd : 0;
-        const duration = Math.min(bars * timing.barSeconds + ringOn, bufferSeconds - offset);
-        voice.player.start(this.barStartSeconds(startBar), offset, duration);
+        const duration = Math.min(bars * barSec + ringOn, bufferSeconds - offset);
+        if (duration > 0) voice.player.start(this.barStartSeconds(startBar), offset, duration);
       });
 
+      if (ownPickup) {
+        const pickStart = start - ownPickup * barSec;
+        const offset = (firstSource - ownPickup - track.fileStartBar) * barSec;
+        if (pickStart >= 0 && offset >= 0 && offset < bufferSeconds) {
+          voice.player.start(pickStart, offset, Math.min(ownPickup * barSec, bufferSeconds - offset));
+          pts.push({ t: pickStart, v: 0 }, { t: pickStart + CUT_FADE_SECONDS, v: 1 });
+        }
+      } else {
+        pts.push({ t: start, v: 0 });
+      }
       pts.push(
-        { t: start, v: 0 },
         { t: start + fadeIn, v: 1 },
-        { t: end + (hit !== null ? 0 : fadeOut * 0.5), v: 1 },
-        { t: end + fadeOut, v: 0 },
+        { t: end + ringOut * hold, v: 1 },
+        { t: end + ringOut, v: 0 },
       );
     });
 
@@ -327,8 +357,8 @@ export class ArrangementManager {
     // there is one -- beat `swellCutoffBeat` of the last bar -- else the end of the music).
     const hit = this.logoHitSeconds(timing);
     const ringsOut = hit !== null && this.logoRingOut.has(track.id);
-    // Chosen to ring out: the swell may sound on for a moment after the hit, fading away.
-    const swellCutoff = hit === null ? musicEnd : ringsOut ? hit + LOGO_RING_OUT_SECONDS : hit;
+    const beatSec = timing.barSeconds / 4;
+    let fadeEnd: number | null = null;
 
     planSwells(chunks, track.swellEvents, sectionStarts).forEach(({ event, arrangementBar }, i) => {
       const anchorTime = this.barStartSeconds(arrangementBar);
@@ -343,14 +373,30 @@ export class ArrangementManager {
         duration += when;
         when = 0;
       }
-      duration = Math.min(duration, swellCutoff - when);
+      if (hit !== null) {
+        // Nothing new starts under the logo; a swell already sounding stops at the hit, or -- if this
+        // track may ring out -- decays naturally until its next attack in the bounce.
+        if (when >= hit - 0.05) return;
+        const sourceAtHit = event.start + (hit - when);
+        const natural = Math.min(LOGO_RING_OUT_SECONDS, track.beatTails[Math.round(sourceAtHit / beatSec) - 1] ?? 0);
+        const cutoff = hit + (ringsOut ? natural : 0.03);
+        if (ringsOut && hit < when + duration) fadeEnd = Math.max(fadeEnd ?? 0, cutoff);
+        duration = Math.min(duration, cutoff - when);
+      } else {
+        duration = Math.min(duration, musicEnd - when);
+      }
       if (duration <= 0.02 || offset >= bufferSeconds) return;
       voices[i % 2]!.player.start(when, Math.max(0, offset), Math.min(duration, bufferSeconds - offset));
     });
 
     // Both voices at full level (the clips carry their own shape) -- faded out under the logo if
     // this track rings out there.
-    const fade = ringsOut && hit !== null ? [{ t: hit, v: 1 }, { t: hit + LOGO_RING_OUT_SECONDS, v: 0 }] : [];
+    const fade =
+      hit !== null
+        ? ringsOut && fadeEnd !== null
+          ? [{ t: hit + (fadeEnd - hit) * 0.7, v: 1 }, { t: fadeEnd, v: 0 }]
+          : [{ t: hit, v: 1 }, { t: hit + 0.03, v: 0 }]
+        : [];
     return voices.map((voice) => new GainEnvelope(voice!.gain.gain, 1, fade));
   }
 }

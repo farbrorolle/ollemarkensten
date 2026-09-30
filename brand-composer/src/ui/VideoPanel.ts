@@ -56,6 +56,17 @@ export function mountVideoPanel(
             <input type="range" min="-40" max="6" step="0.5" data-film-volume />
             <span class="video-volume-value" data-film-volume-value></span>
           </label>
+          <label class="video-volume" title="Music level">
+            <span>Music</span>
+            <input type="range" min="-40" max="6" step="0.5" data-music-volume />
+            <span class="video-volume-value" data-music-volume-value></span>
+          </label>
+          <span class="video-volume video-limiter" title="Output limiter on the film audio and the music together">
+            <label class="video-limiter-toggle"><input type="checkbox" data-out-lim-on /> Limiter</label>
+            <input type="range" min="-6" max="18" step="0.5" data-out-lim title="Drive into the output limiter" />
+            <span class="video-volume-value" data-out-lim-value></span>
+            <span class="mini-gr" title="How much the limiter is turning the sound down"><span class="mini-gr-fill" data-out-lim-gr></span></span>
+          </span>
           <button type="button" class="btn" data-replace>Replace film</button>
           <button type="button" class="btn" data-remove>Remove</button>
         </span>
@@ -140,6 +151,29 @@ export function mountVideoPanel(
   volumeInput.value = String(film.volumeDb);
   volumeInput.addEventListener("input", () => film.setVolumeDb(Number(volumeInput.value)));
 
+  // Music level + the output limiter over film audio and music together.
+  const signed = (v: number): string => `${v > 0 ? "+" : ""}${v.toFixed(1)} dB`;
+  const musicInput = q<HTMLInputElement>("[data-music-volume]");
+  const musicValue = q("[data-music-volume-value]");
+  musicInput.value = String(engine.masterGain);
+  musicValue.textContent = signed(engine.masterGain);
+  musicInput.addEventListener("input", () => {
+    engine.setMasterGain(Number(musicInput.value));
+    musicValue.textContent = signed(Number(musicInput.value));
+  });
+  const limOn = q<HTMLInputElement>("[data-out-lim-on]");
+  const limInput = q<HTMLInputElement>("[data-out-lim]");
+  const limValue = q("[data-out-lim-value]");
+  const limGr = q("[data-out-lim-gr]");
+  limOn.checked = engine.isOutputLimiterOn;
+  limOn.addEventListener("change", () => engine.setOutputLimiterOn(limOn.checked));
+  limInput.value = String(engine.outputDriveDb);
+  limValue.textContent = signed(engine.outputDriveDb);
+  limInput.addEventListener("input", () => {
+    engine.setOutputDrive(Number(limInput.value));
+    limValue.textContent = signed(Number(limInput.value));
+  });
+
   function renderFilmState(): void {
     const info = film.info;
     emptyEl.hidden = !!info;
@@ -179,6 +213,9 @@ export function mountVideoPanel(
 
   return {
     update() {
+      const reduction = Math.min(12, Math.abs(engine.outputLimiterReduction));
+      limGr.style.width = `${(reduction / 12) * 100}%`;
+      limGr.title = `${reduction.toFixed(1)} dB`;
       const info = film.info;
       if (!info) return;
 

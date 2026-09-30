@@ -48,6 +48,10 @@ export class Track {
   readonly isSwell: boolean;
   /** Ring-out seconds after each source bar (index 0 = bar 1); empty if not analysed. */
   readonly tails: number[];
+  /** Ring-out after each source beat (index 0 = end of beat 1), for the logo's mid-bar hit. */
+  readonly beatTails: number[];
+  /** Source section start bar -> bars of pickup (upbeat) leading into it. */
+  readonly pickups: Record<string, number>;
   readonly swellEvents: { start: number; end: number; anchorBar: number }[];
 
   private readonly legacyPlayer: Tone.Player | null = null;
@@ -83,6 +87,8 @@ export class Track {
     this.isLogo = config.role === "logo";
     this.isSwell = config.role === "swell";
     this.tails = config.tails ?? [];
+    this.beatTails = config.beatTails ?? [];
+    this.pickups = config.pickups ?? {};
     this.swellEvents = config.swellEvents ?? [];
 
     this.sidechainGain = new Tone.Gain(1);

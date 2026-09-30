@@ -806,8 +806,7 @@ body {
   --lane-gutter: 102px;
 }
 
-.timeline-ruler,
-.timeline-sections {
+.timeline-ruler {
   margin-left: calc(var(--lane-gutter) + 1px); /* + the timeline body's 1px border */
   margin-right: 5px;
 }
@@ -1375,5 +1374,172 @@ body.view-customer .track-row {
   background: rgba(51, 209, 122, 0.14) !important;
   color: var(--green);
   cursor: default;
+  z-index: 0 !important;
+  justify-content: flex-end;
+  padding-left: 0;
+}
+
+.timeline-section-logo .timeline-section-remove {
+  color: var(--green);
+}
+
+.timeline-section-logo .timeline-section-remove:hover {
+  background: var(--green);
+  color: #0b0d12;
+}
+
+.video-limiter {
+  gap: 6px;
+}
+
+.video-limiter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-dim);
+}
+
+.video-limiter input[type="range"] {
+  width: 90px;
+}
+
+.mini-gr {
+  display: inline-block;
+  width: 48px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg);
+  border: 1px solid var(--panel-border);
+  overflow: hidden;
+}
+
+.mini-gr-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--amber);
+  transition: width 0.08s linear;
+}
+
+/* The form (section blocks) as its own lane between the film and the music. */
+.timeline-lane-form {
+  height: 34px;
+  cursor: default;
+}
+
+.timeline-lane-form .timeline-sections {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  margin: 0;
+}
+
+.timeline-section-block {
   z-index: 1;
+}
+
+.timeline-section-ghost {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 3;
+  border: 1px dashed var(--text);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 0 6px;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  overflow: visible;
+  pointer-events: none;
+  box-shadow: -2px 0 0 var(--text);
+}
+
+/* Section cards: as wide as the part will be; length choice inside. */
+.timeline-palette-chip {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  box-sizing: border-box;
+  min-width: 56px;
+  overflow: hidden;
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+.timeline-palette-chip .chip-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.chip-lengths {
+  display: flex;
+  gap: 3px;
+}
+
+.chip-length {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--panel-border);
+  background: var(--bg);
+  color: var(--text-dim);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.chip-length.is-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: white;
+}
+
+.timeline-palette-logo {
+  justify-content: center;
+  border-color: var(--green);
+  background: rgba(51, 209, 122, 0.14);
+  color: var(--green);
+  cursor: pointer;
+}
+
+.lock-btn.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.timeline-toolbar-warning {
+  color: #ffb84d;
+}
+
+.timeline-palette-chip[hidden],
+.lock-btn[hidden] {
+  display: none;
+}
+
+/* × right after the name (not at the far right, where the logo's green line often is). */
+.timeline-lane-form .timeline-section-block {
+  justify-content: flex-start;
+  padding-right: 10px;
+}
+
+.timeline-lane-form .timeline-section-label {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.timeline-lane-form .timeline-section-logo {
+  justify-content: flex-end;
+  padding-right: 4px;
+}
+
+.timeline-lane-form .timeline-section-transition {
+  width: 24px;
+  max-width: 24px;
 }
