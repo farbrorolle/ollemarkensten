@@ -23,6 +23,7 @@ interface EditableSegment {
 }
 
 const LANE_HEIGHT = 40;
+const MIX_LANE_HEIGHT = 64;
 const WAVE_COLOR = "#7c5cff";
 const FILM_WAVE_COLOR = "#ffb84d";
 const LOGO_WAVE_COLOR = "#33d17a";
@@ -31,8 +32,6 @@ const DEFAULT_NEW_SEGMENT_BARS = 4;
 const TRANSITION_LABELS: Record<TransitionType, string> = {
   cut: "Cut",
   crossfade: "Crossfade",
-  "filter-sweep": "Filter sweep",
-  riser: "Riser",
 };
 
 function drawWaveformSlice(ctx: CanvasRenderingContext2D, data: Float32Array, x0: number, x1: number, height: number): void {
@@ -177,14 +176,21 @@ export function mountTimeline(
   const computeSpan = (): number => {
     const music = engine.arrangementSeconds;
     const filmSeconds = film?.info?.duration;
-    return Math.max(0.001, music, filmSeconds ?? (engine.canFit ? music * 1.25 : music));
+    const content = Math.max(music, filmSeconds ?? 0);
+    // Headroom after the music/film so the length can be dragged longer.
+    return Math.max(0.001, engine.canFit ? content * 1.2 : content);
   };
   let spanSeconds = computeSpan();
   /** x position (0..1) of a transport time, and of the start of a (1-indexed) arrangement bar. */
   const xOfSeconds = (seconds: number): number => seconds / spanSeconds;
   const xOfBar = (bar: number): number => xOfSeconds(engine.barStartSeconds(bar));
 
+  root.classList.add("timeline-mode-block");
   root.innerHTML = `
+    <div class="timeline-toolbar">
+      <button type="button" class="btn" data-mode-toggle>Visa sektioner</button>
+      <span class="timeline-toolbar-status" data-status></span>
+    </div>
     <div class="timeline-palette" data-palette></div>
     <div class="timeline-ruler" data-ruler></div>
     <div class="timeline-sections" data-sections></div>
@@ -198,6 +204,10 @@ export function mountTimeline(
           <span class="timeline-logo-anchor-handle" data-logo-anchor-handle></span>
         </div>
         <div class="timeline-film-end" data-film-end hidden><span class="timeline-film-end-label" data-film-end-label></span></div>
+        <div class="timeline-music-block" data-music-block>
+          <span class="timeline-music-block-label" data-music-block-label></span>
+          <span class="timeline-music-block-handle" data-music-block-handle title="Dra för att ändra musikens längd"></span>
+        </div>
         <div class="timeline-playhead" data-playhead></div>
       </div>
     </div>
@@ -221,6 +231,21 @@ export function mountTimeline(
   const logoAnchor = root.querySelector<HTMLElement>("[data-logo-anchor]")!;
   const logoAnchorLabel = root.querySelector<HTMLElement>("[data-logo-anchor-label]")!;
   const logoAnchorHandle = root.querySelector<HTMLElement>("[data-logo-anchor-handle]")!;
+  const modeToggle = root.querySelector<HTMLButtonElement>("[data-mode-toggle]")!;
+  const statusEl = root.querySelector<HTMLElement>("[data-status]")!;
+  const musicBlock = root.querySelector<HTMLElement>("[data-music-block]")!;
+  const musicBlockLabel = root.querySelector<HTMLElement>("[data-music-block-label]")!;
+  const musicBlockHandle = root.querySelector<HTMLElement>("[data-music-block-handle]")!;
+
+  // Main view = the music as one block; the section view is secondary.
+  let showSections = false;
+  modeToggle.addEventListener("click", () => {
+    showSections = !showSections;
+    root.classList.toggle("timeline-mode-block", !showSections);
+    root.classList.toggle("timeline-mode-sections", showSections);
+    modeToggle.textContent = showSections ? "Dölj sektioner" : "Visa sektioner";
+    redrawAll(); // canvases that were hidden have no width until shown
+  });
   const segmentList = root.querySelector<HTMLElement>("[data-segment-list]")!;
 
   for (const section of sections) {
@@ -501,6 +526,10 @@ export function mountTimeline(
     canvas.height = LANE_HEIGHT;
     const ctx = canvas.getContext("2d")!;
     ctx.clearRect(0, 0, width, LANE_HEIGHT);
+    drawTrackInto(ctx, track, width, LANE_HEIGHT);
+  }
+
+  function drawTrackInto(ctx: CanvasRenderingContext2D, track: Track, width: number, LANE_HEIGHT: number): void {
     ctx.strokeStyle = WAVE_COLOR;
 
     if (track.playMode === "oneshot") {
@@ -624,16 +653,41 @@ export function mountTimeline(
     afterFilm.style.left = `${Math.min(1, fraction) * 100}%`;
   }
 
+  // All of the music in one lane (the customer's main view): every folder faintly on top of each other.
+  const mixLane = document.createElement("div");
+  mixLane.className = "timeline-lane timeline-lane-mix";
+  mixLane.innerHTML = `<span class="timeline-lane-name">Musik</span><canvas></canvas>`;
+  lanesEl.appendChild(mixLane);
+  const mixCanvas = mixLane.querySelector("canvas")!;
+
+  function drawMixLane(): void {
+    const width = mixCanvas.clientWidth || 800;
+    mixCanvas.width = width;
+    mixCanvas.height = MIX_LANE_HEIGHT;
+    const ctx = mixCanvas.getContext("2d")!;
+    ctx.clearRect(0, 0, width, MIX_LANE_HEIGHT);
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    for (const track of tracks) {
+      if (track.isLogo) continue;
+      drawTrackInto(ctx, track, width, MIX_LANE_HEIGHT);
+    }
+    ctx.globalAlpha = 0.9;
+    for (const track of tracks) if (track.isLogo) drawTrackInto(ctx, track, width, MIX_LANE_HEIGHT);
+    ctx.restore();
+  }
+
   const lanesByTrack = new Map<string, { canvas: HTMLCanvasElement; lane: HTMLElement }>();
   for (const track of tracks) {
     const lane = document.createElement("div");
-    lane.className = "timeline-lane";
+    lane.className = "timeline-lane timeline-lane-track";
     lane.innerHTML = `<span class="timeline-lane-name">${track.name}</span><canvas></canvas>`;
     lanesEl.appendChild(lane);
     const canvas = lane.querySelector("canvas")!;
     lanesByTrack.set(track.id, { canvas, lane });
     drawTrackLane(track, canvas);
   }
+  drawMixLane();
 
   function commit(): void {
     let bar = 1;
@@ -657,9 +711,66 @@ export function mountTimeline(
     renderRuler();
     renderSections();
     renderSegmentList();
-    for (const track of tracks) {
-      const entry = lanesByTrack.get(track.id);
-      if (entry) drawTrackLane(track, entry.canvas);
+    if (showSections) {
+      for (const track of tracks) {
+        const entry = lanesByTrack.get(track.id);
+        if (entry) drawTrackLane(track, entry.canvas);
+      }
+    } else {
+      drawMixLane();
+    }
+  }
+
+  // --- Music block: drag its right edge to set the length. The music is re-arranged so the
+  // logo ends exactly there (same as dragging the logo line, just thinking in "total length").
+  let draggingEnd: number | null = null;
+  musicBlockHandle.addEventListener("pointerdown", (e) => {
+    if (!engine.canFit) return;
+    e.preventDefault();
+    e.stopPropagation();
+    musicBlockHandle.setPointerCapture(e.pointerId);
+    const rect = overlay.getBoundingClientRect();
+    const minEnd = engine.musicStartSeconds + 2 * engine.barSeconds;
+    const toSeconds = (clientX: number): number =>
+      Math.max(minEnd, Math.min(1, (clientX - rect.left) / rect.width) * spanSeconds);
+    draggingEnd = toSeconds(e.clientX);
+    const onMove = (ev: PointerEvent): void => {
+      draggingEnd = toSeconds(ev.clientX);
+    };
+    const onUp = (): void => {
+      musicBlockHandle.removeEventListener("pointermove", onMove);
+      musicBlockHandle.removeEventListener("pointerup", onUp);
+      musicBlockHandle.removeEventListener("pointercancel", onUp);
+      const end = draggingEnd;
+      draggingEnd = null;
+      suppressClick = true;
+      window.setTimeout(() => (suppressClick = false), 0);
+      const logo = engine.logoSettings;
+      if (end !== null && logo) engine.fitToAnchor(end - (engine.logoDurationSeconds - logo.anchorSeconds));
+    };
+    musicBlockHandle.addEventListener("pointermove", onMove);
+    musicBlockHandle.addEventListener("pointerup", onUp);
+    musicBlockHandle.addEventListener("pointercancel", onUp);
+  });
+
+  let lastBlockText = "";
+  function updateMusicBlock(): void {
+    const start = engine.musicStartSeconds;
+    const end = draggingEnd ?? engine.arrangementSeconds;
+    musicBlock.style.left = `${xOfSeconds(start) * 100}%`;
+    musicBlock.style.top = `${mixLane.offsetTop}px`;
+    musicBlock.style.height = `${mixLane.offsetHeight}px`;
+    musicBlock.style.width = `${Math.max(0, xOfSeconds(end) - xOfSeconds(start)) * 100}%`;
+    musicBlock.classList.toggle("timeline-music-block-dragging", draggingEnd !== null);
+    musicBlockHandle.hidden = !engine.canFit;
+    const text =
+      draggingEnd !== null
+        ? `Släpp för att anpassa till ${formatFilmTime(end)}`
+        : `${formatFilmTime(end - start)} · ${totalBars} takter`;
+    if (text !== lastBlockText) {
+      musicBlockLabel.textContent = text;
+      statusEl.textContent = draggingEnd !== null ? "" : `Musiken slutar ${formatFilmTime(end)}`;
+      lastBlockText = text;
     }
   }
 
@@ -747,6 +858,7 @@ export function mountTimeline(
       playhead.style.left = `${fraction * 100}%`;
       updateFilm(spanSeconds);
       updateLogo();
+      updateMusicBlock();
 
       for (const track of tracks) {
         const entry = lanesByTrack.get(track.id);

@@ -142,7 +142,9 @@
       "threshold": -20,
       "ratio": 2,
       "attack": 0.005,
-      "release": 0.18
+      "release": 0.18,
+      "depth": 6,
+      "curve": "smooth"
     }
   ],
   "sections": [
@@ -228,41 +230,46 @@
         "section": "a",
         "bars": 8,
         "minBars": 0,
-        "maxBars": 16,
+        "maxBars": 64,
         "stepBars": 4,
-        "priority": 2
+        "priority": 2,
+        "transition": "crossfade"
       },
       {
         "section": "b",
         "bars": 8,
         "minBars": 4,
-        "maxBars": 16,
+        "maxBars": 64,
         "stepBars": 4,
-        "priority": 3
+        "priority": 3,
+        "transition": "crossfade"
       },
       {
         "section": "c",
         "bars": 8,
         "minBars": 0,
-        "maxBars": 16,
+        "maxBars": 64,
         "stepBars": 4,
-        "priority": 1
+        "priority": 1,
+        "transition": "crossfade"
       },
       {
         "section": "d",
         "bars": 8,
         "minBars": 0,
-        "maxBars": 16,
+        "maxBars": 64,
         "stepBars": 4,
-        "priority": 1
+        "priority": 1,
+        "transition": "crossfade"
       },
       {
         "section": "e",
         "bars": 8,
         "minBars": 0,
-        "maxBars": 8,
+        "maxBars": 32,
         "stepBars": 4,
-        "priority": 1
+        "priority": 1,
+        "transition": "crossfade"
       },
       {
         "section": "break",
@@ -270,7 +277,8 @@
         "minBars": 0,
         "maxBars": 4,
         "stepBars": 2,
-        "priority": 2
+        "priority": 2,
+        "transition": "crossfade"
       },
       {
         "section": "final",
@@ -278,7 +286,8 @@
         "minBars": 2,
         "maxBars": 16,
         "stepBars": 2,
-        "priority": 5
+        "priority": 5,
+        "transition": "crossfade"
       }
     ]
   },
@@ -295,5 +304,17 @@
       "before": "1m"
     },
     "fadeMusic": null
+  },
+  "master": {
+    "gain": 0,
+    "limiterThreshold": -1,
+    "compressor": {
+      "enabled": false,
+      "threshold": -18,
+      "ratio": 2,
+      "attack": 0.01,
+      "release": 0.2,
+      "knee": 6
+    }
   }
 }

@@ -42,12 +42,25 @@ const regions = { intro: [1, 4], a: [5, 12], b: [13, 20], final: [49, 56] };
   assert.equal(r.lengths[3], 8, "final (priority 4) untouched");
 }
 
-// Longer than the template: extend lowest priority first.
+// Longer than the template: the extra length is spread over the loopable sections.
 {
   const r = fitToLength(template, anchorOffsetInMusic(36, timing), timing, regions);
   assert.equal(r.totalBars, 36);
-  assert.equal(r.lengths[1], 16, `a extended: ${r.lengths}`);
+  assert.deepEqual(r.lengths, [4, 12, 12, 8], `spread: ${r.lengths}`);
   assert.ok(Math.abs(r.errorSeconds) < 1e-9);
+}
+
+// Much longer: every loopable section grows, none beyond its max.
+{
+  const long = [
+    { section: "a", bars: 8, minBars: 0, maxBars: 32, stepBars: 4, priority: 1 },
+    { section: "b", bars: 8, minBars: 0, maxBars: 32, stepBars: 4, priority: 1 },
+    { section: "c", bars: 8, minBars: 0, maxBars: 32, stepBars: 4, priority: 1 },
+    { section: "final", bars: 8, minBars: 2, maxBars: 8, stepBars: 2, priority: 5 },
+  ];
+  const r = fitToLength(long, anchorOffsetInMusic(80, timing), timing);
+  assert.equal(r.totalBars, 80);
+  assert.deepEqual(r.lengths, [24, 24, 24, 8], `even: ${r.lengths}`);
 }
 
 // Shorter than the minimum: anchor lands late, with a warning.

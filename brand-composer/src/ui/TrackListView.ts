@@ -11,7 +11,7 @@ function mountTrackRow(
   row.className = "track-row";
   const loadControls = track.isSectioned
     ? `<span class="track-name-hint" title="Spår med olika ljud per sektion kan inte ersättas med en enda lokal fil">per sektion</span>`
-    : `<button data-load class="btn btn-file" title="Ladda lokal WAV-fil (eller dra och släpp)">📁</button>
+    : `<button data-load class="btn btn-file creator-only" title="Ladda lokal WAV-fil (eller dra och släpp)">📁</button>
        <input data-file-input type="file" accept="audio/*" hidden />`;
   row.innerHTML = `
     <span class="track-name-cell">
@@ -19,9 +19,9 @@ function mountTrackRow(
       ${loadControls}
     </span>
     <input data-volume type="range" min="-60" max="6" step="0.5" title="Volume (dB)" />
-    <input data-pan type="range" min="-1" max="1" step="0.05" title="Pan" />
+    <input data-pan class="creator-only" type="range" min="-1" max="1" step="0.05" title="Pan" />
     <button data-mute class="btn btn-toggle">M</button>
-    <button data-solo class="btn btn-toggle">S</button>
+    <button data-solo class="btn btn-toggle creator-only">S</button>
   `;
   container.appendChild(row);
 

@@ -34,9 +34,8 @@ src/
     ArrangementManager.ts   Schemalägger hela arrangemanget en gång vid
                              inläsning: fasta cue-punkter (takt -> sektion,
                              + övergångstyp), inga live-triggade övergångar
-    TransitionFx.ts          Delade synthesnoder för övergångstyperna
-                             "filter-sweep" och "riser" (masterfilter +
-                             brus-riser), triggas av ArrangementManager
+    GainEnvelope.ts          Styckvis linjära gain-kurvor på tidslinjen
+                             (sektionsröster, melodimute, fade) – sök-säkra
     Sidechain.ts            Envelope-follower-baserad ducking (threshold/ratio/
                              attack/release), realtidsjusterbar
     wav.ts                  WAV-encoding + nedladdning för stereo-export
@@ -174,22 +173,37 @@ spelare.
 
 ### Övergångar mellan sektioner
 
-Varje cue (utom arrangemangets första) har en övergångstyp, redigerbar via en
-liten meny i sektionsblocket i tidslinjen:
+Varje cue (utom arrangemangets första) har en övergång, vald i sektionsvyn:
 
-- **Cut** — nästan momentant byte, ingen hörbar toning.
-- **Crossfade** (standard) — kort musikalisk toning (en åttondel) mellan
-  utgående/inkommande.
-- **Filter sweep** — som crossfade, plus att master-lowpass-filtret sveper
-  igen en takt innan cuen och poppar upp igen exakt på den.
-- **Riser** — som crossfade, plus ett syntetiskt brus-riser (`Tone.Noise` +
-  bandpass-filter) som bygger upp och kulminerar exakt på cuen.
+- **Cut** — byte på några millisekunder, bara för att undvika klick.
+- **Crossfade** — utgående sektion klingar vidare en åttondel och tonas ut
+  medan den inkommande spelar. För långa bounces spelar varje spår sina
+  sektioner omväxlande på två "röster" (samma avkodade buffer) så att de kan
+  överlappa; rösternas gain är `GainEnvelope`s som läggs om från vilken
+  position uppspelningen än startar (även efter hopp i tidslinjen).
 
-Cut/crossfade avgör bara hur långa de befintliga gain-rampningarna
-(`sectionGain`/`takeGain`) är — samma schemaläggningskod som redan fanns.
-Filter sweep/riser lägger till ett extra, återanvändbart effektlager
-(`TransitionFx`) ovanpå det, inkopplat i masterkedjan (`masterBus -> filter
--> limiter`) respektive mixat in i master-kanalen.
+Syntetiska risers/filtersvep finns inte längre – egna övergångsljud läggs in
+som separata ljudfiler.
+
+### Kundvy och skaparvy
+
+Växeln uppe till höger (eller `?view=creator`):
+
+- **Kundvy** (standard): filmen, musiken som *ett block* (dra i högra kanten
+  för att ändra längden – arrangemanget räknas om så att loggan slutar där),
+  loggans startstreck, och en volymregel + mute per mapp. "Visa sektioner" ger
+  sektionsvyn (dra och släpp, längd, övergång) som sekundär vy.
+- **Skaparvy**: dessutom BPM, pan/solo, **Master** (master gain,
+  busskompressor med på/av + GR-mätare, limiter med GR-mätare, export),
+  **Sidechain** (valfri källa → mapp eller buss, mängd i dB, känslighet,
+  attack/release och kurva: mjuk/analog, pump/exponentiell eller linjär) och
+  **Ljudlogga** (vilka mappar som mutas före loggan och hur långt före,
+  valfri fade in i loggan, var plopp ligger i filen och vilket slag det
+  landar på).
+
+Förlängning: sektionerna A–E får loopas (`maxBars` 64/32 i broadcom.json)
+och kostnaden för förlängning växer kvadratiskt, så extra längd sprids över
+flera sektioner i stället för att en sektion upprepas om och om igen.
 
 ### Varför spåren håller sig fassynkade
 

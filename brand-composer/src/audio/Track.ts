@@ -47,6 +47,12 @@ export class Track {
   readonly isLogo: boolean;
 
   private readonly legacyPlayer: Tone.Player | null = null;
+  /**
+   * Region mode: two "voices" playing the same buffer, used alternately per
+   * section so a crossfade can overlap the outgoing and incoming section.
+   * Voice 0 is `legacyPlayer`. Each has its own gain, driven by gain envelopes.
+   */
+  private readonly regionVoices: { player: Tone.Player; gain: Tone.Gain }[] = [];
   private readonly legacyFile: string | null = null;
   private readonly takes = new Map<string, SectionTake>();
 
@@ -95,7 +101,17 @@ export class Track {
       }
     } else {
       this.legacyPlayer = new Tone.Player({ loop: this.playMode === "loop", fadeIn: 0.002, fadeOut: 0.01 });
-      this.legacyPlayer.connect(this.sidechainGain);
+      if (this.playMode === "region") {
+        const second = new Tone.Player({ loop: false, fadeIn: 0.002, fadeOut: 0.01 });
+        for (const player of [this.legacyPlayer, second]) {
+          const gain = new Tone.Gain(0);
+          player.connect(gain);
+          gain.connect(this.sidechainGain);
+          this.regionVoices.push({ player, gain });
+        }
+      } else {
+        this.legacyPlayer.connect(this.sidechainGain);
+      }
       this.legacyFile = config.file ?? null;
     }
 
@@ -107,6 +123,7 @@ export class Track {
   async load(): Promise<void> {
     if (this.legacyPlayer) {
       if (this.legacyFile) await this.legacyPlayer.load(this.legacyFile);
+      this.shareRegionBuffer();
       return;
     }
     await Promise.all(
@@ -122,6 +139,7 @@ export class Track {
     if (!this.legacyPlayer) throw new Error(`Track "${this.id}" has per-section audio; can't replace it with a single file.`);
     const url = URL.createObjectURL(file);
     await this.legacyPlayer.load(url);
+    this.shareRegionBuffer();
     const previous = this.objectUrl;
     this.objectUrl = url;
     this.isLocalFile = true;
@@ -136,6 +154,17 @@ export class Track {
   /** The per-take fade gain for a given section id, if this is a sectioned track. */
   takeGainFor(sectionId: string): Tone.Gain | undefined {
     return this.takes.get(sectionId)?.takeGain;
+  }
+
+  /** Region mode: the second voice plays the very same decoded buffer (no extra memory). */
+  private shareRegionBuffer(): void {
+    const second = this.regionVoices[1];
+    if (second && this.legacyPlayer?.loaded) second.player.buffer = this.legacyPlayer.buffer;
+  }
+
+  /** Region mode: voice `i` (0 or 1) -- its player and its gain. */
+  regionVoice(i: number): { player: Tone.Player; gain: Tone.Gain } | undefined {
+    return this.regionVoices[i];
   }
 
   /** The single-file player (loop/region/oneshot tracks), or null for per-section tracks. */
@@ -155,6 +184,7 @@ export class Track {
    */
   resyncSectionTakes(): void {
     if (this.legacyPlayer && this.playMode !== "loop") this.legacyPlayer.unsync().sync();
+    for (const voice of this.regionVoices.slice(1)) voice.player.unsync().sync();
     for (const take of this.takes.values()) {
       take.player.unsync().sync();
       take.takeGain.gain.cancelScheduledValues(0);
@@ -189,6 +219,7 @@ export class Track {
   syncToTransport(): void {
     if (this.playMode === "loop") this.legacyPlayer?.sync().start(0);
     else this.legacyPlayer?.sync(); // started per cue by ArrangementManager / AudioEngine
+    for (const voice of this.regionVoices.slice(1)) voice.player.sync();
     for (const take of this.takes.values()) take.player.sync();
   }
 
@@ -227,6 +258,10 @@ export class Track {
 
   dispose(): void {
     this.legacyPlayer?.dispose();
+    for (const voice of this.regionVoices) {
+      if (voice.player !== this.legacyPlayer) voice.player.dispose();
+      voice.gain.dispose();
+    }
     for (const take of this.takes.values()) {
       take.player.dispose();
       take.takeGain.dispose();

@@ -56,7 +56,17 @@ export interface SidechainConfig {
   attack: number;
   /** Seconds to recover back to unity gain once the source drops below it. */
   release: number;
+  /** Most the target is ever turned down, in dB ("how much"). Default 24. */
+  depth?: number;
+  /**
+   * Shape of the duck/recovery ramps:
+   * "linear" (even), "exponential" (fast start, long tail -- classic "pump"),
+   * "smooth" (RC curve like an analogue compressor). Default "smooth".
+   */
+  curve?: SidechainCurve;
 }
+
+export type SidechainCurve = "linear" | "exponential" | "smooth";
 
 /**
  * A named arrangement section (Verse, Chorus, ...). For tracks that use a
@@ -74,12 +84,11 @@ export interface SectionConfig {
 
 /**
  * How playback bridges into a cue:
- * - "cut": near-instant switch, no blend.
- * - "crossfade": a short musical blend (outgoing fades out / incoming fades in).
- * - "filter-sweep": the master lowpass filter sweeps closed then pops back open, on top of a crossfade.
- * - "riser": a synthesized noise riser builds and peaks at the cue, on top of a crossfade.
+ * - "cut": near-instant switch (a few ms, just enough to avoid a click).
+ * - "crossfade": the outgoing section rings on for an 8th note while fading out.
+ * (Risers/sweeps are the creator's own audio files, not generated.)
  */
-export type TransitionType = "cut" | "crossfade" | "filter-sweep" | "riser";
+export type TransitionType = "cut" | "crossfade";
 
 /** A fixed point in the arrangement where playback switches to a different section. */
 export interface CueConfig {
@@ -139,6 +148,22 @@ export interface LogoConfig {
   fadeMusic?: string | null;
 }
 
+export interface CompressorSettings {
+  /** Off = ratio forced to 1 (transparent). */
+  enabled: boolean;
+  threshold: number; // dB
+  ratio: number;
+  attack: number; // s
+  release: number; // s
+  knee: number; // dB
+}
+
+export interface MasterConfig {
+  gain?: number; // dB
+  limiterThreshold?: number; // dB
+  compressor?: Partial<CompressorSettings>;
+}
+
 export interface ProjectConfig {
   title: string;
   /** Tempo the WAV stems were bounced at in Logic Pro. Drives Tone.Transport.bpm 1:1. */
@@ -172,4 +197,5 @@ export interface ProjectConfig {
   /** Rules for "fit to length" (see src/project/fitToLength.ts). */
   fit?: FitConfig;
   logo?: LogoConfig;
+  master?: MasterConfig;
 }

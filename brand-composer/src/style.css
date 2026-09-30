@@ -957,6 +957,219 @@ body {
   display: none;
 }
 
+/* Customer / creator view. The customer view hides everything that's the creator's job. */
+.view-switch {
+  margin-left: auto;
+  display: inline-flex;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.view-switch-btn {
+  background: var(--bg);
+  color: var(--text-dim);
+  border: none;
+  padding: 7px 14px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.view-switch-btn + .view-switch-btn {
+  border-left: 1px solid var(--panel-border);
+}
+
+.view-switch-btn.is-active {
+  background: var(--accent);
+  color: #fff;
+}
+
+body.view-customer .creator-only {
+  display: none !important;
+}
+
+body.view-customer .track-list-header,
+body.view-customer .track-row {
+  grid-template-columns: 180px minmax(0, 1fr) 40px;
+}
+
+.panel-logo {
+  grid-column: 1 / -1;
+}
+
+/* The music as one block (customer's main view). */
+.timeline-lane-mix {
+  height: 64px;
+}
+
+.timeline-music-block {
+  position: absolute;
+  border: 1px solid rgba(124, 92, 255, 0.75);
+  border-radius: 6px;
+  background: rgba(124, 92, 255, 0.08);
+  pointer-events: none;
+}
+
+.timeline-music-block-label {
+  position: absolute;
+  top: 3px;
+  left: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.timeline-music-block-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -8px;
+  width: 16px;
+  pointer-events: auto;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.timeline-music-block-handle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 5px;
+  width: 6px;
+  height: 28px;
+  margin-top: -14px;
+  border-radius: 3px;
+  background: var(--accent);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+}
+
+.timeline-music-block-dragging {
+  border-style: dashed;
+}
+
+.timeline-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.timeline-toolbar-status {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* Section view is secondary: hidden until "Visa sektioner". */
+.timeline-mode-block .timeline-palette,
+.timeline-mode-block .timeline-ruler,
+.timeline-mode-block .timeline-sections,
+.timeline-mode-block .timeline-segment-list,
+.timeline-mode-block .timeline-lane-track {
+  display: none !important;
+}
+
+.timeline-mode-sections .timeline-lane-mix,
+.timeline-mode-sections .timeline-music-block {
+  display: none !important;
+}
+
+/* Creator panels: compressor, sidechain rows, logo settings. */
+.creator-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px 16px;
+  align-items: end;
+}
+
+.creator-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.creator-grid select,
+.creator-grid input[type="number"] {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.creator-subhead {
+  margin: 16px 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.creator-subhead:first-child {
+  margin-top: 0;
+}
+
+.value-tag {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.sc-card {
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: var(--bg);
+}
+
+.sc-card-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.sc-card-head select {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.sc-card-head .sc-arrow {
+  color: var(--text-dim);
+}
+
+.sc-card-head .btn {
+  margin-left: auto;
+}
+
+.checkbox-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 13px;
+}
+
+.checkbox-row label {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--text);
+}
+
 /* Mobile: stack the two-column layout, and shrink grid rows whose fixed-px
    columns (track mixer, sidechain params) don't otherwise fit a narrow
    screen. Placed last in the file so it wins over the base rules above at

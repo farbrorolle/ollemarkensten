@@ -7,6 +7,7 @@ import { mountMasterPanel } from "./ui/MasterPanel.ts";
 import { mountTrackList } from "./ui/TrackListView.ts";
 import { mountSidechainPanel } from "./ui/SidechainPanel.ts";
 import { mountTimeline } from "./ui/TimelineView.ts";
+import { mountLogoPanel } from "./ui/LogoPanel.ts";
 import { mountVideoPanel } from "./ui/VideoPanel.ts";
 import { VideoSync } from "./video/VideoSync.ts";
 
@@ -23,6 +24,27 @@ const timelineRoot = document.querySelector<HTMLElement>("#timeline-view")!;
 const masterRoot = document.querySelector<HTMLElement>("#master-panel")!;
 const trackListRoot = document.querySelector<HTMLElement>("#track-list")!;
 const sidechainRoot = document.querySelector<HTMLElement>("#sidechain-panel")!;
+const logoRoot = document.querySelector<HTMLElement>("#logo-panel")!;
+
+/**
+ * Customer view (default): film, the music as one block, one fader per folder.
+ * Creator view (?view=creator or the switch): also sections, master, sidechain, logo settings.
+ */
+function setView(view: "customer" | "creator"): void {
+  document.body.classList.toggle("view-customer", view === "customer");
+  document.body.classList.toggle("view-creator", view === "creator");
+  for (const btn of document.querySelectorAll<HTMLButtonElement>("[data-view]")) {
+    btn.classList.toggle("is-active", btn.dataset.view === view);
+  }
+  const url = new URL(location.href);
+  if (view === "creator") url.searchParams.set("view", "creator");
+  else url.searchParams.delete("view");
+  history.replaceState(null, "", url);
+}
+for (const btn of document.querySelectorAll<HTMLButtonElement>("[data-view]")) {
+  btn.addEventListener("click", () => setView(btn.dataset.view === "creator" ? "creator" : "customer"));
+}
+setView(new URLSearchParams(location.search).get("view") === "creator" ? "creator" : "customer");
 
 /** Play/pause from a click or key press. Primes the film synchronously (user-gesture rule) before starting audio. */
 async function togglePlay(): Promise<void> {
@@ -55,6 +77,7 @@ async function bootstrap(): Promise<void> {
   const timeline = mountTimeline(timelineRoot, engine, config.sections ?? [], film);
   mountTrackList(trackListRoot, engine, (trackId) => timeline.redrawTrack(trackId));
   mountSidechainPanel(sidechainRoot, engine);
+  mountLogoPanel(logoRoot, engine);
 
   // A new film: re-arrange the music so the logo ends exactly when the film ends.
   // (The customer can then drag the logo's start line to any sync point.)

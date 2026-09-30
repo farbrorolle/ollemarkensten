@@ -37,7 +37,7 @@
   ],
   "arrangement": [
     { "bar": 1, "section": "verse" },
-    { "bar": 9, "section": "chorus", "transition": "riser" }
+    { "bar": 9, "section": "chorus", "transition": "crossfade" }
   ],
   "loopBars": 16
 }

@@ -10,7 +10,11 @@
     <div id="app">
       <header class="app-header">
         <h1 data-title>Brand Composer</h1>
-        <span class="subtitle">Web-DAW-motor · Tone.js · arrangerade takt-synkade sektioner</span>
+        <span class="subtitle">Anpassa musiken till din film</span>
+        <div class="view-switch" role="group" aria-label="Vy">
+          <button type="button" class="view-switch-btn" data-view="customer">Kundvy</button>
+          <button type="button" class="view-switch-btn" data-view="creator">Skaparvy</button>
+        </div>
       </header>
 
       <main class="layout">
@@ -22,25 +26,30 @@
         <section class="panel panel-transport" id="transport-panel"></section>
 
         <section class="panel panel-timeline">
-          <h2>Arrangemang</h2>
-          <p class="hint">Fasta cue-punkter, schemalagda vid inläsning — klicka i tidslinjen för att hoppa.</p>
+          <h2>Musik</h2>
+          <p class="hint">Dra i musikens högra kant för att ändra längden – musiken arrangeras om automatiskt. Klicka i tidslinjen för att hoppa.</p>
           <div id="timeline-view"></div>
         </section>
 
-        <section class="panel panel-master">
-          <h2>Master Chain</h2>
+        <section class="panel panel-master creator-only">
+          <h2>Master</h2>
           <div id="master-panel"></div>
         </section>
 
-        <section class="panel panel-sidechain">
+        <section class="panel panel-sidechain creator-only">
           <h2>Sidechain</h2>
           <div id="sidechain-panel"></div>
         </section>
 
+        <section class="panel panel-logo creator-only">
+          <h2>Ljudlogga</h2>
+          <div id="logo-panel"></div>
+        </section>
+
         <section class="panel panel-tracks">
-          <h2>Spår</h2>
+          <h2>Mixer</h2>
           <div class="track-list-header">
-            <span></span><span>Volume</span><span>Pan</span><span>Mute</span><span>Solo</span>
+            <span></span><span>Volym</span><span class="creator-only">Pan</span><span>Mute</span><span class="creator-only">Solo</span>
           </div>
           <div id="track-list"></div>
         </section>

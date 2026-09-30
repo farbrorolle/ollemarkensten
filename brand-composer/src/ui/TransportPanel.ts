@@ -17,7 +17,7 @@ export function mountTransportPanel(root: HTMLElement, engine: AudioEngine, onPl
       <button data-pause class="btn">⏸ Pause</button>
       <button data-stop class="btn">⏹ Stop</button>
     </div>
-    <label class="field">
+    <label class="field creator-only">
       <span>BPM</span>
       <input data-bpm type="number" min="20" max="300" step="1" />
     </label>

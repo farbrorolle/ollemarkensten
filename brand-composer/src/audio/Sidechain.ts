@@ -1,6 +1,6 @@
 import * as Tone from "tone";
 import type { Track } from "./Track.ts";
-import type { SidechainConfig } from "../project/types.ts";
+import type { SidechainConfig, SidechainCurve } from "../project/types.ts";
 
 export interface SidechainTarget {
   readonly duckNode: Tone.Gain;
@@ -15,6 +15,9 @@ export interface SidechainParams {
   attack: number;
   /** Seconds to recover back to unity gain once the source drops below it. */
   release: number;
+  /** Maximum reduction in dB. */
+  depth: number;
+  curve: SidechainCurve;
 }
 
 /**
@@ -29,6 +32,8 @@ export interface SidechainParams {
  */
 export class Sidechain {
   readonly id: string;
+  readonly sourceId: string;
+  readonly targetId: string;
   params: SidechainParams;
 
   private readonly meter: Tone.Meter;
@@ -38,12 +43,16 @@ export class Sidechain {
 
   constructor(id: string, source: Track, target: SidechainTarget, config: SidechainConfig) {
     this.id = id;
+    this.sourceId = config.source;
+    this.targetId = config.target;
     this.target = target;
     this.params = {
       threshold: config.threshold,
       ratio: config.ratio,
       attack: config.attack,
       release: config.release,
+      depth: config.depth ?? 24,
+      curve: config.curve ?? "smooth",
     };
 
     this.meter = new Tone.Meter({ channelCount: 1, normalRange: false, smoothing: 0 });
@@ -60,13 +69,13 @@ export class Sidechain {
       let targetGain = 1;
       if (db > this.params.threshold) {
         const excess = db - this.params.threshold;
-        const reductionDb = excess - excess / this.params.ratio;
+        const reductionDb = Math.min(this.params.depth, excess - excess / this.params.ratio);
         targetGain = Tone.dbToGain(-reductionDb);
       }
 
-      if (targetGain !== this.currentGain) {
-        const rampTime = targetGain < this.currentGain ? this.params.attack : this.params.release;
-        this.target.duckNode.gain.rampTo(targetGain, Math.max(rampTime, 0.001));
+      if (Math.abs(targetGain - this.currentGain) > 1e-4) {
+        const rampTime = Math.max(targetGain < this.currentGain ? this.params.attack : this.params.release, 0.001);
+        this.ramp(targetGain, rampTime);
         this.currentGain = targetGain;
       }
 
@@ -75,8 +84,29 @@ export class Sidechain {
     this.rafId = requestAnimationFrame(step);
   }
 
+  private ramp(value: number, seconds: number): void {
+    const gain = this.target.duckNode.gain;
+    const now = Tone.now();
+    gain.cancelScheduledValues(now);
+    gain.setValueAtTime(gain.value, now);
+    switch (this.params.curve) {
+      case "linear":
+        gain.linearRampToValueAtTime(value, now + seconds);
+        break;
+      case "exponential":
+        gain.exponentialRampToValueAtTime(Math.max(value, 1e-4), now + seconds);
+        break;
+      default:
+        // RC curve: ~95 % of the way after `seconds`.
+        gain.setTargetAtTime(value, now, seconds / 3);
+    }
+  }
+
   dispose(): void {
     if (this.rafId !== null) cancelAnimationFrame(this.rafId);
     this.meter.dispose();
+    const gain = this.target.duckNode.gain;
+    gain.cancelScheduledValues(Tone.now());
+    gain.value = 1;
   }
 }

@@ -59,9 +59,15 @@ export function blockOptions(block: FitBlock): number[] {
 
 function changeCost(block: FitBlock, len: number): number {
   const priority = block.priority ?? 1;
+  if (len > block.bars) {
+    // Extending grows quadratically, so extra length is spread over several sections
+    // (A x2 and C x2 rather than A x5) -- more musical than looping one section forever.
+    const step = Math.max(1, block.stepBars ?? 1);
+    return (priority * (len - block.bars) ** 2) / step;
+  }
   // Dropping a section entirely is a bigger musical change than shortening it by the same amount.
   const dropPenalty = len === 0 ? block.bars : 0;
-  return (Math.abs(len - block.bars) + dropPenalty) * priority;
+  return (block.bars - len + dropPenalty) * priority;
 }
 
 /**

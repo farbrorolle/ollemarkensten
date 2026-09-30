@@ -5,29 +5,47 @@ import type { TrackPlayMode } from "./Track.ts";
 import { Sidechain } from "./Sidechain.ts";
 import type { SidechainTarget } from "./Sidechain.ts";
 import { ArrangementManager } from "./ArrangementManager.ts";
-import { TransitionFx } from "./TransitionFx.ts";
+import { GainEnvelope } from "./GainEnvelope.ts";
+import type { EnvelopePoint } from "./GainEnvelope.ts";
 import { reencodeBlobAsWav } from "./wav.ts";
-import type { CueConfig, FitConfig, LogoConfig, ProjectConfig, SectionConfig } from "../project/types.ts";
+import type {
+  CompressorSettings,
+  CueConfig,
+  FitConfig,
+  LogoConfig,
+  ProjectConfig,
+  SectionConfig,
+  SidechainConfig,
+  TransitionType,
+} from "../project/types.ts";
 import { fitToLength } from "../project/fitToLength.ts";
 import type { FitResult } from "../project/fitToLength.ts";
 
-/** A gain move on one track, in transport seconds: a short mute, or a linear fade to silence. */
-interface AutomationEvent {
-  track: Track;
-  from: number;
-  to: number;
-}
-
 const MUTE_RAMP_SECONDS = 0.03;
 
+/** Old configs used "riser"/"filter-sweep" (removed): they become a crossfade. */
+function normalizeTransition(t: string | undefined): TransitionType {
+  return t === "cut" ? "cut" : "crossfade";
+}
+
+export const DEFAULT_COMPRESSOR: CompressorSettings = {
+  enabled: false,
+  threshold: -18,
+  ratio: 2,
+  attack: 0.01,
+  release: 0.2,
+  knee: 6,
+};
+
 /**
- * Owns Tone.Transport, the MasterBus (-> filter -> Limiter -> speakers) and
- * every Track/Bus/Sidechain in the currently loaded project.
+ * Owns Tone.Transport, the MasterBus (-> bus compressor -> Limiter -> speakers)
+ * and every Track/Bus/Sidechain in the currently loaded project.
  */
 export class AudioEngine {
   readonly masterBus: Bus;
+  readonly compressor: Tone.Compressor;
   readonly limiter: Tone.Limiter;
-  readonly transitionFx: TransitionFx;
+  private compressorSettings: CompressorSettings = { ...DEFAULT_COMPRESSOR };
 
   readonly buses = new Map<string, Bus>();
   readonly tracks = new Map<string, Track>();
@@ -44,28 +62,82 @@ export class AudioEngine {
   private fitConfig: FitConfig | undefined;
   private logoConfig: LogoConfig | undefined;
   private logoTrack: Track | null = null;
-  private automation: AutomationEvent[] = [];
+  /** Seek-safe gain curves: section voices (regions) + melody mute / fade into the logo. */
+  private envelopes: GainEnvelope[] = [];
   private _lastFit: FitResult | null = null;
   private readonly arrangementListeners = new Set<() => void>();
 
   constructor() {
     this.masterBus = new Bus("master", "MasterBus");
     this.limiter = new Tone.Limiter(-1);
-    this.transitionFx = new TransitionFx();
+    this.compressor = new Tone.Compressor();
+    this.applyCompressor();
 
-    this.masterBus.connect(this.transitionFx.filter);
-    this.transitionFx.filter.connect(this.limiter);
+    this.masterBus.connect(this.compressor);
+    this.compressor.connect(this.limiter);
     this.limiter.connect(Tone.getDestination());
-    this.transitionFx.connectRiser(this.masterBus.channel);
 
     Tone.getTransport().bpm.value = 120;
 
-    // Arrangement automation (melody mute, fade into the logo) is written straight onto the
-    // tracks' autoGain from wherever playback starts, so it's also right after a seek.
+    // Gain envelopes are written straight onto their gains from wherever playback starts,
+    // so they're also right after a seek.
     const transport = Tone.getTransport();
-    transport.on("start", (time, offset) => this.applyAutomationFrom(time, offset ?? 0));
-    transport.on("stop", (time) => this.resetAutomation(time));
-    transport.on("pause", (time) => this.holdAutomation(time));
+    transport.on("start", (time, offset) => this.envelopes.forEach((e) => e.applyFrom(time, offset ?? 0)));
+    transport.on("loopStart", (time, offset) => this.envelopes.forEach((e) => e.applyFrom(time, offset ?? 0)));
+    transport.on("stop", (time) => this.envelopes.forEach((e) => e.reset(time)));
+    transport.on("pause", (time) => this.envelopes.forEach((e) => e.hold(time)));
+  }
+
+  // --- Master bus compressor -------------------------------------------------------------------
+
+  get compressorState(): CompressorSettings {
+    return { ...this.compressorSettings };
+  }
+
+  setCompressor(settings: Partial<CompressorSettings>): void {
+    this.compressorSettings = { ...this.compressorSettings, ...settings };
+    this.applyCompressor();
+  }
+
+  /** "Off" = ratio 1 (no gain change), so the chain never has to be re-wired. */
+  private applyCompressor(): void {
+    const c = this.compressorSettings;
+    this.compressor.threshold.value = c.threshold;
+    this.compressor.ratio.value = c.enabled ? Math.max(1, c.ratio) : 1;
+    this.compressor.attack.value = c.attack;
+    this.compressor.release.value = c.release;
+    this.compressor.knee.value = c.knee;
+  }
+
+  /** Current gain reduction of the bus compressor, in dB (0 = none, negative = reducing). */
+  get compressorReduction(): number {
+    return this.compressor.reduction;
+  }
+
+  // --- Sidechains ------------------------------------------------------------------------------
+
+  /** Everything a sidechain can duck: tracks (mapps) and buses. */
+  get sidechainTargets(): { id: string; name: string }[] {
+    return [
+      ...Array.from(this.tracks.values())
+        .filter((t) => !t.isLogo)
+        .map((t) => ({ id: t.id, name: t.name })),
+      ...Array.from(this.buses.values()).map((b) => ({ id: b.id, name: `Buss: ${b.name}` })),
+    ];
+  }
+
+  addSidechain(config: SidechainConfig): Sidechain {
+    const source = this.tracks.get(config.source);
+    if (!source) throw new Error(`Sidechain "${config.id}" references unknown source "${config.source}"`);
+    this.sidechains.get(config.id)?.dispose();
+    const sidechain = new Sidechain(config.id, source, this.resolveSidechainTarget(config.target), config);
+    this.sidechains.set(config.id, sidechain);
+    return sidechain;
+  }
+
+  removeSidechain(id: string): void {
+    this.sidechains.get(id)?.dispose();
+    this.sidechains.delete(id);
   }
 
   get title(): string {
@@ -291,7 +363,7 @@ export class AudioEngine {
     this.buses.clear();
     Tone.getTransport().cancel(0);
     this.endEventId = null;
-    this.automation = [];
+    this.envelopes = [];
     this.logoTrack = null;
   }
 
@@ -340,12 +412,13 @@ export class AudioEngine {
     this.refreshSoloState();
 
     // Sidechains.
-    for (const scConfig of config.sidechains ?? []) {
-      const source = this.tracks.get(scConfig.source);
-      if (!source) throw new Error(`Sidechain "${scConfig.id}" references unknown source "${scConfig.source}"`);
-      const target = this.resolveSidechainTarget(scConfig.target);
-      this.sidechains.set(scConfig.id, new Sidechain(scConfig.id, source, target, scConfig));
-    }
+    for (const scConfig of config.sidechains ?? []) this.addSidechain(scConfig);
+
+    // Master chain settings (creator view).
+    if (config.master?.gain !== undefined) this.setMasterGain(config.master.gain);
+    if (config.master?.limiterThreshold !== undefined) this.setLimiterThreshold(config.master.limiterThreshold);
+    this.compressorSettings = { ...DEFAULT_COMPRESSOR, ...config.master?.compressor };
+    this.applyCompressor();
 
     // Arrangement: schedule every cue up front (fixed positions, not a live-triggered thing).
     this.sectionsById = new Map((config.sections ?? []).map((section) => [section.id, section]));
@@ -392,23 +465,23 @@ export class AudioEngine {
     this.endEventId = null; // cancel(0) just removed it
     this._lastFit = fit; // null = edited by hand
     for (const track of this.tracks.values()) track.resyncSectionTakes();
-    this.arrangement.schedule(
-      cues,
+    this.envelopes = this.arrangement.schedule(
+      cues.map((cue) => ({ ...cue, transition: normalizeTransition(cue.transition) })),
       loopBars,
       this.sectionsById,
       Array.from(this.tracks.values()),
-      this.transitionFx,
       { musicStartSeconds, barSeconds: this.barSeconds },
       this.regions,
     );
     this.scheduleLogo();
+    this.envelopes.forEach((e) => e.reset(Tone.now()));
     this.applyPlaybackMode(); // schedule() always turns looping on; re-apply film/logo mode on top
     for (const listener of this.arrangementListeners) listener();
   }
 
-  /** Places the logo so its anchor hits beat `anchorBeat` of the last bar, and sets up mute/fade automation. */
+  /** Places the logo so its anchor hits beat `anchorBeat` of the last bar, and adds the mute/fade envelopes. */
   private scheduleLogo(): void {
-    this.automation = [];
+    for (const track of this.tracks.values()) track.autoGain.gain.value = 1;
     const player = this.logoTrack?.filePlayer;
     const logo = this.logoConfig;
     const anchor = this.logoAnchorSeconds;
@@ -418,57 +491,46 @@ export class AudioEngine {
     // If the arrangement is so short that the logo would start before 0, start the file part-way in.
     player.start(Math.max(0, start), Math.max(0, -start));
 
-    const musicTracks = Array.from(this.tracks.values()).filter((t) => !t.isLogo);
-    if (logo.mute && logo.mute.tracks.length) {
-      const ids = new Set(logo.mute.tracks);
-      const at = anchor - Tone.Time(logo.mute.before).toSeconds();
-      for (const track of musicTracks) {
-        if (ids.has(track.id) || ids.has(track.busId)) this.automation.push({ track, from: at, to: at + MUTE_RAMP_SECONDS });
+    // Per track: at most one mute (fast ramp) and one fade (to silence at the anchor); the
+    // envelope follows whichever is lower at every point.
+    const mutedIds = new Set(logo.mute?.tracks ?? []);
+    const muteAt = logo.mute ? anchor - Tone.Time(logo.mute.before).toSeconds() : null;
+    const fadeFrom = logo.fadeMusic ? anchor - Tone.Time(logo.fadeMusic).toSeconds() : null;
+    for (const track of this.tracks.values()) {
+      if (track.isLogo) continue;
+      const muted = muteAt !== null && (mutedIds.has(track.id) || mutedIds.has(track.busId));
+      const points: EnvelopePoint[] = [];
+      if (muted && (fadeFrom === null || muteAt! <= fadeFrom)) {
+        points.push({ t: muteAt!, v: 1 }, { t: muteAt! + MUTE_RAMP_SECONDS, v: 0 });
+      } else if (fadeFrom !== null) {
+        points.push({ t: fadeFrom, v: 1 });
+        if (muted) {
+          // Muted part-way through the fade.
+          const at = Math.max(fadeFrom, muteAt!);
+          const v = 1 - (at - fadeFrom) / (anchor - fadeFrom);
+          points.push({ t: at, v }, { t: at + MUTE_RAMP_SECONDS, v: 0 });
+        } else {
+          points.push({ t: anchor, v: 0 });
+        }
+      } else if (muted) {
+        points.push({ t: muteAt!, v: 1 }, { t: muteAt! + MUTE_RAMP_SECONDS, v: 0 });
       }
-    }
-    if (logo.fadeMusic) {
-      const from = anchor - Tone.Time(logo.fadeMusic).toSeconds();
-      for (const track of musicTracks) this.automation.push({ track, from, to: anchor });
+      if (points.length) this.envelopes.push(new GainEnvelope(track.autoGain.gain, 1, points));
     }
   }
 
-  /** Gain an automated track should have at transport time `t` (product of all its moves). */
-  private automationValueAt(track: Track, t: number): number {
-    let value = 1;
-    for (const e of this.automation) {
-      if (e.track !== track || t <= e.from) continue;
-      value *= t >= e.to ? 0 : 1 - (t - e.from) / (e.to - e.from);
-    }
-    return value;
-  }
-
-  private applyAutomationFrom(time: number, offset: number): void {
-    const tracks = new Set(this.automation.map((e) => e.track));
-    for (const track of tracks) {
-      const gain = track.autoGain.gain;
-      gain.cancelScheduledValues(time);
-      gain.setValueAtTime(this.automationValueAt(track, offset), time);
-    }
-    for (const e of this.automation) {
-      if (e.to <= offset) continue;
-      const gain = e.track.autoGain.gain;
-      const from = Math.max(e.from, offset);
-      gain.setValueAtTime(this.automationValueAt(e.track, from), time + (from - offset));
-      gain.linearRampToValueAtTime(this.automationValueAt(e.track, e.to), time + (e.to - offset));
-    }
-  }
-
-  private holdAutomation(time: number): void {
-    for (const track of this.tracks.values()) {
-      track.autoGain.gain.cancelScheduledValues(time);
-    }
-  }
-
-  private resetAutomation(time: number): void {
-    for (const track of this.tracks.values()) {
-      track.autoGain.gain.cancelScheduledValues(time);
-      track.autoGain.gain.setValueAtTime(1, time);
-    }
+  /** Creator view: change the melody mute / fade settings and re-place everything. */
+  setLogoSettings(settings: Partial<Pick<LogoConfig, "mute" | "fadeMusic" | "anchorSeconds" | "anchorBeat">>): void {
+    if (!this.logoConfig) return;
+    this.logoConfig = { ...this.logoConfig, ...settings };
+    const segments = this.arrangement.arrangementSegments;
+    const cues: CueConfig[] = segments.map((s) => ({
+      bar: s.startBar,
+      section: s.sectionId,
+      transition: s.transition,
+      ...(s.sourceBar !== undefined ? { sourceBar: s.sourceBar } : {}),
+    }));
+    this.applyArrangement(cues, this.arrangement.totalBars, this.arrangement.musicStartSeconds, this._lastFit);
   }
 
   /**
@@ -526,6 +588,6 @@ export class AudioEngine {
     this.clearProject();
     this.masterBus.dispose();
     this.limiter.dispose();
-    this.transitionFx.dispose();
+    this.compressor.dispose();
   }
 }
