@@ -1239,7 +1239,7 @@
         "maxBars": 4,
         "stepBars": 1,
         "priority": 2,
-        "keep": "end"
+        "keep": "start"
       },
       {
         "section": "a",
@@ -1290,17 +1290,17 @@
         "section": "break",
         "bars": 4,
         "minBars": 0,
-        "maxBars": 4,
-        "stepBars": 2,
+        "maxBars": 16,
+        "stepBars": 4,
         "priority": 1,
         "transition": "crossfade"
       },
       {
         "section": "final",
         "bars": 8,
-        "minBars": 2,
+        "minBars": 4,
         "maxBars": 16,
-        "stepBars": 2,
+        "stepBars": 4,
         "priority": 5,
         "transition": "crossfade"
       }

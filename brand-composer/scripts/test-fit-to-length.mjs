@@ -1,6 +1,6 @@
 // Unit tests for "anpassa till längd". Run: node scripts/test-fit-to-length.mjs
 import assert from "node:assert/strict";
-import { anchorOffsetInMusic, blockOptions, chooseLengths, fitToLength, regionChunks } from "../src/project/fitToLength.ts";
+import { anchorOffsetInMusic, blockOptions, chooseLengths, fitOriginal, fitToLength, regionChunks } from "../src/project/fitToLength.ts";
 
 const timing = { barSeconds: 1.6, beatSeconds: 0.4, anchorBeat: 3 }; // 150 BPM 4/4, logo plopp on beat 3
 
@@ -78,8 +78,9 @@ const regions = { intro: [1, 4], a: [5, 12], b: [13, 20], final: [49, 56] };
   const final = r.cues.find((c) => c.section === "final");
   const len = r.lengths[3];
   assert.equal(final.sourceBar, 56 - len + 1);
+  // The first section always starts where the track starts (no tails from an earlier bar).
   const intro = r.cues.find((c) => c.section === "intro");
-  assert.equal(intro.sourceBar, 4 - r.lengths[0] + 1);
+  assert.equal(intro.sourceBar, 1);
 }
 
 // Every whole-second target from 12 to 90 s: exact whenever the template allows it.
@@ -94,12 +95,30 @@ for (let target = 12; target <= 90; target++) {
 // Region chunks: shortened, exact and repeated.
 assert.deepEqual(regionChunks(1, 4, [5, 12], 9), [{ startBar: 1, sourceBar: 9, bars: 4 }]);
 assert.deepEqual(regionChunks(5, 8, [5, 12]), [{ startBar: 5, sourceBar: 5, bars: 8 }]);
+// Longer than the region: the extra bars come from its end (not its start again).
 assert.deepEqual(regionChunks(1, 12, [5, 12]), [
   { startBar: 1, sourceBar: 5, bars: 8 },
-  { startBar: 9, sourceBar: 5, bars: 4 },
+  { startBar: 9, sourceBar: 9, bars: 4 },
 ]);
 
 // chooseLengths never exceeds the ideal when something fits.
 assert.ok(chooseLengths(template, 20).total <= 20);
+
+assert.deepEqual(regionChunks(1, 20, [5, 12]), [
+  { startBar: 1, sourceBar: 5, bars: 8 },
+  { startBar: 9, sourceBar: 5, bars: 8 },
+  { startBar: 17, sourceBar: 9, bars: 4 },
+]);
+
+// Original form: sections in order at full length, cut at the end, then repeats from the 2nd section.
+{
+  const r = fitOriginal(template, anchorOffsetInMusic(10, timing), timing, regions);
+  assert.equal(r.totalBars, 10);
+  assert.deepEqual(r.cues.map((c) => `${c.section}@${c.bar}`), ["intro@1", "a@5"]);
+  const long = fitOriginal(template, anchorOffsetInMusic(40, timing), timing, regions);
+  assert.equal(long.totalBars, 40);
+  assert.deepEqual(long.cues.map((c) => c.section), ["intro", "a", "b", "final", "a", "b"]);
+  assert.ok(Math.abs(long.errorSeconds) < 1e-9);
+}
 
 console.log("fitToLength: all tests passed");

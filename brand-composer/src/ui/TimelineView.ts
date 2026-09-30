@@ -4,7 +4,7 @@ import type { Track } from "../audio/Track.ts";
 import type { CueConfig, SectionConfig, TransitionType } from "../project/types.ts";
 import type { FilmInfo, VideoSync } from "../video/VideoSync.ts";
 import { formatFilmTime, formatSeconds } from "../video/syncMath.ts";
-import { regionChunks } from "../project/fitToLength.ts";
+import { keepEndSourceBar, regionChunks } from "../project/fitToLength.ts";
 
 export interface TimelineHandle {
   update(): void;
@@ -29,6 +29,7 @@ const FILM_WAVE_COLOR = "#ffb84d";
 const LOGO_WAVE_COLOR = "#33d17a";
 const DIM_TEXT_COLOR = "#8b8fa3";
 const DEFAULT_NEW_SEGMENT_BARS = 4;
+const TRANSITION_ICONS: Record<TransitionType, string> = { cut: "✂", crossfade: "≈" };
 const TRANSITION_LABELS: Record<TransitionType, string> = {
   cut: "Cut",
   crossfade: "Crossfade",
@@ -188,6 +189,10 @@ export function mountTimeline(
   root.classList.add("timeline-mode-block");
   root.innerHTML = `
     <div class="timeline-toolbar">
+      <div class="arrange-switch" role="group" aria-label="How the music is fitted" data-arrange>
+        <button type="button" class="arrange-btn" data-arrange-mode="auto" title="The music is re-arranged to fit the length: sections are shortened, dropped or repeated">Auto arrange</button>
+        <button type="button" class="arrange-btn" data-arrange-mode="original" title="The track plays as written and is only cut (or extended) at the end">Original form</button>
+      </div>
       <button type="button" class="btn" data-mode-toggle>Show sections</button>
       <span class="timeline-toolbar-status" data-status></span>
     </div>
@@ -236,6 +241,20 @@ export function mountTimeline(
   const musicBlock = root.querySelector<HTMLElement>("[data-music-block]")!;
   const musicBlockLabel = root.querySelector<HTMLElement>("[data-music-block-label]")!;
   const musicBlockHandle = root.querySelector<HTMLElement>("[data-music-block-handle]")!;
+
+  // Auto arrange / original form.
+  const arrangeButtons = Array.from(root.querySelectorAll<HTMLButtonElement>("[data-arrange-mode]"));
+  const syncArrangeButtons = (): void => {
+    for (const btn of arrangeButtons) btn.classList.toggle("is-active", btn.dataset.arrangeMode === engine.arrangeMode);
+  };
+  for (const btn of arrangeButtons) {
+    btn.hidden = !engine.canFit;
+    btn.addEventListener("click", () => {
+      engine.setArrangeMode(btn.dataset.arrangeMode === "original" ? "original" : "auto");
+      syncArrangeButtons();
+    });
+  }
+  syncArrangeButtons();
 
   // Main view = the music as one block; the section view is secondary.
   let showSections = false;
@@ -313,18 +332,38 @@ export function mountTimeline(
       e.preventDefault();
       handle.setPointerCapture(e.pointerId);
       const startX = e.clientX;
-      const startLength = editableSegments[index]!.lengthBars;
+      const seg = editableSegments[index]!;
+      const next = editableSegments[index + 1];
+      const startLength = seg.lengthBars;
+      const startNextLength = next?.lengthBars ?? 0;
       const widthPx = overlay.getBoundingClientRect().width || 1;
       const barsPerPixel = spanSeconds / engine.barSeconds / widthPx;
 
+      // Dragging the edge moves the boundary: this section eats into the next one (or gives
+      // it bars back), so the total length -- and the logo -- stay put. The last section just
+      // gets longer/shorter.
       const onMove = (ev: PointerEvent): void => {
-        const deltaBars = Math.round((ev.clientX - startX) * barsPerPixel);
-        editableSegments[index]!.lengthBars = Math.max(1, startLength + deltaBars);
+        let delta = Math.round((ev.clientX - startX) * barsPerPixel);
+        delta = Math.max(1 - startLength, delta);
+        if (next) delta = Math.min(startNextLength - 1, delta);
+        seg.lengthBars = startLength + delta;
+        if (next) next.lengthBars = startNextLength - delta;
         reflowSectionPositions();
       };
       const onUp = (): void => {
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
+        // Long bounces: this section plays on further into its own material; the next one
+        // loses its beginning but keeps its ending (its lead-in onwards).
+        const region = engine.sourceRegionFor(seg.sectionId);
+        if (region) {
+          const from = seg.sourceBar ?? region[0];
+          if (from + seg.lengthBars - 1 > region[1]) seg.sourceBar = keepEndSourceBar(region, seg.lengthBars);
+        }
+        const nextRegion = next ? engine.sourceRegionFor(next.sectionId) : undefined;
+        if (next && nextRegion && next.lengthBars !== startNextLength) {
+          next.sourceBar = keepEndSourceBar(nextRegion, next.lengthBars);
+        }
         commit();
       };
       window.addEventListener("pointermove", onMove);
@@ -379,20 +418,19 @@ export function mountTimeline(
       block.style.left = `${xOfBar(startBar) * 100}%`;
       block.style.width = `${(xOfBar(startBar + seg.lengthBars) - xOfBar(startBar)) * 100}%`;
 
-      const label = document.createElement("span");
-      label.className = "timeline-section-label";
-      label.textContent = sectionNameById.get(seg.sectionId) ?? seg.sectionId;
-      block.appendChild(label);
+      const name = sectionNameById.get(seg.sectionId) ?? seg.sectionId;
+      block.title = `${name} · ${seg.lengthBars} bar${seg.lengthBars === 1 ? "" : "s"}`;
 
       if (index > 0) {
+        // A small icon at the section's left edge: ✂ cut / ≈ crossfade (the name stays readable).
         const transitionSelect = document.createElement("select");
         transitionSelect.className = "timeline-section-transition";
-        transitionSelect.title = "Transition into this section";
+        transitionSelect.title = `Transition into ${name}: ${TRANSITION_LABELS[seg.transition]}`;
         transitionSelect.draggable = false;
         for (const [value, text] of Object.entries(TRANSITION_LABELS)) {
           const option = document.createElement("option");
           option.value = value;
-          option.textContent = text;
+          option.textContent = `${TRANSITION_ICONS[value as TransitionType]} ${text}`;
           if (value === seg.transition) option.selected = true;
           transitionSelect.appendChild(option);
         }
@@ -404,6 +442,11 @@ export function mountTimeline(
         });
         block.appendChild(transitionSelect);
       }
+
+      const label = document.createElement("span");
+      label.className = "timeline-section-label";
+      label.textContent = name;
+      block.appendChild(label);
 
       if (editableSegments.length > 1) {
         const removeBtn = document.createElement("button");

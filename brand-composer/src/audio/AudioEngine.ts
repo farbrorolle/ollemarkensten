@@ -19,7 +19,7 @@ import type {
   SidechainConfig,
   TransitionType,
 } from "../project/types.ts";
-import { fitToLength } from "../project/fitToLength.ts";
+import { fitOriginal, fitToLength } from "../project/fitToLength.ts";
 import type { FitResult } from "../project/fitToLength.ts";
 
 const MUTE_RAMP_SECONDS = 0.03;
@@ -69,6 +69,8 @@ export class AudioEngine {
   /** Seek-safe gain curves: section voices (regions) + melody mute / fade into the logo. */
   private envelopes: GainEnvelope[] = [];
   private _lastFit: FitResult | null = null;
+  /** "auto": re-arrange sections to fit; "original": play the track as written, cut/extended at the end. */
+  private _arrangeMode: "auto" | "original" = "auto";
   private readonly arrangementListeners = new Set<() => void>();
 
   constructor() {
@@ -263,6 +265,18 @@ export class AudioEngine {
     return !!this.fitConfig && this.hasLogo;
   }
 
+  get arrangeMode(): "auto" | "original" {
+    return this._arrangeMode;
+  }
+
+  /** Switches between auto arrange and original form, keeping the logo where it is. */
+  setArrangeMode(mode: "auto" | "original"): void {
+    if (mode === this._arrangeMode) return;
+    this._arrangeMode = mode;
+    const anchor = this.logoAnchorSeconds;
+    if (anchor !== null && this.canFit) this.fitToAnchor(anchor);
+  }
+
   /** Result of the most recent fitToAnchor(), or null if the arrangement was edited by hand since. */
   get lastFit(): FitResult | null {
     return this._lastFit;
@@ -274,7 +288,8 @@ export class AudioEngine {
    */
   fitToAnchor(anchorSeconds: number): FitResult {
     if (!this.fitConfig || !this.logoConfig) throw new Error("This project has no fit-to-length rules");
-    const result = fitToLength(
+    const fit = this._arrangeMode === "original" ? fitOriginal : fitToLength;
+    const result = fit(
       this.fitConfig.template,
       anchorSeconds,
       { barSeconds: this.barSeconds, beatSeconds: this.beatSeconds, anchorBeat: this.logoConfig.anchorBeat },

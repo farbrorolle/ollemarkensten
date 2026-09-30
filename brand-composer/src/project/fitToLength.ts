@@ -62,8 +62,10 @@ function changeCost(block: FitBlock, len: number): number {
   if (len > block.bars) {
     // Extending grows quadratically, so extra length is spread over several sections
     // (A x2 and C x2 rather than A x5) -- more musical than looping one section forever.
-    const step = Math.max(1, block.stepBars ?? 1);
-    return (priority * (len - block.bars) ** 2) / step;
+    // Divided by the section's own length, so each grows in proportion to its size: a 4-bar
+    // break gets about half the extra bars of an 8-bar section. (Priority only decides what
+    // gets cut first when shortening.)
+    return (len - block.bars) ** 2 / Math.max(1, block.bars);
   }
   // Dropping a section entirely is a bigger musical change than shortening it by the same amount.
   const dropPenalty = len === 0 ? block.bars : 0;
@@ -145,7 +147,10 @@ export function fitToLength(
     const len = lengths[i]!;
     if (len <= 0) return;
     const cue: CueConfig = { bar, section: block.section, transition: (block.transition ?? "cut") as TransitionType };
-    const sourceBar = sourceBarFor(block, len, regions?.[block.section]);
+    // The music always starts where the track starts (no reverb/delay tails from an earlier bar):
+    // the first section reads from its region start whatever its "keep" rule.
+    const region = regions?.[block.section];
+    const sourceBar = cues.length === 0 && region ? region[0] : sourceBarFor(block, len, region);
     if (sourceBar !== undefined) cue.sourceBar = sourceBar;
     cues.push(cue);
     bar += len;
@@ -173,8 +178,11 @@ export interface RegionChunk {
 
 /**
  * Splits a section of `lengthBars` into source chunks: starts at `sourceBar`
- * (default the region start), runs to the region end, then repeats the
- * region from its start as often as needed.
+ * (default the region start) and runs on through the region. If it's longer
+ * than that, the extra bars are taken from the *end* of the region (whole
+ * repeats first, then the last bars again) -- the section keeps moving forward
+ * and still ends with its own lead-in to the next section, instead of
+ * restarting from its beginning.
  */
 export function regionChunks(
   startBar: number,
@@ -184,13 +192,69 @@ export function regionChunks(
 ): RegionChunk[] {
   const [first, last] = region;
   const chunks: RegionChunk[] = [];
-  let src = Math.min(Math.max(sourceBar ?? first, first), last);
-  let done = 0;
-  while (done < lengthBars) {
-    const bars = Math.min(lengthBars - done, last - src + 1);
-    chunks.push({ startBar: startBar + done, sourceBar: src, bars });
-    done += bars;
-    src = first;
+  const regionBars = last - first + 1;
+  const src = Math.min(Math.max(sourceBar ?? first, first), last);
+  const firstBars = Math.min(lengthBars, last - src + 1);
+  chunks.push({ startBar, sourceBar: src, bars: firstBars });
+  let done = firstBars;
+  let remaining = lengthBars - done;
+  // Whole repeats, then the remainder from the end of the region.
+  while (remaining > regionBars) {
+    chunks.push({ startBar: startBar + done, sourceBar: first, bars: regionBars });
+    done += regionBars;
+    remaining -= regionBars;
   }
+  if (remaining > 0) chunks.push({ startBar: startBar + done, sourceBar: last - remaining + 1, bars: remaining });
   return chunks;
+}
+
+/**
+ * Where a section of `lengthBars` should start reading its region so it ends
+ * with the region's own ending (keeps the lead-in to the next section).
+ */
+export function keepEndSourceBar(region: [number, number], lengthBars: number): number {
+  return Math.max(region[0], region[1] - lengthBars + 1);
+}
+
+/**
+ * "Original form": no re-arranging -- the sections play in their original
+ * order at full length and the music is simply cut (or, if longer than the
+ * whole track, continues by repeating everything after the first section).
+ */
+export function fitOriginal(
+  template: FitBlock[],
+  targetAnchorSeconds: number,
+  timing: FitTiming,
+  regions?: Record<string, [number, number]>,
+): FitResult {
+  const beforeFirstBar = (timing.anchorBeat - 1) * timing.beatSeconds;
+  const idealBars = Math.max(1, Math.floor((targetAnchorSeconds - beforeFirstBar) / timing.barSeconds + 1e-9) + 1);
+  const cues: CueConfig[] = [];
+  const lengths = template.map(() => 0);
+  let bar = 1;
+  let i = 0;
+  let guard = 0;
+  while (bar <= idealBars && template.length && guard++ < 10000) {
+    const block = template[i]!;
+    const len = Math.min(block.bars, idealBars - bar + 1);
+    const region = regions?.[block.section];
+    const cue: CueConfig = { bar, section: block.section, transition: "cut" };
+    if (region) cue.sourceBar = region[0];
+    cues.push(cue);
+    lengths[i]! += len;
+    bar += len;
+    i = i + 1 < template.length ? i + 1 : Math.min(1, template.length - 1); // after the end: repeat from the 2nd section
+  }
+  const totalBars = bar - 1;
+  const musicStartSeconds = Math.max(0, targetAnchorSeconds - anchorOffsetInMusic(totalBars, timing));
+  const anchorSeconds = musicStartSeconds + anchorOffsetInMusic(totalBars, timing);
+  return {
+    cues,
+    totalBars,
+    musicStartSeconds,
+    anchorSeconds,
+    errorSeconds: anchorSeconds - targetAnchorSeconds,
+    lengths,
+    warnings: [],
+  };
 }
