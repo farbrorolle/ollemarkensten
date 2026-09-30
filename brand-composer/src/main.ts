@@ -75,8 +75,8 @@ async function bootstrap(): Promise<void> {
   const transportPanel = mountTransportPanel(transportRoot, engine, () => film.primeFromGesture());
   const masterPanel = mountMasterPanel(masterRoot, engine);
   const timeline = mountTimeline(timelineRoot, engine, config.sections ?? [], film);
-  mountTrackList(trackListRoot, engine, (trackId) => timeline.redrawTrack(trackId));
-  mountSidechainPanel(sidechainRoot, engine);
+  const trackList = mountTrackList(trackListRoot, engine, (trackId) => timeline.redrawTrack(trackId));
+  const sidechainPanel = mountSidechainPanel(sidechainRoot, engine);
   mountLogoPanel(logoRoot, engine);
 
   // A new film: re-arrange the music so the logo ends exactly when the film ends.
@@ -112,6 +112,8 @@ async function bootstrap(): Promise<void> {
     videoPanel.update();
     transportPanel.update();
     masterPanel.update();
+    sidechainPanel.update();
+    trackList.update();
     timeline.update();
     requestAnimationFrame(tick);
   };

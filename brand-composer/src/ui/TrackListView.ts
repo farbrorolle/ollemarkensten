@@ -1,6 +1,9 @@
 import type { AudioEngine } from "../audio/AudioEngine.ts";
 import type { Track } from "../audio/Track.ts";
 
+/** Buttons whose state can also be changed elsewhere (e.g. solo from the sidechain panel). */
+const liveButtons: { track: Track; solo: HTMLButtonElement; mute: HTMLButtonElement }[] = [];
+
 function mountTrackRow(
   container: HTMLElement,
   track: Track,
@@ -33,6 +36,7 @@ function mountTrackRow(
   const muteBtn = row.querySelector<HTMLButtonElement>("[data-mute]")!;
   const soloBtn = row.querySelector<HTMLButtonElement>("[data-solo]")!;
 
+  liveButtons.push({ track, solo: soloBtn, mute: muteBtn });
   volumeInput.value = String(track.volume);
   panInput.value = String(track.pan);
   muteBtn.classList.toggle("btn-toggle-active", track.mute);
@@ -81,7 +85,20 @@ function mountTrackRow(
   });
 }
 
-export function mountTrackList(root: HTMLElement, engine: AudioEngine, onTrackChanged?: (trackId: string) => void): void {
+export function mountTrackList(
+  root: HTMLElement,
+  engine: AudioEngine,
+  onTrackChanged?: (trackId: string) => void,
+): { update(): void } {
   root.innerHTML = "";
+  liveButtons.length = 0;
   for (const track of engine.tracks.values()) mountTrackRow(root, track, engine, onTrackChanged);
+  return {
+    update() {
+      for (const { track, solo, mute } of liveButtons) {
+        solo.classList.toggle("btn-toggle-active", track.solo);
+        mute.classList.toggle("btn-toggle-active", track.mute);
+      }
+    },
+  };
 }

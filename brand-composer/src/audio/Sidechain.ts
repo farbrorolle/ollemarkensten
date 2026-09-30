@@ -84,6 +84,12 @@ export class Sidechain {
     this.rafId = requestAnimationFrame(step);
   }
 
+  /** How far the target is turned down right now, in dB (0 = not at all, negative = ducking). */
+  get reductionDb(): number {
+    const g = this.target.duckNode.gain.value;
+    return g >= 0.9999 ? 0 : Tone.gainToDb(Math.max(g, 1e-5));
+  }
+
   private ramp(value: number, seconds: number): void {
     const gain = this.target.duckNode.gain;
     const now = Tone.now();

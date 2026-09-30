@@ -6,6 +6,7 @@ import { Sidechain } from "./Sidechain.ts";
 import type { SidechainTarget } from "./Sidechain.ts";
 import { ArrangementManager } from "./ArrangementManager.ts";
 import { GainEnvelope } from "./GainEnvelope.ts";
+import { LoudnessMeter } from "./LoudnessMeter.ts";
 import type { EnvelopePoint } from "./GainEnvelope.ts";
 import { reencodeBlobAsWav } from "./wav.ts";
 import type {
@@ -44,7 +45,10 @@ export const DEFAULT_COMPRESSOR: CompressorSettings = {
 export class AudioEngine {
   readonly masterBus: Bus;
   readonly compressor: Tone.Compressor;
+  /** Gain into the limiter ("drive"): push the mix harder into the limiter. */
+  readonly limiterDrive: Tone.Gain;
   readonly limiter: Tone.Limiter;
+  readonly loudness: LoudnessMeter;
   private compressorSettings: CompressorSettings = { ...DEFAULT_COMPRESSOR };
 
   readonly buses = new Map<string, Bus>();
@@ -73,16 +77,22 @@ export class AudioEngine {
     this.compressor = new Tone.Compressor();
     this.applyCompressor();
 
+    this.limiterDrive = new Tone.Gain(1);
     this.masterBus.connect(this.compressor);
-    this.compressor.connect(this.limiter);
+    this.compressor.connect(this.limiterDrive);
+    this.limiterDrive.connect(this.limiter);
     this.limiter.connect(Tone.getDestination());
+    this.loudness = new LoudnessMeter(this.limiter);
 
     Tone.getTransport().bpm.value = 120;
 
     // Gain envelopes are written straight onto their gains from wherever playback starts,
     // so they're also right after a seek.
     const transport = Tone.getTransport();
-    transport.on("start", (time, offset) => this.envelopes.forEach((e) => e.applyFrom(time, offset ?? 0)));
+    transport.on("start", (time, offset) => {
+      this.envelopes.forEach((e) => e.applyFrom(time, offset ?? 0));
+      if ((offset ?? 0) < 0.05) this.loudness.reset(); // integrated LUFS: from the top of each play-through
+    });
     transport.on("loopStart", (time, offset) => this.envelopes.forEach((e) => e.applyFrom(time, offset ?? 0)));
     transport.on("stop", (time) => this.envelopes.forEach((e) => e.reset(time)));
     transport.on("pause", (time) => this.envelopes.forEach((e) => e.hold(time)));
@@ -324,6 +334,15 @@ export class AudioEngine {
     return this.masterBus.volume;
   }
 
+  /** dB of gain into the limiter. */
+  setLimiterDrive(db: number): void {
+    this.limiterDrive.gain.value = Tone.dbToGain(db);
+  }
+
+  get limiterDriveDb(): number {
+    return Tone.gainToDb(this.limiterDrive.gain.value);
+  }
+
   setLimiterThreshold(db: number): void {
     this.limiter.threshold.value = db;
   }
@@ -417,6 +436,7 @@ export class AudioEngine {
     // Master chain settings (creator view).
     if (config.master?.gain !== undefined) this.setMasterGain(config.master.gain);
     if (config.master?.limiterThreshold !== undefined) this.setLimiterThreshold(config.master.limiterThreshold);
+    if (config.master?.limiterDrive !== undefined) this.setLimiterDrive(config.master.limiterDrive);
     this.compressorSettings = { ...DEFAULT_COMPRESSOR, ...config.master?.compressor };
     this.applyCompressor();
 
@@ -589,5 +609,7 @@ export class AudioEngine {
     this.masterBus.dispose();
     this.limiter.dispose();
     this.compressor.dispose();
+    this.limiterDrive.dispose();
+    this.loudness.dispose();
   }
 }

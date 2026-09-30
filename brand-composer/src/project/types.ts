@@ -161,6 +161,8 @@ export interface CompressorSettings {
 export interface MasterConfig {
   gain?: number; // dB
   limiterThreshold?: number; // dB
+  /** Gain into the limiter, dB. */
+  limiterDrive?: number;
   compressor?: Partial<CompressorSettings>;
 }
 

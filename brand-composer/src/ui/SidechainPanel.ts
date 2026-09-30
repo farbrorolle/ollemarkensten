@@ -16,11 +16,25 @@ let nextId = 1;
  * attack/release and the shape of the curve. Changing source/target rebuilds
  * the sidechain; the other settings apply live.
  */
-export function mountSidechainPanel(root: HTMLElement, engine: AudioEngine): void {
+export interface SidechainPanelHandle {
+  update(): void;
+}
+
+export function mountSidechainPanel(root: HTMLElement, engine: AudioEngine): SidechainPanelHandle {
   const sources = Array.from(engine.tracks.values()).filter((t) => !t.isLogo);
+  /** Live meters/solo buttons of the rendered cards, refreshed every frame. */
+  let live: { update(): void }[] = [];
+
+  /** The tracks behind a sidechain end: the track itself, or every track on a bus. */
+  const tracksFor = (id: string) => {
+    const track = engine.tracks.get(id);
+    if (track) return [track];
+    return Array.from(engine.tracks.values()).filter((t) => t.busId === id);
+  };
 
   function render(): void {
     root.innerHTML = "";
+    live = [];
     for (const sidechain of engine.sidechains.values()) root.appendChild(card(sidechain));
     const add = document.createElement("button");
     add.type = "button";
@@ -59,8 +73,11 @@ export function mountSidechainPanel(root: HTMLElement, engine: AudioEngine): voi
     el.innerHTML = `
       <div class="sc-card-head">
         <select data-source title="Källa (det som styr)">${options(sources.map((t) => ({ id: t.id, name: t.name })), sidechain.sourceId)}</select>
+        <button type="button" class="btn btn-toggle sc-solo" data-solo-source title="Solo källan">S</button>
         <span class="sc-arrow"> duckar →</span>
         <select data-target title="Mål (det som sänks)">${options(engine.sidechainTargets, sidechain.targetId)}</select>
+        <button type="button" class="btn btn-toggle sc-solo" data-solo-target title="Solo målet">S</button>
+        <button type="button" class="btn btn-toggle sc-solo" data-solo-both title="Solo källa + mål – lyssna på duckningen">Solo båda</button>
         <button type="button" class="btn btn-step" data-remove title="Ta bort">×</button>
       </div>
       <div class="creator-grid">
@@ -71,6 +88,11 @@ export function mountSidechainPanel(root: HTMLElement, engine: AudioEngine): voi
         <label><span>Kurva</span><select data-curve>${Object.entries(CURVES)
           .map(([v, t]) => `<option value="${v}"${v === p.curve ? " selected" : ""}>${t}</option>`)
           .join("")}</select></label>
+      </div>
+      <div class="sc-meter">
+        <span>Målet trycks ned</span>
+        <div class="meter-track"><div class="meter-fill" data-gr></div></div>
+        <span class="meter-value" data-gr-value>0.0 dB</span>
       </div>`;
 
     const q = <T extends HTMLElement>(sel: string): T => el.querySelector<T>(sel)!;
@@ -107,6 +129,39 @@ export function mountSidechainPanel(root: HTMLElement, engine: AudioEngine): voi
     };
     q("[data-source]").addEventListener("change", rebuild);
     q("[data-target]").addEventListener("change", rebuild);
+    // Solo: source, target, or both (to hear the ducking on its own).
+    const sourceTracks = tracksFor(sidechain.sourceId);
+    const targetTracks = tracksFor(sidechain.targetId);
+    const soloSource = q<HTMLButtonElement>("[data-solo-source]");
+    const soloTarget = q<HTMLButtonElement>("[data-solo-target]");
+    const soloBoth = q<HTMLButtonElement>("[data-solo-both]");
+    const setSolo = (tracks: typeof sourceTracks, on: boolean): void => {
+      for (const t of tracks) t.solo = on;
+      engine.refreshSoloState();
+    };
+    const allSolo = (tracks: typeof sourceTracks): boolean => tracks.length > 0 && tracks.every((t) => t.solo);
+    soloSource.addEventListener("click", () => setSolo(sourceTracks, !allSolo(sourceTracks)));
+    soloTarget.addEventListener("click", () => setSolo(targetTracks, !allSolo(targetTracks)));
+    soloBoth.addEventListener("click", () => {
+      const on = !(allSolo(sourceTracks) && allSolo(targetTracks));
+      setSolo([...sourceTracks, ...targetTracks], on);
+    });
+
+    const grFill = q("[data-gr]");
+    const grValue = q("[data-gr-value]");
+    live.push({
+      update() {
+        const db = sidechain.reductionDb;
+        const magnitude = Math.min(24, Math.abs(db));
+        grFill.style.width = `${(magnitude / 24) * 100}%`;
+        grFill.classList.toggle("meter-fill-active", magnitude > 0.05);
+        grValue.textContent = `${db.toFixed(1)} dB`;
+        soloSource.classList.toggle("btn-toggle-active", allSolo(sourceTracks));
+        soloTarget.classList.toggle("btn-toggle-active", allSolo(targetTracks));
+        soloBoth.classList.toggle("btn-toggle-active", allSolo(sourceTracks) && allSolo(targetTracks));
+      },
+    });
+
     q("[data-remove]").addEventListener("click", () => {
       engine.removeSidechain(sidechain.id);
       render();
@@ -115,4 +170,9 @@ export function mountSidechainPanel(root: HTMLElement, engine: AudioEngine): voi
   }
 
   render();
+  return {
+    update() {
+      for (const item of live) item.update();
+    },
+  };
 }

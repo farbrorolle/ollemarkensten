@@ -101,9 +101,38 @@ export function mountMasterPanel(root: HTMLElement, engine: AudioEngine): Master
   limHead.textContent = "Limiter";
   const limGrid = document.createElement("div");
   limGrid.className = "creator-grid";
-  limGrid.append(slider("Threshold", -24, 0, 0.5, engine.limiterThreshold, dB, (v) => engine.setLimiterThreshold(v)));
+  limGrid.append(
+    slider("Gain in", -12, 18, 0.5, engine.limiterDriveDb, (v) => `${v > 0 ? "+" : ""}${v.toFixed(1)} dB`, (v) =>
+      engine.setLimiterDrive(v),
+    ),
+    slider("Threshold (tak)", -24, 0, 0.5, engine.limiterThreshold, dB, (v) => engine.setLimiterThreshold(v)),
+  );
   const limMeter = meter("Limiter GR");
   root.append(limHead, limGrid, limMeter.el);
+
+  // Loudness after the limiter.
+  const lufsHead = document.createElement("div");
+  lufsHead.className = "creator-subhead";
+  lufsHead.innerHTML = `Loudness efter limitern (LUFS) <button type="button" class="btn btn-step" data-lufs-reset title="Nollställ integrerat värde">↺</button>`;
+  const lufs = document.createElement("div");
+  lufs.className = "lufs-meter";
+  lufs.innerHTML = `
+    <div class="lufs-cell"><span class="lufs-label">Momentary</span><span class="lufs-value" data-m>–</span><div class="meter-track"><div class="lufs-fill" data-mf></div></div></div>
+    <div class="lufs-cell"><span class="lufs-label">Short-term</span><span class="lufs-value" data-s>–</span><div class="meter-track"><div class="lufs-fill" data-sf></div></div></div>
+    <div class="lufs-cell"><span class="lufs-label">Integrerat</span><span class="lufs-value lufs-integrated" data-i>–</span></div>`;
+  root.append(lufsHead, lufs);
+  lufsHead.querySelector("[data-lufs-reset]")!.addEventListener("click", () => engine.loudness.reset());
+  const lufsEls = {
+    m: lufs.querySelector<HTMLElement>("[data-m]")!,
+    s: lufs.querySelector<HTMLElement>("[data-s]")!,
+    i: lufs.querySelector<HTMLElement>("[data-i]")!,
+    mf: lufs.querySelector<HTMLElement>("[data-mf]")!,
+    sf: lufs.querySelector<HTMLElement>("[data-sf]")!,
+  };
+  const fmtLufs = (v: number): string => (Number.isFinite(v) && v > -70 ? v.toFixed(1) : "–");
+  // Bar scale: -40 .. 0 LUFS.
+  const fillWidth = (v: number): string => `${Number.isFinite(v) ? Math.max(0, Math.min(100, ((v + 40) / 40) * 100)) : 0}%`;
+  let lufsFrame = 0;
 
   // Export.
   const exportRow = document.createElement("div");
@@ -139,6 +168,14 @@ export function mountMasterPanel(root: HTMLElement, engine: AudioEngine): Master
     update() {
       compMeter.set(engine.compressorReduction);
       limMeter.set(engine.limiterReduction);
+      if (++lufsFrame % 6 === 0) {
+        const L = engine.loudness;
+        lufsEls.m.textContent = fmtLufs(L.momentary);
+        lufsEls.s.textContent = fmtLufs(L.shortTerm);
+        lufsEls.i.textContent = fmtLufs(L.integrated);
+        lufsEls.mf.style.width = fillWidth(L.momentary);
+        lufsEls.sf.style.width = fillWidth(L.shortTerm);
+      }
     },
   };
 }
