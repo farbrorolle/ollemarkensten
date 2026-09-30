@@ -200,9 +200,15 @@ export function mountTimeline(
       </span>
       <button type="button" class="btn lock-btn is-active" data-lock aria-pressed="true" hidden title="While on, adding, removing or resizing parts never changes the total length: other parts are shortened or lengthened to make room">🔒 Always lock to video length</button>
       <button type="button" class="btn" data-mode-toggle>Show sections</button>
+      <span class="zoom-group" title="Zoom the timeline (or ⌘/Ctrl + scroll, or pinch)">
+        <button type="button" class="btn btn-icon" data-zoom-out aria-label="Zoom out">−</button>
+        <span class="zoom-value" data-zoom-value>100%</span>
+        <button type="button" class="btn btn-icon" data-zoom-in aria-label="Zoom in">+</button>
+      </span>
       <span class="timeline-toolbar-status" data-status></span>
     </div>
     <div class="timeline-palette" data-palette></div>
+    <div class="timeline-scroll" data-scroll><div class="timeline-zoom" data-zoom-inner>
     <div class="timeline-ruler" data-ruler></div>
     <div class="timeline-body" data-body>
       <div class="timeline-lanes" data-lanes></div>
@@ -221,6 +227,7 @@ export function mountTimeline(
         <div class="timeline-playhead" data-playhead></div>
       </div>
     </div>
+    </div></div>
     <div class="timeline-segment-list" data-segment-list></div>
   `;
 
@@ -248,6 +255,47 @@ export function mountTimeline(
   const musicBlock = root.querySelector<HTMLElement>("[data-music-block]")!;
   const musicBlockLabel = root.querySelector<HTMLElement>("[data-music-block-label]")!;
   const musicBlockHandle = root.querySelector<HTMLElement>("[data-music-block-handle]")!;
+
+  // --- Zoom: the timeline content gets wider and scrolls sideways (lane names stay put).
+  const scrollEl = root.querySelector<HTMLElement>("[data-scroll]")!;
+  const zoomInner = root.querySelector<HTMLElement>("[data-zoom-inner]")!;
+  const zoomValue = root.querySelector<HTMLElement>("[data-zoom-value]")!;
+  const ZOOMS = [1, 1.5, 2, 3, 4, 6, 8];
+  let zoom = 1;
+  function setZoom(next: number, focusClientX?: number): void {
+    next = Math.max(ZOOMS[0]!, Math.min(ZOOMS[ZOOMS.length - 1]!, next));
+    if (next === zoom) return;
+    const rect = scrollEl.getBoundingClientRect();
+    const focusX = (focusClientX ?? rect.left + rect.width / 2) - rect.left;
+    const contentX = (scrollEl.scrollLeft + focusX) / zoom; // content position at zoom 1
+    zoom = next;
+    zoomInner.style.width = `${zoom * 100}%`;
+    zoomValue.textContent = `${Math.round(zoom * 100)}%`;
+    scrollEl.scrollLeft = contentX * zoom - focusX;
+    if (!zoomRedraw) {
+      zoomRedraw = true;
+      requestAnimationFrame(() => {
+        zoomRedraw = false;
+        redrawAll();
+      });
+    }
+  }
+  let zoomRedraw = false;
+  const stepZoom = (dir: 1 | -1, clientX?: number): void => {
+    const i = ZOOMS.findIndex((z) => z >= zoom - 1e-9);
+    setZoom(ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, (ZOOMS[i] === zoom ? i : dir > 0 ? i - 1 : i) + dir))]!, clientX);
+  };
+  root.querySelector("[data-zoom-in]")!.addEventListener("click", () => stepZoom(1));
+  root.querySelector("[data-zoom-out]")!.addEventListener("click", () => stepZoom(-1));
+  scrollEl.addEventListener(
+    "wheel",
+    (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      setZoom(zoom * Math.exp(-e.deltaY * 0.01), e.clientX);
+    },
+    { passive: false },
+  );
 
   // Undo / redo of every change to the music's form and length (also ⌘Z/⇧⌘Z, Ctrl+Z/Ctrl+Y).
   const undoBtn = root.querySelector<HTMLButtonElement>("[data-undo]")!;
@@ -1290,6 +1338,10 @@ export function mountTimeline(
     logoAnchor.hidden = anchor === null;
     logoAnchor.classList.toggle("timeline-logo-anchor-dragging", draggingAnchor !== null);
     logoAnchor.classList.toggle("timeline-logo-anchor-fixed", !engine.canFit);
+    // The drag handle only covers the music lane (not the form lane, where the × buttons are).
+    logoAnchorHandle.style.top = `${mixLane.offsetTop}px`;
+    logoAnchorHandle.style.bottom = "auto";
+    logoAnchorHandle.style.height = `${mixLane.offsetHeight}px`;
     if (anchor !== null) {
       logoAnchor.style.left = `${Math.min(1, xOfSeconds(anchor)) * 100}%`;
       logoAnchor.classList.toggle("timeline-logo-anchor-flip", xOfSeconds(anchor) > 0.8);

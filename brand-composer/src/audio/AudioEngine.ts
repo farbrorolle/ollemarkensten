@@ -602,6 +602,9 @@ export class AudioEngine {
       logoEnabled: this.logoEnabled,
       arrangeMode: this._arrangeMode,
     };
+    // Edited while playing: keep playing from the same spot in the new arrangement.
+    const wasPlaying = Tone.getTransport().state === "started";
+    const playedFrom = Tone.getTransport().seconds;
     Tone.getTransport().stop(); // also resets position to 0
     Tone.getTransport().cancel(0);
     this.endEventId = null; // cancel(0) just removed it
@@ -625,6 +628,7 @@ export class AudioEngine {
     this.scheduleLogo();
     this.envelopes.forEach((e) => e.reset(Tone.now()));
     this.applyPlaybackMode(); // schedule() always turns looping on; re-apply film/logo mode on top
+    if (wasPlaying && (this.filmMode || playedFrom < this.arrangementSeconds - 0.1)) Tone.getTransport().start(undefined, playedFrom);
     for (const listener of this.arrangementListeners) listener();
   }
 

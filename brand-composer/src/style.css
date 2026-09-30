@@ -1682,3 +1682,42 @@ body.view-customer .track-row {
   opacity: 0;
   cursor: pointer;
 }
+
+/* Zoom: the content gets wider inside a sideways-scrolling frame; lane names stay put. */
+.timeline-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.timeline-zoom {
+  width: 100%;
+  min-width: 100%;
+}
+
+.timeline-body {
+  overflow: clip;
+}
+
+.timeline-lane-name {
+  position: sticky;
+  left: 0;
+  z-index: 6;
+  background: var(--panel);
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+}
+
+.zoom-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.zoom-value {
+  font-size: 11px;
+  color: var(--text-dim);
+  min-width: 38px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}

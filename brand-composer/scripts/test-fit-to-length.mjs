@@ -28,13 +28,20 @@ const regions = { intro: [1, 4], a: [5, 12], b: [13, 20], final: [49, 56] };
   assert.deepEqual(r.cues.map((c) => c.bar), [1, 5, 13, 21]);
 }
 
-// Up to the original length, auto arrange = the original form: the track as composed, cut at the end.
+// Shorter than the original: the parts that fit, the next one brought in from its start once half of it fits.
 {
   const r = fitToLength(template, 27, timing, regions);
   assert.ok(Math.abs(r.errorSeconds) < 1e-9, "anchor exact");
   assert.equal(r.totalBars, 17);
   assert.deepEqual(r.cues.map((c) => `${c.section}@${c.bar}`), ["intro@1", "a@5", "b@13"]);
   assert.ok(r.musicStartSeconds < timing.barSeconds);
+}
+
+// Shorter, but not room for half the next part: the parts that fit are extended instead.
+{
+  const r = fitToLength(template, anchorOffsetInMusic(15, timing), timing, regions);
+  assert.equal(r.totalBars, 15);
+  assert.deepEqual(r.lengths, [3, 12, 0, 0], `extended: ${r.lengths}`);
 }
 
 // Longer than the template: the extra length is spread over the loopable sections.
@@ -105,7 +112,7 @@ assert.deepEqual(regionChunks(1, 20, [5, 12]), [
   ];
   // "a" is 20 bars long (8 bars of material).
   const loop = expandLongSections(cues, 24, regions, "loop");
-  assert.deepEqual(loop.map((c) => [c.bar, c.section, c.sourceBar]), [[1, "intro", 1], [5, "a", 5], [9, "a", 5], [13, "a", 5], [17, "a", 5]]);
+  assert.deepEqual(loop.map((c) => [c.bar, c.section, c.sourceBar]), [[1, "intro", 1], [5, "a", 5], [13, "a", 5], [21, "a", 9]]);
   const cont = expandLongSections(cues, 24, regions, "continue");
   assert.deepEqual(cont.map((c) => [c.bar, c.section, c.sourceBar]), [[1, "intro", 1], [5, "a", 5], [13, "b", 13], [21, "a", 5]]);
   // Nothing too long: unchanged.

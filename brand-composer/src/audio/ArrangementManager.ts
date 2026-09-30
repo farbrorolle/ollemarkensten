@@ -222,6 +222,22 @@ export class ArrangementManager {
     const bufferSeconds = voices[0]?.player.loaded ? voices[0].player.buffer.duration : 0;
     if (!voices[0] || !voices[1] || !bufferSeconds) return [];
 
+    // Tone players only accept starts in time order: anything that would go back in time on a
+    // voice is moved to just after its previous start (and skipped if nothing is left of it).
+    const lastStart = [-Infinity, -Infinity];
+    const startIn = (v: number, when: number, offset: number, duration: number): boolean => {
+      const min = lastStart[v]! + 1e-3;
+      if (when < min) {
+        const shift = min - when;
+        if (duration - shift <= 0.01) return false;
+        when = min;
+        offset += shift;
+        duration -= shift;
+      }
+      voices[v]!.player.start(when, offset, duration);
+      lastStart[v] = when;
+      return true;
+    };
     const chunkLists = segments.map((segment) => {
       const region = regions?.[segment.sectionId];
       return region ? regionChunks(segment.startBar, segment.endBar - segment.startBar, region, segment.sourceBar) : [];
@@ -230,7 +246,6 @@ export class ArrangementManager {
     segments.forEach((segment, index) => {
       const chunks = chunkLists[index]!;
       if (!chunks.length) return;
-      const voice = voices[index % 2]!;
       const pts = points[index % 2]!;
       const next = segments[index + 1];
       const lastChunk = chunks[chunks.length - 1]!;
@@ -286,6 +301,18 @@ export class ArrangementManager {
         playPastEnd = Math.max(0, hit + ringOut - this.barStartSeconds(segment.endBar));
       }
 
+      // (Scheduled before the section's own chunks: a player's starts must come in time order.)
+      let pickedUp = false;
+      if (ownPickup) {
+        const pickStart = start - ownPickup * barSec;
+        const offset = (firstSource - ownPickup - track.fileStartBar) * barSec;
+        if (pickStart >= 0 && offset >= 0 && offset < bufferSeconds && startIn(index % 2, pickStart, offset, Math.min(ownPickup * barSec, bufferSeconds - offset))) {
+          pts.push({ t: pickStart, v: 0 }, { t: pickStart + CUT_FADE_SECONDS, v: 1 });
+          pickedUp = true;
+        }
+      }
+      if (!pickedUp) pts.push({ t: start, v: 0 });
+
       chunks.forEach((chunk, chunkIndex) => {
         // The file may be silence-trimmed: it starts at `fileStartBar` of the bounce.
         let startBar = chunk.startBar;
@@ -303,19 +330,9 @@ export class ArrangementManager {
         // The section's last chunk rings on (the bounce's own continuation after that bar).
         const ringOn = chunkIndex === chunks.length - 1 ? playPastEnd : 0;
         const duration = Math.min(bars * barSec + ringOn, bufferSeconds - offset);
-        if (duration > 0) voice.player.start(this.barStartSeconds(startBar), offset, duration);
+        if (duration > 0) startIn(index % 2, this.barStartSeconds(startBar), offset, duration);
       });
 
-      if (ownPickup) {
-        const pickStart = start - ownPickup * barSec;
-        const offset = (firstSource - ownPickup - track.fileStartBar) * barSec;
-        if (pickStart >= 0 && offset >= 0 && offset < bufferSeconds) {
-          voice.player.start(pickStart, offset, Math.min(ownPickup * barSec, bufferSeconds - offset));
-          pts.push({ t: pickStart, v: 0 }, { t: pickStart + CUT_FADE_SECONDS, v: 1 });
-        }
-      } else {
-        pts.push({ t: start, v: 0 });
-      }
       pts.push(
         { t: start + fadeIn, v: 1 },
         { t: end + ringOut * hold, v: 1 },
@@ -360,6 +377,7 @@ export class ArrangementManager {
     const beatSec = timing.barSeconds / 4;
     let fadeEnd: number | null = null;
 
+    const swellLast = [-Infinity, -Infinity];
     planSwells(chunks, track.swellEvents, sectionStarts).forEach(({ event, arrangementBar }, i) => {
       const anchorTime = this.barStartSeconds(arrangementBar);
       if (anchorTime >= musicEnd) return;
@@ -386,7 +404,10 @@ export class ArrangementManager {
         duration = Math.min(duration, musicEnd - when);
       }
       if (duration <= 0.02 || offset >= bufferSeconds) return;
-      voices[i % 2]!.player.start(when, Math.max(0, offset), Math.min(duration, bufferSeconds - offset));
+      const v = i % 2;
+      if (when < swellLast[v]! + 1e-3) return; // (starts must come in time order per voice)
+      voices[v]!.player.start(when, Math.max(0, offset), Math.min(duration, bufferSeconds - offset));
+      swellLast[v] = when;
     });
 
     // Both voices at full level (the clips carry their own shape) -- faded out under the logo if
