@@ -325,6 +325,9 @@ export function fitOriginal(
  * - "continue" (original form): the music simply runs on into the next part(s) of the track, as
  *   written (after the last part it goes on from the 2nd, like `fitOriginal`).
  */
+/** Bars at the end of a part that belong to its ending (fill/lead-in), played only once when it loops. */
+const ENDING_BARS = 4;
+
 export function expandLongSections(
   cues: CueConfig[],
   totalBars: number,
@@ -353,17 +356,26 @@ export function expandLongSections(
       push(cue, length);
       return;
     }
-    push(cue, available);
-    let left = length - available;
     if (mode === "loop") {
+      // The part's ending (its last phrase: fill/lead-in into the next part) is played only once,
+      // at the very end: first the part without its ending, then loops of its body, and the last
+      // loop runs out through the ending -- so it still leads nicely into what follows.
       const regionBars = region[1] - region[0] + 1;
+      const ending = regionBars >= 8 ? ENDING_BARS : 0;
+      const bodyEnd = region[1] - ending; // last bar of the body
+      const first = Math.max(1, bodyEnd - src + 1);
+      push(cue, first);
+      let left = length - first;
+      const body = bodyEnd - region[0] + 1;
       while (left > regionBars) {
-        push({ bar, section: cue.section, transition: "crossfade", sourceBar: region[0] }, regionBars);
-        left -= regionBars;
+        push({ bar, section: cue.section, transition: "crossfade", sourceBar: region[0] }, body);
+        left -= body;
       }
       if (left > 0) push({ bar, section: cue.section, transition: "crossfade", sourceBar: keepEndSourceBar(region, left) }, left);
       return;
     }
+    push(cue, available);
+    let left = length - available;
     let index = order.indexOf(cue.section);
     let guard = 0;
     while (left > 0 && guard++ < 1000) {

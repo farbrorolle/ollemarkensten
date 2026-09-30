@@ -105,7 +105,7 @@ assert.deepEqual(regionChunks(1, 20, [5, 12]), [
   ];
   // "a" is 20 bars long (8 bars of material).
   const loop = expandLongSections(cues, 24, regions, "loop");
-  assert.deepEqual(loop.map((c) => [c.bar, c.section, c.sourceBar]), [[1, "intro", 1], [5, "a", 5], [13, "a", 5], [21, "a", 9]]);
+  assert.deepEqual(loop.map((c) => [c.bar, c.section, c.sourceBar]), [[1, "intro", 1], [5, "a", 5], [9, "a", 5], [13, "a", 5], [17, "a", 5]]);
   const cont = expandLongSections(cues, 24, regions, "continue");
   assert.deepEqual(cont.map((c) => [c.bar, c.section, c.sourceBar]), [[1, "intro", 1], [5, "a", 5], [13, "b", 13], [21, "a", 5]]);
   // Nothing too long: unchanged.
