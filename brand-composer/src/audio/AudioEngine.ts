@@ -24,6 +24,9 @@ export class AudioEngine {
 
   private projectTitle = "";
   private sectionsById = new Map<string, SectionConfig>();
+  /** "Film mode": a video is loaded, so the song plays once from bar 1 and stops at the arrangement's end instead of looping. */
+  private filmMode = false;
+  private endEventId: number | null = null;
 
   constructor() {
     this.masterBus = new Bus("master", "MasterBus");
@@ -65,6 +68,55 @@ export class AudioEngine {
 
   get bpm(): number {
     return Tone.getTransport().bpm.value;
+  }
+
+  /** Length of the whole arrangement in seconds at the current BPM (0 if there is none). */
+  get arrangementSeconds(): number {
+    const bars = this.arrangement.totalBars;
+    return bars ? Tone.Time(`${bars}m`).toSeconds() : 0;
+  }
+
+  /**
+   * Transport position (seconds) of the audio actually coming out of the
+   * speakers right now. `Tone.Transport.seconds` runs ahead of what is heard
+   * by the context's lookAhead (~0.1 s) plus the device output latency, so
+   * anything that must line up with the *audible* music -- the video -- uses
+   * this instead.
+   */
+  get audibleSeconds(): number {
+    const context = Tone.getContext();
+    const raw = context.rawContext as unknown as { outputLatency?: number; baseLatency?: number };
+    const latency = raw.outputLatency || raw.baseLatency || 0;
+    return Tone.getTransport().getSecondsAtTime(Math.max(0, context.currentTime - latency));
+  }
+
+  /**
+   * Film mode on: the transport stops looping and instead stops (and rewinds)
+   * by itself at the end of the arrangement, so the music plays through once
+   * alongside the video. Film mode off restores the normal looping behaviour.
+   */
+  setFilmMode(on: boolean): void {
+    this.filmMode = on;
+    this.applyPlaybackMode();
+  }
+
+  get isFilmMode(): boolean {
+    return this.filmMode;
+  }
+
+  private applyPlaybackMode(): void {
+    const transport = Tone.getTransport();
+    if (this.endEventId !== null) {
+      transport.clear(this.endEventId);
+      this.endEventId = null;
+    }
+    const bars = this.arrangement.totalBars;
+    if (!bars) return;
+    transport.loop = !this.filmMode;
+    if (this.filmMode) {
+      // Scheduled in bars (ticks), so it stays on the arrangement's last barline even if the BPM changes.
+      this.endEventId = transport.schedule((time) => transport.stop(time), `${bars}m`);
+    }
   }
 
   setMasterGain(db: number): void {
@@ -113,6 +165,7 @@ export class AudioEngine {
     for (const bus of this.buses.values()) bus.dispose();
     this.buses.clear();
     Tone.getTransport().cancel(0);
+    this.endEventId = null;
   }
 
   /**
@@ -192,8 +245,10 @@ export class AudioEngine {
   applyArrangement(cues: CueConfig[], loopBars: number): void {
     Tone.getTransport().stop(); // also resets position to 0
     Tone.getTransport().cancel(0);
+    this.endEventId = null; // cancel(0) just removed it
     for (const track of this.tracks.values()) track.resyncSectionTakes();
     this.arrangement.schedule(cues, loopBars, this.sectionsById, Array.from(this.tracks.values()), this.transitionFx);
+    this.applyPlaybackMode(); // schedule() always turns looping on; re-apply film mode on top
   }
 
   /**

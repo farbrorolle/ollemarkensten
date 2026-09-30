@@ -2,6 +2,8 @@ import * as Tone from "tone";
 import type { AudioEngine } from "../audio/AudioEngine.ts";
 import type { Track } from "../audio/Track.ts";
 import type { CueConfig, SectionConfig, TransitionType } from "../project/types.ts";
+import type { FilmInfo, VideoSync } from "../video/VideoSync.ts";
+import { formatSecondsSv } from "../video/syncMath.ts";
 
 export interface TimelineHandle {
   update(): void;
@@ -18,6 +20,8 @@ interface EditableSegment {
 
 const LANE_HEIGHT = 40;
 const WAVE_COLOR = "#7c5cff";
+const FILM_WAVE_COLOR = "#ffb84d";
+const DIM_TEXT_COLOR = "#8b8fa3";
 const DEFAULT_NEW_SEGMENT_BARS = 4;
 const TRANSITION_LABELS: Record<TransitionType, string> = {
   cut: "Cut",
@@ -53,6 +57,51 @@ function drawWaveformSlice(ctx: CanvasRenderingContext2D, data: Float32Array, x0
 }
 
 /**
+ * Draws the film's own audio (min/max peaks over the whole film) on the
+ * timeline's time scale: x = 0..width spans `spanSeconds` of music, so the
+ * waveform ends exactly where the film ends.
+ */
+function drawFilmPeaks(
+  ctx: CanvasRenderingContext2D,
+  peaks: Float32Array,
+  filmSeconds: number,
+  spanSeconds: number,
+  width: number,
+  height: number,
+): void {
+  const buckets = peaks.length / 2;
+  const mid = height / 2;
+  const xEnd = Math.min(width, Math.ceil((filmSeconds / spanSeconds) * width));
+  ctx.beginPath();
+  for (let x = 0; x < xEnd; x++) {
+    const b0 = Math.floor((((x / width) * spanSeconds) / filmSeconds) * buckets);
+    const b1 = Math.min(buckets, Math.max(b0 + 1, Math.floor(((((x + 1) / width) * spanSeconds) / filmSeconds) * buckets)));
+    let min = 0;
+    let max = 0;
+    for (let b = b0; b < b1; b++) {
+      min = Math.min(min, peaks[b * 2]!);
+      max = Math.max(max, peaks[b * 2 + 1]!);
+    }
+    ctx.moveTo(x + 0.5, mid + min * mid);
+    ctx.lineTo(x + 0.5, mid + max * mid);
+  }
+  ctx.stroke();
+}
+
+function filmAudioMessage(info: FilmInfo): string {
+  switch (info.audioState) {
+    case "decoding":
+      return "Läser in filmens ljud…";
+    case "none":
+      return "Hittade inget ljudspår i filmen";
+    case "too-long":
+      return "Filmen är för lång för att visa ljudvågen";
+    default:
+      return "";
+  }
+}
+
+/**
  * Renders the song's arrangement as an editable horizontal timeline: a bar
  * ruler, section blocks you can drag to reorder, resize (drag the right
  * edge) or remove, a palette to append new section instances, one waveform
@@ -63,7 +112,12 @@ function drawWaveformSlice(ctx: CanvasRenderingContext2D, data: Float32Array, x0
  * order/lengths and pushes it straight to AudioEngine.applyArrangement --
  * there's no separate "save" step.
  */
-export function mountTimeline(root: HTMLElement, engine: AudioEngine, sections: SectionConfig[]): TimelineHandle {
+export function mountTimeline(
+  root: HTMLElement,
+  engine: AudioEngine,
+  sections: SectionConfig[],
+  film?: VideoSync,
+): TimelineHandle {
   const sectionNameById = new Map(sections.map((s) => [s.id, s.name]));
   const sectionById = new Map(sections.map((s) => [s.id, s]));
   const tracks = Array.from(engine.tracks.values());
@@ -82,7 +136,11 @@ export function mountTimeline(root: HTMLElement, engine: AudioEngine, sections: 
     <div class="timeline-sections" data-sections></div>
     <div class="timeline-body" data-body>
       <div class="timeline-lanes" data-lanes></div>
-      <div class="timeline-playhead" data-playhead></div>
+      <div class="timeline-overlay" data-overlay>
+        <div class="timeline-after-film" data-after-film hidden></div>
+        <div class="timeline-film-end" data-film-end hidden><span class="timeline-film-end-label" data-film-end-label></span></div>
+        <div class="timeline-playhead" data-playhead></div>
+      </div>
     </div>
     <div class="timeline-segment-list" data-segment-list></div>
   `;
@@ -93,6 +151,12 @@ export function mountTimeline(root: HTMLElement, engine: AudioEngine, sections: 
   const body = root.querySelector<HTMLElement>("[data-body]")!;
   const lanesEl = root.querySelector<HTMLElement>("[data-lanes]")!;
   const playhead = root.querySelector<HTMLElement>("[data-playhead]")!;
+  // Playhead/markers live in an overlay that spans exactly the waveform canvases (right of the lane names),
+  // so they line up with the waveforms, the ruler and the section blocks.
+  const overlay = root.querySelector<HTMLElement>("[data-overlay]")!;
+  const afterFilm = root.querySelector<HTMLElement>("[data-after-film]")!;
+  const filmEnd = root.querySelector<HTMLElement>("[data-film-end]")!;
+  const filmEndLabel = root.querySelector<HTMLElement>("[data-film-end-label]")!;
   const segmentList = root.querySelector<HTMLElement>("[data-segment-list]")!;
 
   for (const section of sections) {
@@ -162,7 +226,7 @@ export function mountTimeline(root: HTMLElement, engine: AudioEngine, sections: 
       handle.setPointerCapture(e.pointerId);
       const startX = e.clientX;
       const startLength = editableSegments[index]!.lengthBars;
-      const widthPx = body.getBoundingClientRect().width || 1;
+      const widthPx = overlay.getBoundingClientRect().width || 1;
       const barsPerPixel = totalBars / widthPx;
 
       const onMove = (ev: PointerEvent): void => {
@@ -403,6 +467,75 @@ export function mountTimeline(root: HTMLElement, engine: AudioEngine, sections: 
     }
   }
 
+  // The film's own audio track, shown as the top lane while a film is loaded.
+  const filmLane = document.createElement("div");
+  filmLane.className = "timeline-lane timeline-lane-film";
+  filmLane.hidden = true;
+  filmLane.innerHTML = `<button type="button" class="timeline-lane-name timeline-film-toggle"></button><canvas></canvas>`;
+  lanesEl.appendChild(filmLane);
+  const filmToggle = filmLane.querySelector<HTMLButtonElement>("button")!;
+  const filmCanvas = filmLane.querySelector("canvas")!;
+  filmToggle.addEventListener("click", (event) => {
+    event.stopPropagation(); // don't also seek the transport
+    film?.setAudioOn(!film.audioOn);
+  });
+  let filmDrawKey = "";
+  let filmToggleText = "";
+  let filmEndText = "";
+
+  function drawFilmLane(info: FilmInfo, spanSeconds: number): void {
+    const width = filmCanvas.clientWidth || 800;
+    const key = `${width}|${spanSeconds.toFixed(3)}|${info.duration}|${info.audioState}`;
+    if (key === filmDrawKey) return;
+    filmDrawKey = key;
+    filmCanvas.width = width;
+    filmCanvas.height = LANE_HEIGHT;
+    const ctx = filmCanvas.getContext("2d")!;
+    ctx.clearRect(0, 0, width, LANE_HEIGHT);
+    if (info.peaks) {
+      ctx.strokeStyle = FILM_WAVE_COLOR;
+      drawFilmPeaks(ctx, info.peaks, info.duration, spanSeconds, width, LANE_HEIGHT);
+    } else {
+      ctx.fillStyle = DIM_TEXT_COLOR;
+      ctx.font = "12px system-ui, sans-serif";
+      ctx.textBaseline = "middle";
+      ctx.fillText(filmAudioMessage(info), 8, LANE_HEIGHT / 2);
+    }
+  }
+
+  function updateFilm(spanSeconds: number): void {
+    const info = film?.info ?? null;
+    filmLane.hidden = !info;
+    filmEnd.hidden = !info;
+    if (!info || spanSeconds <= 0) {
+      afterFilm.hidden = true;
+      filmDrawKey = "";
+      return;
+    }
+
+    drawFilmLane(info, spanSeconds);
+    const audioOn = film!.audioOn;
+    filmLane.classList.toggle("timeline-lane-muted", !audioOn);
+    const toggleText = audioOn ? "🔊 Filmljud" : "🔇 Filmljud";
+    if (toggleText !== filmToggleText) {
+      filmToggle.textContent = toggleText;
+      filmToggle.title = audioOn ? "Filmens eget ljud är PÅ – klicka för att stänga av" : "Filmens eget ljud är AV – klicka för att slå på";
+      filmToggleText = toggleText;
+    }
+
+    const fraction = info.duration / spanSeconds;
+    const beyond = fraction > 1.0005;
+    filmEnd.style.left = `${Math.min(1, fraction) * 100}%`;
+    filmEnd.classList.toggle("timeline-film-end-beyond", beyond);
+    const endText = beyond ? `Filmen fortsätter ${formatSecondsSv(info.duration - spanSeconds)} s →` : "Filmen slutar";
+    if (endText !== filmEndText) {
+      filmEndLabel.textContent = endText;
+      filmEndText = endText;
+    }
+    afterFilm.hidden = fraction >= 0.9995;
+    afterFilm.style.left = `${Math.min(1, fraction) * 100}%`;
+  }
+
   const lanesByTrack = new Map<string, { canvas: HTMLCanvasElement; lane: HTMLElement }>();
   for (const track of tracks) {
     const lane = document.createElement("div");
@@ -441,7 +574,7 @@ export function mountTimeline(root: HTMLElement, engine: AudioEngine, sections: 
   renderSegmentList();
 
   body.addEventListener("click", (event) => {
-    const rect = body.getBoundingClientRect();
+    const rect = overlay.getBoundingClientRect();
     const fraction = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
     const loopSeconds = Tone.Time(`${totalBars}m`).toSeconds();
     Tone.getTransport().seconds = fraction * loopSeconds;
@@ -452,6 +585,7 @@ export function mountTimeline(root: HTMLElement, engine: AudioEngine, sections: 
       const loopSeconds = Tone.Time(`${totalBars}m`).toSeconds();
       const fraction = loopSeconds > 0 ? (Tone.getTransport().seconds / loopSeconds) % 1 : 0;
       playhead.style.left = `${fraction * 100}%`;
+      updateFilm(loopSeconds);
 
       for (const track of tracks) {
         const entry = lanesByTrack.get(track.id);

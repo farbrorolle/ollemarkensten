@@ -40,6 +40,11 @@ src/
     Sidechain.ts            Envelope-follower-baserad ducking (threshold/ratio/
                              attack/release), realtidsjusterbar
     wav.ts                  WAV-encoding + nedladdning för stereo-export
+  video/
+    VideoSync.ts            Kundens film (lokal videofil) låst mot Tone.Transport:
+                             driftkorrigering varje animationsruta, spelas en gång
+    syncMath.ts             Ren matematik för driftkorrigeringen (enhetstestad i
+                             scripts/test-sync-math.mjs) + vågform/tidsformat
   project/
     types.ts                 ProjectConfig-typerna (bpm, tracks, buses,
                              sidechains, sections, arrangement, transition)
@@ -50,6 +55,39 @@ src/
                              master-limiter-mätare + export, sidechain-reglage
   main.ts                   Startpunkt: laddar public/config/demo-project.json
 ```
+
+### Film: video synkad mot musiken
+
+Överst i appen finns en stor filmyta. Dra in en videofil (eller klicka
+**Välj film…**) — precis som för lokala ljudfiler laddas den aldrig upp
+någonstans utan spelas från en `URL.createObjectURL`-adress i webbläsaren.
+Bäst stöd: MP4 (H.264 + AAC); WebM fungerar också, MOV i Safari.
+
+- **Transporten är klockan, videon följer efter.** Varje animationsruta
+  (`requestAnimationFrame`) jämför `video.currentTime` med transportens
+  position för det ljud som *hörs just nu* (`AudioEngine.audibleSeconds` —
+  `Transport.seconds` ligger ~0,1 s före det hörbara pga Tone.js lookahead,
+  plus enhetens utgångslatens). Liten drift rättas osynligt genom att
+  `playbackRate` nudgas några procent; stora hopp (t.ex. klick i
+  tidslinjen) rättas med en seek som siktar lite framåt för att kompensera
+  seek-tiden. Videons eget `timeupdate`-event används inte — för glest.
+  Uppmätt i headless Chromium: median ~8 ms, max ~33 ms avvikelse (en
+  bildruta vid 25 fps är 40 ms).
+- **Filmen spelas en gång och styr låtens längd.** Så fort en film är
+  inladdad slutar arrangemanget att loopa (`AudioEngine.setFilmMode`) och
+  transporten stannar själv i slutet av sista takten. Är musiken längre än
+  filmen står bilden kvar på sista rutan medan musiken spelar klart. En
+  statusrad säger i klartext om musiken räcker hela filmen eller hur många
+  sekunder som saknas, och tidslinjen visar en streckad **Filmen slutar**-
+  markering så att man kan dra sektionerna till rätt längd.
+- **Filmens eget ljud** visas som ett eget spår överst i tidslinjen
+  (vågform) och slås av/på med **🔊 Filmens ljud** (eller klick på
+  spårnamnet). Det går direkt till högtalarna, inte genom mixern/limitern,
+  och ingår inte i WAV-exporten — det är referensljud (t.ex. speakerröst).
+  Om webbläsaren vägrar starta ljudet automatiskt spelas filmen tyst och
+  en rad förklarar hur man slår på det.
+- Klick på bilden eller mellanslag = play/paus. När transporten står still
+  visar bilden rätt ruta för positionen man klickar på i tidslinjen.
 
 ### Arrangemang: fasta cue-punkter, inte en live-knapp
 

@@ -6,7 +6,11 @@ export interface TransportPanelHandle {
   update(): void;
 }
 
-export function mountTransportPanel(root: HTMLElement, engine: AudioEngine): TransportPanelHandle {
+/**
+ * @param onPlayGesture called synchronously inside the Play click, before audio starts -- used to
+ *   "unlock" the film's <video> for playback with sound (browsers require a user gesture for that).
+ */
+export function mountTransportPanel(root: HTMLElement, engine: AudioEngine, onPlayGesture?: () => void): TransportPanelHandle {
   root.innerHTML = `
     <div class="transport-buttons">
       <button data-play class="btn btn-primary">▶ Play</button>
@@ -37,6 +41,7 @@ export function mountTransportPanel(root: HTMLElement, engine: AudioEngine): Tra
   bpmInput.value = String(engine.bpm);
 
   playBtn.addEventListener("click", async () => {
+    onPlayGesture?.();
     await engine.unlockAudio();
     engine.play();
   });

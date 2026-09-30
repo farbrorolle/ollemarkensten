@@ -578,6 +578,301 @@ body {
   color: var(--green);
 }
 
+/* Film (video) panel: the customer's view -- big and obvious. */
+.panel-video {
+  grid-column: 1 / -1;
+}
+
+#video-panel {
+  position: relative;
+  border-radius: 10px;
+}
+
+#video-panel [hidden],
+#timeline-view [hidden] {
+  display: none !important;
+}
+
+.video-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 6px;
+  min-height: 280px;
+  padding: 32px 20px;
+  border: 2px dashed var(--panel-border);
+  border-radius: 10px;
+  background: var(--bg);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.video-drag-over .video-drop {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.video-drag-over .video-stage {
+  outline: 2px dashed var(--accent);
+  outline-offset: 3px;
+}
+
+.video-drop-icon {
+  font-size: 44px;
+  line-height: 1;
+}
+
+.video-drop-title {
+  margin: 4px 0 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.video-drop-text {
+  margin: 0 0 6px;
+  color: var(--text-dim);
+}
+
+.video-drop-note {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.video-drop-note strong {
+  color: var(--text);
+}
+
+.video-loading .video-drop,
+.video-loading .video-stage {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.video-stage {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.video-element {
+  display: block;
+  width: 100%;
+  max-height: 55vh;
+  object-fit: contain;
+  background: #000;
+}
+
+.video-overlay {
+  position: absolute;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.video-overlay-section {
+  top: 12px;
+  left: 12px;
+  border-left: 3px solid var(--accent);
+}
+
+.video-overlay-time {
+  top: 12px;
+  right: 12px;
+}
+
+.video-overlay-ended {
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--amber);
+}
+
+.video-play-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 72px;
+  height: 72px;
+  margin: -36px 0 0 -36px;
+  padding-left: 5px;
+  border-radius: 50%;
+  background: rgba(124, 92, 255, 0.88);
+  color: #fff;
+  font-size: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  transition: transform 0.15s;
+}
+
+.video-stage:hover .video-play-hint {
+  transform: scale(1.07);
+}
+
+.video-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-top: 12px;
+}
+
+.video-file {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 200px;
+}
+
+.video-file-name {
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.video-file-length {
+  flex: 0 0 auto;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.video-fit {
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.video-fit-ok {
+  color: var(--green);
+  background: rgba(51, 209, 122, 0.12);
+}
+
+.video-fit-warn {
+  color: var(--amber);
+  background: rgba(255, 184, 77, 0.14);
+}
+
+.video-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.video-audio-toggle {
+  min-width: 170px;
+}
+
+.video-audio-on {
+  border-color: var(--green);
+  color: var(--green);
+  background: rgba(51, 209, 122, 0.1);
+}
+
+.video-notice {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--amber);
+}
+
+.video-error {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--red);
+}
+
+/* Timeline: ruler, section blocks and the playhead/film overlay all share the
+   waveform canvases' horizontal extent (right of the 90px lane names), so a
+   given bar is at the same x everywhere. 102px = lane padding 4 + name 90 + gap 8. */
+#timeline-view {
+  --lane-gutter: 102px;
+}
+
+.timeline-ruler,
+.timeline-sections {
+  margin-left: calc(var(--lane-gutter) + 1px); /* + the timeline body's 1px border */
+  margin-right: 5px;
+}
+
+.timeline-overlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--lane-gutter);
+  right: 4px;
+  pointer-events: none;
+}
+
+.timeline-lane-film {
+  background: rgba(255, 184, 77, 0.05);
+}
+
+.timeline-lane-film[hidden] + .timeline-lane {
+  border-top: none;
+}
+
+.timeline-film-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  font-size: 12px;
+  color: var(--amber);
+  cursor: pointer;
+}
+
+.timeline-film-toggle:hover {
+  text-decoration: underline;
+}
+
+.timeline-after-film {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.04) 0 6px, transparent 6px 12px);
+}
+
+.timeline-film-end {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 2px dashed var(--amber);
+}
+
+.timeline-film-end-label {
+  position: absolute;
+  top: 3px;
+  right: 5px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--amber);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 /* Mobile: stack the two-column layout, and shrink grid rows whose fixed-px
    columns (track mixer, sidechain params) don't otherwise fit a narrow
    screen. Placed last in the file so it wins over the base rules above at
@@ -585,6 +880,18 @@ body {
 @media (max-width: 640px) {
   .layout {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .video-drop {
+    min-height: 200px;
+  }
+
+  .video-element {
+    max-height: 50vh;
+  }
+
+  .video-audio-toggle {
+    min-width: 0;
   }
 
   .track-list-header,
