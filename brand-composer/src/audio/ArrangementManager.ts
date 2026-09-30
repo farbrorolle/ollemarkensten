@@ -81,6 +81,8 @@ export class ArrangementManager {
   private loopBars = 0;
   private currentSectionId: string | null = null;
   private timing: ArrangementTiming = { musicStartSeconds: 0, barSeconds: 2 };
+  /** Beat of the last bar where the logo hits (swells are cut there); 0 = no logo. Set by AudioEngine. */
+  swellCutoffBeat = 0;
   private onSectionChange?: (sectionId: string) => void;
 
   setOnSectionChange(callback: (sectionId: string) => void): void {
@@ -238,7 +240,7 @@ export class ArrangementManager {
         ? CUT_FADE_SECONDS
         : next
           ? Math.max(CUT_FADE_SECONDS, track.tails.length ? tail : fadeSecondsFor(next.transition))
-          : Math.max(Tone.Time(END_FADE).toSeconds(), tail);
+          : Tone.Time(END_FADE).toSeconds(); // the end of the music: no ring-out, the logo stands alone
       const start = this.barStartSeconds(segment.startBar);
       const end = this.barStartSeconds(segment.endBar);
 
@@ -300,6 +302,11 @@ export class ArrangementManager {
     const sectionStarts = Object.values(regions).map((r) => r[0]);
     const fileStart = (track.fileStartBar - 1) * timing.barSeconds;
     const musicEnd = this.barStartSeconds(this.loopBars + 1);
+    // Swells never ring into the logo: nothing of them after `swellCutoff` (the logo's hit when
+    // there is one -- beat `swellCutoffBeat` of the last bar -- else the end of the music).
+    const swellCutoff = this.swellCutoffBeat
+      ? this.barStartSeconds(this.loopBars) + (this.swellCutoffBeat - 1) * (timing.barSeconds / 4)
+      : musicEnd;
 
     planSwells(chunks, track.swellEvents, sectionStarts).forEach(({ event, arrangementBar }, i) => {
       const anchorTime = this.barStartSeconds(arrangementBar);
@@ -314,7 +321,8 @@ export class ArrangementManager {
         duration += when;
         when = 0;
       }
-      if (duration <= 0 || offset >= bufferSeconds) return;
+      duration = Math.min(duration, swellCutoff - when);
+      if (duration <= 0.02 || offset >= bufferSeconds) return;
       voices[i % 2]!.player.start(when, Math.max(0, offset), Math.min(duration, bufferSeconds - offset));
     });
 

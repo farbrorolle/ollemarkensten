@@ -500,6 +500,7 @@ export class AudioEngine {
     this.endEventId = null; // cancel(0) just removed it
     this._lastFit = fit; // null = edited by hand
     for (const track of this.tracks.values()) track.resyncSectionTakes();
+    this.arrangement.swellCutoffBeat = this.logoConfig && this.logoTrack ? this.logoConfig.anchorBeat : 0;
     this.envelopes = this.arrangement.schedule(
       cues.map((cue) => ({ ...cue, transition: normalizeTransition(cue.transition) })),
       loopBars,

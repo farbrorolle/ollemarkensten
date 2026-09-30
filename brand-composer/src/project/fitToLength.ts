@@ -72,45 +72,95 @@ function changeCost(block: FitBlock, len: number): number {
   return (block.bars - len + dropPenalty) * priority;
 }
 
+/** A jump in the source (the music doesn't simply continue): the more of these, the less "as composed". */
+const JUMP_COST = 6;
+
+interface BlockChoice {
+  len: number;
+  /** Source bar the block starts reading from (undefined without regions). */
+  sourceBar?: number;
+  /** Source bar where it ends (for continuity with the next block). */
+  sourceEnd?: number;
+  /** Jumps inside the block itself (a repeat wraps around). */
+  innerJumps: number;
+}
+
+/** The ways a block can be played at each allowed length (keep its start or its end when shortened). */
+function blockChoices(block: FitBlock, region: [number, number] | undefined, isFirst: boolean): BlockChoice[] {
+  const choices: BlockChoice[] = [];
+  for (const len of blockOptions(block)) {
+    if (len === 0 || !region) {
+      choices.push({ len, innerJumps: 0 });
+      continue;
+    }
+    const [first, last] = region;
+    const regionBars = last - first + 1;
+    if (len >= regionBars) {
+      // Full, or longer: runs through, then repeats taken from the end (see regionChunks).
+      const repeats = Math.ceil((len - regionBars) / regionBars);
+      choices.push({ len, sourceBar: first, sourceEnd: last, innerJumps: repeats });
+      continue;
+    }
+    // Shortened: keep its start (ends early) and/or its end (starts late).
+    // The music's first section always starts where the track starts.
+    const keeps = isFirst ? ["start"] : block.keep ? [block.keep] : ["end", "start"];
+    for (const keep of keeps) {
+      choices.push(
+        keep === "start"
+          ? { len, sourceBar: first, sourceEnd: first + len - 1, innerJumps: 0 }
+          : { len, sourceBar: last - len + 1, sourceEnd: last, innerJumps: 0 },
+      );
+    }
+  }
+  return choices;
+}
+
 /**
- * Picks one length per block: the longest total that is <= `idealBars`
- * (or the shortest possible total if none is), and among those the one that
- * changes low-priority sections first (smallest priority-weighted change).
+ * Picks how to play each block: the longest total that is <= `idealBars`
+ * (or the shortest possible total if none is), and among those the most
+ * "as composed" one -- inspired by the original form: sections stay whole and
+ * in order where possible, low-priority sections are cut first, and every
+ * place where the music doesn't simply continue in the source costs extra.
  */
-export function chooseLengths(template: FitBlock[], idealBars: number): { lengths: number[]; total: number } {
-  // DP over totals: best[total] = { cost, lengths }.
-  let best = new Map<number, { cost: number; lengths: number[] }>([[0, { cost: 0, lengths: [] }]]);
+export function chooseArrangement(
+  template: FitBlock[],
+  idealBars: number,
+  regions?: Record<string, [number, number]>,
+): { total: number; choices: BlockChoice[] } {
+  type State = { cost: number; choices: BlockChoice[]; total: number; lastEnd: number };
+  // DP over (total bars, source bar where the music so far ends).
+  let best = new Map<string, State>([["0|-1", { cost: 0, choices: [], total: 0, lastEnd: -1 }]]);
   for (const block of template) {
-    const next = new Map<number, { cost: number; lengths: number[] }>();
-    const options = blockOptions(block);
-    for (const [total, state] of best) {
-      for (const len of options) {
-        const t = total + len;
-        const cost = state.cost + changeCost(block, len);
-        const existing = next.get(t);
-        if (!existing || cost < existing.cost) next.set(t, { cost, lengths: [...state.lengths, len] });
+    const next = new Map<string, State>();
+    const region = regions?.[block.section];
+    for (const state of best.values()) {
+      for (const choice of blockChoices(block, region, state.total === 0)) {
+        let cost = state.cost + changeCost(block, choice.len) + choice.innerJumps * (JUMP_COST / 2);
+        let lastEnd = state.lastEnd;
+        if (choice.len > 0) {
+          if (regions && state.lastEnd !== -1 && choice.sourceBar !== state.lastEnd + 1) cost += JUMP_COST;
+          lastEnd = choice.sourceEnd ?? -1;
+        }
+        const total = state.total + choice.len;
+        const key = `${total}|${lastEnd}`;
+        const existing = next.get(key);
+        if (!existing || cost < existing.cost) next.set(key, { cost, choices: [...state.choices, choice], total, lastEnd });
       }
     }
     best = next;
   }
-  const totals = Array.from(best.keys()).filter((t) => t > 0);
-  if (totals.length === 0) throw new Error("The template can't be longer than 0 bars");
-  const fitting = totals.filter((t) => t <= idealBars);
-  const total = fitting.length ? Math.max(...fitting) : Math.min(...totals);
-  return { total, lengths: best.get(total)!.lengths };
+  const states = Array.from(best.values()).filter((s) => s.total > 0);
+  if (states.length === 0) throw new Error("The template can't be longer than 0 bars");
+  const fitting = states.filter((s) => s.total <= idealBars);
+  const total = fitting.length ? Math.max(...fitting.map((s) => s.total)) : Math.min(...states.map((s) => s.total));
+  const winner = states.filter((s) => s.total === total).reduce((a, b) => (b.cost < a.cost ? b : a));
+  return { total, choices: winner.choices };
 }
 
-/**
- * Where to start reading a block's source region: keep the region's start
- * (default for extended blocks) or its end (so a shortened section keeps its
- * lead-in to the next one).
- */
-function sourceBarFor(block: FitBlock, len: number, region: [number, number] | undefined): number | undefined {
-  if (!region) return undefined;
-  const regionBars = region[1] - region[0] + 1;
-  const keep = block.keep ?? "end";
-  if (keep === "end" && len < regionBars) return region[1] - len + 1;
-  return region[0];
+/** Lengths only (for callers/tests that don't care where each block reads from). */
+export function chooseLengths(template: FitBlock[], idealBars: number): { lengths: number[]; total: number } {
+  const { total, choices } = chooseArrangement(template, idealBars);
+  return { total, lengths: choices.map((c) => c.len) };
 }
 
 /**
@@ -128,7 +178,8 @@ export function fitToLength(
   // Ideal bar count: the most bars whose anchor still fits at or before the target.
   const idealBars = Math.floor((targetAnchorSeconds - beforeFirstBar) / timing.barSeconds + 1e-9) + 1;
 
-  const { lengths, total } = chooseLengths(template, Math.max(0, idealBars));
+  const { total, choices } = chooseArrangement(template, Math.max(0, idealBars), regions);
+  const lengths = choices.map((c) => c.len);
 
   const anchorInMusic = anchorOffsetInMusic(total, timing);
   let musicStartSeconds = targetAnchorSeconds - anchorInMusic;
@@ -147,10 +198,7 @@ export function fitToLength(
     const len = lengths[i]!;
     if (len <= 0) return;
     const cue: CueConfig = { bar, section: block.section, transition: (block.transition ?? "cut") as TransitionType };
-    // The music always starts where the track starts (no reverb/delay tails from an earlier bar):
-    // the first section reads from its region start whatever its "keep" rule.
-    const region = regions?.[block.section];
-    const sourceBar = cues.length === 0 && region ? region[0] : sourceBarFor(block, len, region);
+    const sourceBar = choices[i]!.sourceBar;
     if (sourceBar !== undefined) cue.sourceBar = sourceBar;
     cues.push(cue);
     bar += len;

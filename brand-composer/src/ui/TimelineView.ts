@@ -719,6 +719,21 @@ export function mountTimeline(
     ctx.globalAlpha = 0.9;
     for (const track of tracks) if (track.isLogo) drawTrackInto(ctx, track, width, MIX_LANE_HEIGHT);
     ctx.restore();
+
+    // Section names right on the music, with a divider at each section start.
+    ctx.save();
+    ctx.font = "600 11px system-ui, sans-serif";
+    ctx.textBaseline = "bottom";
+    for (const segment of segments) {
+      const x0 = xOfBar(segment.startBar) * width;
+      const x1 = xOfBar(segment.endBar) * width;
+      ctx.fillStyle = "rgba(255, 255, 255, 0.28)";
+      ctx.fillRect(Math.round(x0), 0, 1, MIX_LANE_HEIGHT);
+      const name = sectionNameById.get(segment.sectionId) ?? segment.sectionId;
+      ctx.fillStyle = "rgba(230, 232, 240, 0.9)";
+      if (x1 - x0 > 24) ctx.fillText(name, x0 + 4, MIX_LANE_HEIGHT - 4, x1 - x0 - 8);
+    }
+    ctx.restore();
   }
 
   const lanesByTrack = new Map<string, { canvas: HTMLCanvasElement; lane: HTMLElement }>();

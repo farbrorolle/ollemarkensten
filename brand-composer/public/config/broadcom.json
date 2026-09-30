@@ -1169,23 +1169,23 @@
     },
     {
       "id": "a",
-      "name": "A"
+      "name": "Ostinato"
     },
     {
       "id": "b",
-      "name": "B"
+      "name": "Groove"
     },
     {
       "id": "c",
-      "name": "C"
+      "name": "Motif"
     },
     {
       "id": "d",
-      "name": "D"
+      "name": "Pads"
     },
     {
       "id": "e",
-      "name": "E"
+      "name": "Guitars"
     },
     {
       "id": "break",
@@ -1290,7 +1290,7 @@
         "section": "break",
         "bars": 4,
         "minBars": 0,
-        "maxBars": 16,
+        "maxBars": 4,
         "stepBars": 4,
         "priority": 1,
         "transition": "crossfade"
