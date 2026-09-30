@@ -219,6 +219,9 @@ export function mountVideoPanel(
         if (warning) {
           fitText = `⚠ ${warning}`;
           fitClass = "video-fit-warn";
+        } else if (film.detectedCut !== null && Math.abs((engine.logoAnchorSeconds ?? -1) - film.detectedCut) < 0.05) {
+          fitText = `✓ Logo hit synced to the film's last cut (${formatFilmTime(film.detectedCut)})`;
+          fitClass = "video-fit-ok";
         } else if (Math.abs(diff) < 0.05) {
           fitText = "✓ The logo ends when the film ends";
           fitClass = "video-fit-ok";

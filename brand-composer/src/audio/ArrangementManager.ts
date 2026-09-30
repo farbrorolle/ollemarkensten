@@ -10,6 +10,8 @@ import type { PlayedChunk } from "../project/swellPlan.ts";
 const CUT_FADE_SECONDS = 0.003; // "cut": just enough to avoid a hard click, no audible blend
 /** Longest ring-out after a section (sustained pads/bass would otherwise hang on too long). */
 const MAX_RING_OUT_SECONDS = 2;
+/** How long the chosen tracks fade away under the logo after its hit. */
+const LOGO_RING_OUT_SECONDS = 1.5;
 /** Fade at the very end of the music (under the logo's ring-out). */
 const END_FADE = "8n";
 
@@ -83,6 +85,14 @@ export class ArrangementManager {
   private timing: ArrangementTiming = { musicStartSeconds: 0, barSeconds: 2 };
   /** Beat of the last bar where the logo hits (swells are cut there); 0 = no logo. Set by AudioEngine. */
   swellCutoffBeat = 0;
+  /** Tracks that may ring out under the logo (everything else stops at its hit). Set by AudioEngine. */
+  logoRingOut = new Set<string>();
+
+  /** Transport seconds of the logo's hit, or null without a logo. */
+  private logoHitSeconds(timing: ArrangementTiming): number | null {
+    if (!this.swellCutoffBeat) return null;
+    return this.barStartSeconds(this.loopBars) + (this.swellCutoffBeat - 1) * (timing.barSeconds / 4);
+  }
   private onSectionChange?: (sectionId: string) => void;
 
   setOnSectionChange(callback: (sectionId: string) => void): void {
@@ -242,7 +252,18 @@ export class ArrangementManager {
           ? Math.max(CUT_FADE_SECONDS, track.tails.length ? tail : fadeSecondsFor(next.transition))
           : Tone.Time(END_FADE).toSeconds(); // the end of the music: no ring-out, the logo stands alone
       const start = this.barStartSeconds(segment.startBar);
-      const end = this.barStartSeconds(segment.endBar);
+      let end = this.barStartSeconds(segment.endBar);
+      let fadeOut = ringOut;
+      let playPastEnd = ringOut;
+      const hit = !next ? this.logoHitSeconds(timing) : null;
+      if (hit !== null) {
+        // The last section meets the logo: stop at the logo's hit -- except the tracks chosen to
+        // ring out (swells, sonar ...), which fade away under the logo.
+        const ring = this.logoRingOut.has(track.id) ? LOGO_RING_OUT_SECONDS : CUT_FADE_SECONDS * 10;
+        playPastEnd = Math.max(0, hit + ring - end);
+        end = hit;
+        fadeOut = ring;
+      }
 
       chunks.forEach((chunk, chunkIndex) => {
         // The file may be silence-trimmed: it starts at `fileStartBar` of the bounce.
@@ -259,7 +280,7 @@ export class ArrangementManager {
         const offset = (fromBar - track.fileStartBar) * timing.barSeconds;
         if (offset >= bufferSeconds) return;
         // The section's last chunk rings on (the bounce's own continuation after that bar).
-        const ringOn = chunkIndex === chunks.length - 1 ? ringOut : 0;
+        const ringOn = chunkIndex === chunks.length - 1 ? playPastEnd : 0;
         const duration = Math.min(bars * timing.barSeconds + ringOn, bufferSeconds - offset);
         voice.player.start(this.barStartSeconds(startBar), offset, duration);
       });
@@ -267,8 +288,8 @@ export class ArrangementManager {
       pts.push(
         { t: start, v: 0 },
         { t: start + fadeIn, v: 1 },
-        { t: end + ringOut * 0.5, v: 1 },
-        { t: end + ringOut, v: 0 },
+        { t: end + (hit !== null ? 0 : fadeOut * 0.5), v: 1 },
+        { t: end + fadeOut, v: 0 },
       );
     });
 
@@ -304,9 +325,10 @@ export class ArrangementManager {
     const musicEnd = this.barStartSeconds(this.loopBars + 1);
     // Swells never ring into the logo: nothing of them after `swellCutoff` (the logo's hit when
     // there is one -- beat `swellCutoffBeat` of the last bar -- else the end of the music).
-    const swellCutoff = this.swellCutoffBeat
-      ? this.barStartSeconds(this.loopBars) + (this.swellCutoffBeat - 1) * (timing.barSeconds / 4)
-      : musicEnd;
+    const hit = this.logoHitSeconds(timing);
+    const ringsOut = hit !== null && this.logoRingOut.has(track.id);
+    // Chosen to ring out: the swell may sound on for a moment after the hit, fading away.
+    const swellCutoff = hit === null ? musicEnd : ringsOut ? hit + LOGO_RING_OUT_SECONDS : hit;
 
     planSwells(chunks, track.swellEvents, sectionStarts).forEach(({ event, arrangementBar }, i) => {
       const anchorTime = this.barStartSeconds(arrangementBar);
@@ -326,7 +348,9 @@ export class ArrangementManager {
       voices[i % 2]!.player.start(when, Math.max(0, offset), Math.min(duration, bufferSeconds - offset));
     });
 
-    // Both voices always at full level (the clips carry their own shape).
-    return voices.map((voice) => new GainEnvelope(voice!.gain.gain, 1, []));
+    // Both voices at full level (the clips carry their own shape) -- faded out under the logo if
+    // this track rings out there.
+    const fade = ringsOut && hit !== null ? [{ t: hit, v: 1 }, { t: hit + LOGO_RING_OUT_SECONDS, v: 0 }] : [];
+    return voices.map((voice) => new GainEnvelope(voice!.gain.gain, 1, fade));
   }
 }

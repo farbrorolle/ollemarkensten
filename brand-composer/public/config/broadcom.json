@@ -1168,32 +1168,28 @@
       "name": "Intro"
     },
     {
-      "id": "a",
-      "name": "Ostinato"
+      "id": "intro2",
+      "name": "Intro 2"
     },
     {
-      "id": "b",
-      "name": "Groove"
+      "id": "groove",
+      "name": "Main groove"
     },
     {
-      "id": "c",
-      "name": "Motif"
+      "id": "motif",
+      "name": "Main motif"
     },
     {
-      "id": "d",
-      "name": "Pads"
+      "id": "breakdown",
+      "name": "Breakdown"
     },
     {
-      "id": "e",
-      "name": "Guitars"
+      "id": "uplifter",
+      "name": "Uplifter"
     },
     {
-      "id": "break",
-      "name": "Break"
-    },
-    {
-      "id": "final",
-      "name": "Final"
+      "id": "outro",
+      "name": "Outro"
     }
   ],
   "sourceRegions": {
@@ -1201,31 +1197,27 @@
       1,
       4
     ],
-    "a": [
+    "intro2": [
       5,
       12
     ],
-    "b": [
+    "groove": [
       13,
       20
     ],
-    "c": [
+    "motif": [
       21,
       28
     ],
-    "d": [
+    "breakdown": [
       29,
-      36
-    ],
-    "e": [
-      37,
       44
     ],
-    "break": [
+    "uplifter": [
       45,
       48
     ],
-    "final": [
+    "outro": [
       49,
       56
     ]
@@ -1238,47 +1230,29 @@
         "minBars": 1,
         "maxBars": 4,
         "stepBars": 1,
-        "priority": 2,
+        "priority": 3,
         "keep": "start"
       },
       {
-        "section": "a",
+        "section": "intro2",
         "bars": 8,
         "minBars": 0,
-        "maxBars": 64,
+        "maxBars": 32,
         "stepBars": 4,
-        "priority": 1,
+        "priority": 2,
         "transition": "crossfade"
       },
       {
-        "section": "b",
+        "section": "groove",
         "bars": 8,
         "minBars": 4,
-        "maxBars": 64,
+        "maxBars": 32,
         "stepBars": 4,
         "priority": 3,
         "transition": "crossfade"
       },
       {
-        "section": "c",
-        "bars": 8,
-        "minBars": 0,
-        "maxBars": 64,
-        "stepBars": 4,
-        "priority": 4,
-        "transition": "crossfade"
-      },
-      {
-        "section": "d",
-        "bars": 8,
-        "minBars": 0,
-        "maxBars": 64,
-        "stepBars": 4,
-        "priority": 4,
-        "transition": "crossfade"
-      },
-      {
-        "section": "e",
+        "section": "motif",
         "bars": 8,
         "minBars": 0,
         "maxBars": 32,
@@ -1287,19 +1261,28 @@
         "transition": "crossfade"
       },
       {
-        "section": "break",
+        "section": "breakdown",
+        "bars": 16,
+        "minBars": 0,
+        "maxBars": 64,
+        "stepBars": 4,
+        "priority": 4,
+        "transition": "crossfade"
+      },
+      {
+        "section": "uplifter",
         "bars": 4,
         "minBars": 0,
-        "maxBars": 4,
+        "maxBars": 16,
         "stepBars": 4,
         "priority": 1,
         "transition": "crossfade"
       },
       {
-        "section": "final",
+        "section": "outro",
         "bars": 8,
         "minBars": 4,
-        "maxBars": 16,
+        "maxBars": 32,
         "stepBars": 4,
         "priority": 5,
         "transition": "crossfade"
@@ -1318,7 +1301,12 @@
       ],
       "before": "1m"
     },
-    "fadeMusic": null
+    "fadeMusic": null,
+    "ringOut": [
+      "f08",
+      "f13",
+      "f14"
+    ]
   },
   "master": {
     "gain": 0,

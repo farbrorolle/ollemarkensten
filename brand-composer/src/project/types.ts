@@ -157,6 +157,11 @@ export interface LogoConfig {
   mute?: { tracks: string[]; before: string } | null;
   /** Optional: fade all music (not the logo) down over this long, reaching silence at the anchor. */
   fadeMusic?: string | null;
+  /**
+   * Tracks/buses that ring out (fade away) under the logo -- e.g. swells, sonar.
+   * Everything else stops at the logo's hit, so the logo stands alone.
+   */
+  ringOut?: string[];
 }
 
 export interface CompressorSettings {

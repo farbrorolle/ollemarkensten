@@ -10,6 +10,7 @@ import { mountTimeline } from "./ui/TimelineView.ts";
 import { mountLogoPanel } from "./ui/LogoPanel.ts";
 import { mountVideoPanel } from "./ui/VideoPanel.ts";
 import { VideoSync } from "./video/VideoSync.ts";
+import { findLastCut } from "./video/cutDetect.ts";
 
 const engine = new AudioEngine();
 const film = new VideoSync(engine);
@@ -90,7 +91,16 @@ async function bootstrap(): Promise<void> {
       return;
     }
     fittedFilm = key;
+    film.detectedCut = null;
     engine.fitToAnchor(engine.defaultAnchorForFilm(info.duration)); // the timeline redraws itself
+    // Then look for the film's last hard cut (usually the end card) and put the logo's hit on it.
+    const url = film.sourceUrl;
+    if (!url) return;
+    void findLastCut(url, info.duration).then((cut) => {
+      if (!cut || fittedFilm !== key) return; // no clear cut, or another film was loaded meanwhile
+      film.detectedCut = cut.time;
+      engine.fitToAnchor(cut.time);
+    });
   });
 
   // Space = play/pause, like any DAW or video player (ignored while typing in a field).

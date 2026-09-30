@@ -267,18 +267,67 @@ export function mountTimeline(
   });
   const segmentList = root.querySelector<HTMLElement>("[data-segment-list]")!;
 
+  // Section cards: drag one down into the section strip to put it there (or click to add it at the
+  // end). A new section gets its original length and starts from its own beginning.
+  const SECTION_MIME = "application/x-brand-section";
+  const newSegment = (sectionId: string): EditableSegment => {
+    const region = engine.sourceRegionFor(sectionId);
+    return {
+      sectionId,
+      lengthBars: region ? region[1] - region[0] + 1 : DEFAULT_NEW_SEGMENT_BARS,
+      transition: "crossfade",
+      ...(region ? { sourceBar: region[0] } : {}),
+    };
+  };
   for (const section of sections) {
-    const chip = document.createElement("button");
-    chip.type = "button";
-    chip.className = "timeline-palette-chip";
-    chip.textContent = `+ ${section.name}`;
-    chip.title = `Add a ${section.name} section at the end of the arrangement`;
-    chip.addEventListener("click", () => {
-      editableSegments.push({ sectionId: section.id, lengthBars: DEFAULT_NEW_SEGMENT_BARS, transition: "crossfade" });
+    const region = engine.sourceRegionFor(section.id);
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "timeline-palette-chip";
+    card.draggable = true;
+    card.innerHTML = `<span class="chip-name"></span>${region ? `<span class="chip-bars">${region[1] - region[0] + 1} bars</span>` : ""}`;
+    card.querySelector(".chip-name")!.textContent = section.name;
+    card.title = `Drag ${section.name} into the timeline (or click to add it at the end)`;
+    card.addEventListener("dragstart", (e) => {
+      e.dataTransfer?.setData(SECTION_MIME, section.id);
+      e.dataTransfer?.setData("text/plain", section.name);
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = "copy";
+    });
+    card.addEventListener("click", () => {
+      editableSegments.push(newSegment(section.id));
       commit();
     });
-    palette.appendChild(chip);
+    palette.appendChild(card);
   }
+
+  /** Index to insert at for a drop at clientX: before the first block whose middle is right of it. */
+  const insertIndexAt = (clientX: number): number => {
+    for (let i = 0; i < blockEls.length; i++) {
+      const r = blockEls[i]!.getBoundingClientRect();
+      if (clientX < r.left + r.width / 2) return i;
+    }
+    return blockEls.length;
+  };
+  sectionsRow.addEventListener("dragover", (e) => {
+    if (!e.dataTransfer?.types.includes(SECTION_MIME)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    const i = insertIndexAt(e.clientX);
+    const target = blockEls[Math.min(i, blockEls.length - 1)];
+    if (target) showDropIndicator(target, i < blockEls.length);
+  });
+  sectionsRow.addEventListener("dragleave", (e) => {
+    if (!(e.relatedTarget instanceof Node && sectionsRow.contains(e.relatedTarget))) clearDropIndicator();
+  });
+  sectionsRow.addEventListener("drop", (e) => {
+    const sectionId = e.dataTransfer?.getData(SECTION_MIME);
+    if (!sectionId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    clearDropIndicator();
+    editableSegments.splice(insertIndexAt(e.clientX), 0, newSegment(sectionId));
+    commit();
+  });
 
   function renderRuler(): void {
     ruler.innerHTML = "";
@@ -384,7 +433,7 @@ export function mountTimeline(
       clearDropIndicator();
     });
     block.addEventListener("dragover", (e) => {
-      if (draggedIndex === null) return;
+      if (draggedIndex === null) return; // (section cards are handled by the row)
       e.preventDefault();
       const rect = block.getBoundingClientRect();
       showDropIndicator(block, e.clientX - rect.left < rect.width / 2);
@@ -475,6 +524,19 @@ export function mountTimeline(
       blockEls.push(block);
       sectionsRow.appendChild(block);
     });
+
+    // The sonic logo as its own part of the form (moved with the green line, not dragged here).
+    const logoStart = engine.logoStartSeconds;
+    const logoEnd = engine.logoEndSeconds;
+    if (logoStart !== null && logoEnd !== null) {
+      const logoBlock = document.createElement("div");
+      logoBlock.className = "timeline-section-block timeline-section-logo";
+      logoBlock.style.left = `${xOfSeconds(Math.max(0, logoStart)) * 100}%`;
+      logoBlock.style.width = `${(xOfSeconds(logoEnd) - xOfSeconds(Math.max(0, logoStart))) * 100}%`;
+      logoBlock.title = "The sonic logo – move it with the green line";
+      logoBlock.innerHTML = `<span class="timeline-section-label">Logo</span>`;
+      sectionsRow.appendChild(logoBlock);
+    }
   }
 
   /**

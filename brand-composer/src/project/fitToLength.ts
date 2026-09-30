@@ -178,7 +178,18 @@ export function fitToLength(
   // Ideal bar count: the most bars whose anchor still fits at or before the target.
   const idealBars = Math.floor((targetAnchorSeconds - beforeFirstBar) / timing.barSeconds + 1e-9) + 1;
 
-  const { total, choices } = chooseArrangement(template, Math.max(0, idealBars), regions);
+  // Up to the original length, auto arrange behaves exactly like the original form: the track as
+  // composed, cut at the end. Longer: every section is extended in proportion to its original
+  // length (never shortened), looping on in its own material.
+  const originalBars = template.reduce((sum, b) => sum + b.bars, 0);
+  if (idealBars <= originalBars) return fitOriginal(template, targetAnchorSeconds, timing, regions);
+  // (The first section may still be trimmed at its end, to land on the exact bar count.)
+  const extendOnly = template.map((b, i) => ({
+    ...b,
+    minBars: i === 0 ? Math.min(b.bars, b.minBars ?? b.bars) : b.bars,
+    maxBars: Math.max(b.bars, b.maxBars ?? b.bars),
+  }));
+  const { total, choices } = chooseArrangement(extendOnly, Math.max(0, idealBars), regions);
   const lengths = choices.map((c) => c.len);
 
   const anchorInMusic = anchorOffsetInMusic(total, timing);

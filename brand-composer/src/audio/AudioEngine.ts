@@ -501,6 +501,12 @@ export class AudioEngine {
     this._lastFit = fit; // null = edited by hand
     for (const track of this.tracks.values()) track.resyncSectionTakes();
     this.arrangement.swellCutoffBeat = this.logoConfig && this.logoTrack ? this.logoConfig.anchorBeat : 0;
+    const ring = new Set(this.logoConfig?.ringOut ?? []);
+    this.arrangement.logoRingOut = new Set(
+      Array.from(this.tracks.values())
+        .filter((t) => ring.has(t.id) || ring.has(t.busId))
+        .map((t) => t.id),
+    );
     this.envelopes = this.arrangement.schedule(
       cues.map((cue) => ({ ...cue, transition: normalizeTransition(cue.transition) })),
       loopBars,
@@ -556,7 +562,9 @@ export class AudioEngine {
   }
 
   /** Creator view: change the melody mute / fade settings and re-place everything. */
-  setLogoSettings(settings: Partial<Pick<LogoConfig, "mute" | "fadeMusic" | "anchorSeconds" | "anchorBeat">>): void {
+  setLogoSettings(
+    settings: Partial<Pick<LogoConfig, "mute" | "fadeMusic" | "anchorSeconds" | "anchorBeat" | "ringOut">>,
+  ): void {
     if (!this.logoConfig) return;
     this.logoConfig = { ...this.logoConfig, ...settings };
     const segments = this.arrangement.arrangementSegments;

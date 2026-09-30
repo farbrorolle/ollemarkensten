@@ -1062,7 +1062,6 @@ body.view-customer .track-row {
 }
 
 /* Section view is secondary: hidden until "Visa sektioner". */
-.timeline-mode-block .timeline-palette,
 .timeline-mode-block .timeline-ruler,
 .timeline-mode-block .timeline-segment-list,
 .timeline-mode-block .timeline-lane-track {
@@ -1347,4 +1346,34 @@ body.view-customer .track-row {
   overflow: hidden;
   white-space: nowrap;
   text-indent: 0;
+}
+
+/* Section cards above the timeline. */
+.timeline-palette-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  border-style: solid;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: grab;
+}
+
+.timeline-palette-chip .chip-bars {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.timeline-palette-chip:active {
+  cursor: grabbing;
+}
+
+.timeline-section-logo {
+  border-color: var(--green) !important;
+  background: rgba(51, 209, 122, 0.14) !important;
+  color: var(--green);
+  cursor: default;
+  z-index: 1;
 }

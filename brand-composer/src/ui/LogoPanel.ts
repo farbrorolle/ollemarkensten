@@ -29,12 +29,19 @@ export function mountLogoPanel(root: HTMLElement, engine: AudioEngine): void {
   }
   const folders = Array.from(engine.tracks.values()).filter((t) => !t.isLogo);
   const muted = new Set(logo.mute?.tracks ?? []);
+  const ringing = new Set(logo.ringOut ?? []);
 
   root.innerHTML = `
     <div class="creator-subhead">Mute melody before the logo</div>
     <div class="checkbox-row" data-folders>
       ${folders
         .map((t) => `<label><input type="checkbox" value="${t.id}"${muted.has(t.id) ? " checked" : ""} /> ${t.name}</label>`)
+        .join("")}
+    </div>
+    <div class="creator-subhead">Ring out under the logo <span class="hint" style="margin:0;text-transform:none;letter-spacing:0">(everything else stops at the logo hit)</span></div>
+    <div class="checkbox-row" data-ring>
+      ${folders
+        .map((t) => `<label><input type="checkbox" value="${t.id}"${ringing.has(t.id) ? " checked" : ""} /> ${t.name}</label>`)
         .join("")}
     </div>
     <div class="creator-grid" style="margin-top:12px">
@@ -56,7 +63,9 @@ export function mountLogoPanel(root: HTMLElement, engine: AudioEngine): void {
   const apply = (): void => {
     const tracks = Array.from(root.querySelectorAll<HTMLInputElement>("[data-folders] input:checked")).map((i) => i.value);
     const fade = q<HTMLSelectElement>("[data-fade]").value;
+    const ringOut = Array.from(root.querySelectorAll<HTMLInputElement>("[data-ring] input:checked")).map((i) => i.value);
     engine.setLogoSettings({
+      ringOut,
       mute: tracks.length ? { tracks, before: q<HTMLSelectElement>("[data-before]").value } : null,
       fadeMusic: fade || null,
       anchorSeconds: Math.max(0, Number(q<HTMLInputElement>("[data-anchor]").value) || 0),

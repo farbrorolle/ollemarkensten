@@ -28,18 +28,13 @@ const regions = { intro: [1, 4], a: [5, 12], b: [13, 20], final: [49, 56] };
   assert.deepEqual(r.cues.map((c) => c.bar), [1, 5, 13, 21]);
 }
 
-// A 30 s film with the anchor 3 s before the end (27 s): exact sync, music starts later.
+// Up to the original length, auto arrange = the original form: the track as composed, cut at the end.
 {
   const r = fitToLength(template, 27, timing, regions);
   assert.ok(Math.abs(r.errorSeconds) < 1e-9, "anchor exact");
-  // Ideal is floor((27-0.8)/1.6)+1 = 17 bars, but these steps only allow even totals -> 16, and the
-  // music starts one bar later instead (still exact on the anchor).
-  assert.equal(r.totalBars, 16);
-  assert.ok(r.musicStartSeconds >= timing.barSeconds && r.musicStartSeconds < 2 * timing.barSeconds, `start ${r.musicStartSeconds}`);
-  assert.equal(r.warnings.length, 1);
-  // Lowest priority ("a", priority 1) is cut first.
-  assert.equal(r.lengths[1], 0, `a dropped: ${r.lengths}`);
-  assert.equal(r.lengths[3], 8, "final (priority 4) untouched");
+  assert.equal(r.totalBars, 17);
+  assert.deepEqual(r.cues.map((c) => `${c.section}@${c.bar}`), ["intro@1", "a@5", "b@13"]);
+  assert.ok(r.musicStartSeconds < timing.barSeconds);
 }
 
 // Longer than the template: the extra length is spread over the loopable sections.
@@ -63,32 +58,12 @@ const regions = { intro: [1, 4], a: [5, 12], b: [13, 20], final: [49, 56] };
   assert.deepEqual(r.lengths, [24, 24, 24, 8], `even: ${r.lengths}`);
 }
 
-// Shorter than the minimum: anchor lands late, with a warning.
-{
-  const r = fitToLength(template, 3, timing, regions);
-  assert.equal(r.totalBars, 2 + 0 + 4 + 2);
-  assert.equal(r.musicStartSeconds, 0);
-  assert.ok(r.errorSeconds > 0);
-  assert.equal(r.warnings.length, 1);
-}
-
-// keep "end": a shortened section starts later in its source region.
-{
-  const r = fitToLength(template, anchorOffsetInMusic(26, timing), timing, regions);
-  const final = r.cues.find((c) => c.section === "final");
-  const len = r.lengths[3];
-  assert.equal(final.sourceBar, 56 - len + 1);
-  // The first section always starts where the track starts (no tails from an earlier bar).
-  const intro = r.cues.find((c) => c.section === "intro");
-  assert.equal(intro.sourceBar, 1);
-}
-
 // Every whole-second target from 12 to 90 s: exact whenever the template allows it.
 for (let target = 12; target <= 90; target++) {
   const r = fitToLength(template, target, timing, regions);
   const total = r.cues.length ? r.lengths.reduce((a, b) => a + b, 0) : 0;
   assert.equal(total, r.totalBars);
-  if (target >= 13) assert.ok(Math.abs(r.errorSeconds) < 1e-9, `target ${target}`);
+  assert.ok(Math.abs(r.errorSeconds) < 1e-9, `target ${target}`);
   if (r.warnings.length === 0) assert.ok(r.musicStartSeconds <= timing.barSeconds + 1e-9);
 }
 

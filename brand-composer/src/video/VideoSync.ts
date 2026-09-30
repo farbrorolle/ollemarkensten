@@ -98,6 +98,14 @@ export class VideoSync {
     });
   }
 
+  /** Object URL of the loaded film (for analysis), or null. */
+  get sourceUrl(): string | null {
+    return this.objectUrl;
+  }
+
+  /** The film's last hard cut (where the logo's hit was synced to), or null if none was found. */
+  detectedCut: number | null = null;
+
   get info(): FilmInfo | null {
     return this.film;
   }
