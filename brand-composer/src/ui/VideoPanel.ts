@@ -61,11 +61,13 @@ export function mountVideoPanel(
             <input type="range" min="-40" max="6" step="0.5" data-music-volume />
             <span class="video-volume-value" data-music-volume-value></span>
           </label>
-          <span class="video-volume video-limiter" title="Output limiter on the film audio and the music together">
-            <label class="video-limiter-toggle"><input type="checkbox" data-out-lim-on /> Limiter</label>
-            <input type="range" min="-6" max="18" step="0.5" data-out-lim title="Drive into the output limiter" />
+          <span class="video-volume video-limiter" title="Master limiter on the film audio and the music together: turn up to make everything louder without clipping">
+            <label class="video-limiter-toggle creator-only"><input type="checkbox" data-out-lim-on /> On</label>
+            <span>Limiter gain</span>
+            <input type="range" min="0" max="18" step="0.5" data-out-lim title="Gain into the master limiter" />
             <span class="video-volume-value" data-out-lim-value></span>
             <span class="mini-gr" title="How much the limiter is turning the sound down"><span class="mini-gr-fill" data-out-lim-gr></span></span>
+            <span class="creator-only video-limiter-ceiling">Ceiling <input type="range" min="-6" max="0" step="0.1" data-out-ceil title="Master limiter ceiling (dBFS)" /> <span class="video-volume-value" data-out-ceil-value></span></span>
           </span>
           <button type="button" class="btn" data-replace>Replace film</button>
           <button type="button" class="btn" data-remove>Remove</button>
@@ -172,6 +174,14 @@ export function mountVideoPanel(
   limInput.addEventListener("input", () => {
     engine.setOutputDrive(Number(limInput.value));
     limValue.textContent = signed(Number(limInput.value));
+  });
+  const ceilInput = q<HTMLInputElement>("[data-out-ceil]");
+  const ceilValue = q("[data-out-ceil-value]");
+  ceilInput.value = String(engine.outputCeilingDb);
+  ceilValue.textContent = `${engine.outputCeilingDb.toFixed(1)} dB`;
+  ceilInput.addEventListener("input", () => {
+    engine.setOutputCeiling(Number(ceilInput.value));
+    ceilValue.textContent = `${Number(ceilInput.value).toFixed(1)} dB`;
   });
 
   function renderFilmState(): void {

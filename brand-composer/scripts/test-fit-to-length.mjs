@@ -1,6 +1,6 @@
 // Unit tests for "anpassa till längd". Run: node scripts/test-fit-to-length.mjs
 import assert from "node:assert/strict";
-import { anchorOffsetInMusic, blockOptions, chooseLengths, fitOriginal, fitToLength, regionChunks } from "../src/project/fitToLength.ts";
+import { anchorOffsetInMusic, blockOptions, chooseLengths, expandLongSections, fitOriginal, fitToLength, regionChunks } from "../src/project/fitToLength.ts";
 
 const timing = { barSeconds: 1.6, beatSeconds: 0.4, anchorBeat: 3 }; // 150 BPM 4/4, logo plopp on beat 3
 
@@ -94,6 +94,22 @@ assert.deepEqual(regionChunks(1, 20, [5, 12]), [
   assert.equal(long.totalBars, 40);
   assert.deepEqual(long.cues.map((c) => c.section), ["intro", "a", "b", "final", "a", "b"]);
   assert.ok(Math.abs(long.errorSeconds) < 1e-9);
+}
+
+// Too-long sections: loop (auto) or run on into the next parts (original).
+{
+  const regions = { intro: [1, 4], a: [5, 12], b: [13, 20] };
+  const cues = [
+    { bar: 1, section: "intro", sourceBar: 1 },
+    { bar: 5, section: "a", sourceBar: 5, transition: "crossfade" },
+  ];
+  // "a" is 20 bars long (8 bars of material).
+  const loop = expandLongSections(cues, 24, regions, "loop");
+  assert.deepEqual(loop.map((c) => [c.bar, c.section, c.sourceBar]), [[1, "intro", 1], [5, "a", 5], [13, "a", 5], [21, "a", 9]]);
+  const cont = expandLongSections(cues, 24, regions, "continue");
+  assert.deepEqual(cont.map((c) => [c.bar, c.section, c.sourceBar]), [[1, "intro", 1], [5, "a", 5], [13, "b", 13], [21, "a", 5]]);
+  // Nothing too long: unchanged.
+  assert.deepEqual(expandLongSections(cues, 12, regions, "loop").map((c) => c.bar), [1, 5]);
 }
 
 console.log("fitToLength: all tests passed");

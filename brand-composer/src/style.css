@@ -1543,3 +1543,142 @@ body.view-customer .track-row {
   width: 24px;
   max-width: 24px;
 }
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.undo-group {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.btn-icon {
+  padding: 8px 10px;
+}
+
+.video-limiter-ceiling {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Length menu shown when a part is dropped into the form. */
+.length-menu {
+  position: absolute;
+  z-index: 50;
+  background: var(--panel, #161922);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+  font-size: 12px;
+  color: var(--text);
+  min-width: 240px;
+}
+
+.length-menu-title {
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.length-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.length-menu-label {
+  width: 58px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.length-menu-option {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--panel-border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.length-menu-option:hover {
+  border-color: var(--accent);
+}
+
+.length-menu-option.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.length-menu-hint {
+  color: var(--text-dim);
+  font-size: 11px;
+  margin: 4px 0 8px;
+}
+
+.length-menu-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.length-menu-actions .btn {
+  padding: 5px 12px;
+  font-size: 12px;
+}
+
+/* A part looping (the same part straight after itself). */
+.timeline-section-loop {
+  border-style: dashed;
+  border-color: #4dd4ff;
+  color: #4dd4ff;
+  background: rgba(77, 212, 255, 0.1);
+}
+
+.length-menu-note {
+  color: #4dd4ff;
+  font-size: 10px;
+  margin-left: 4px;
+}
+
+/* Transition: only its icon shows on the block (the menu has the words). */
+.timeline-lane-form .timeline-section-transition {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  max-width: 18px;
+  padding: 0;
+  text-align: center;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.timeline-section-transition-icon {
+  position: relative;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  line-height: 14px;
+  text-align: center;
+  font-size: 11px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.timeline-lane-form .timeline-section-transition-icon .timeline-section-transition {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  opacity: 0;
+  cursor: pointer;
+}

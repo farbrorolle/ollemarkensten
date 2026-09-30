@@ -19,7 +19,7 @@ import type {
   SidechainConfig,
   TransitionType,
 } from "../project/types.ts";
-import { fitOriginal, fitToLength } from "../project/fitToLength.ts";
+import { expandLongSections, fitOriginal, fitToLength } from "../project/fitToLength.ts";
 import type { FitResult } from "../project/fitToLength.ts";
 
 const MUTE_RAMP_SECONDS = 0.03;
@@ -93,7 +93,7 @@ export class AudioEngine {
     this.limiterDrive.connect(this.limiter);
     this.outputBus = new Tone.Gain(1);
     this.outputDrive = new Tone.Gain(1);
-    this.outputLimiter = new Tone.Limiter(-1);
+    this.outputLimiter = new Tone.Limiter(0);
     this.limiter.connect(this.outputBus);
     this.outputBus.connect(this.outputDrive);
     this.outputDrive.connect(this.outputLimiter);
@@ -430,7 +430,19 @@ export class AudioEngine {
 
   setOutputLimiterOn(on: boolean): void {
     this.outputLimiterOn = on;
-    this.outputLimiter.threshold.value = on ? -1 : 0;
+    this.outputLimiter.threshold.value = on ? this.outputCeiling : 0;
+  }
+
+  private outputCeiling = 0;
+
+  /** The output limiter's ceiling (dBFS). Default 0: the customer only pushes gain into it. */
+  setOutputCeiling(db: number): void {
+    this.outputCeiling = Math.min(0, db);
+    if (this.outputLimiterOn) this.outputLimiter.threshold.value = this.outputCeiling;
+  }
+
+  get outputCeilingDb(): number {
+    return this.outputCeiling;
   }
 
   get isOutputLimiterOn(): boolean {
@@ -574,6 +586,22 @@ export class AudioEngine {
     musicStartSeconds = this.arrangement.musicStartSeconds,
     fit: FitResult | null = null,
   ): void {
+    // A section longer than its material loops (auto arrange) or runs on into the next part
+    // (original form) -- as separate, visible parts of the form.
+    if (this.regions) cues = expandLongSections(cues, loopBars, this.regions, this._arrangeMode === "original" ? "continue" : "loop");
+    if (!this.restoring && this.currentState) {
+      this.undoStack.push(this.currentState);
+      if (this.undoStack.length > 100) this.undoStack.shift();
+      this.redoStack.length = 0;
+    }
+    this.currentState = {
+      cues: cues.map((c) => ({ ...c })),
+      loopBars,
+      musicStartSeconds,
+      fit,
+      logoEnabled: this.logoEnabled,
+      arrangeMode: this._arrangeMode,
+    };
     Tone.getTransport().stop(); // also resets position to 0
     Tone.getTransport().cancel(0);
     this.endEventId = null; // cancel(0) just removed it
@@ -598,6 +626,46 @@ export class AudioEngine {
     this.envelopes.forEach((e) => e.reset(Tone.now()));
     this.applyPlaybackMode(); // schedule() always turns looping on; re-apply film/logo mode on top
     for (const listener of this.arrangementListeners) listener();
+  }
+
+  // --- Undo / redo of the arrangement (form, length, logo on/off, arrange mode) ---------------
+
+  private undoStack: ArrangementState[] = [];
+  private redoStack: ArrangementState[] = [];
+  private currentState: ArrangementState | null = null;
+  private restoring = false;
+
+  get canUndo(): boolean {
+    return this.undoStack.length > 0;
+  }
+
+  get canRedo(): boolean {
+    return this.redoStack.length > 0;
+  }
+
+  undo(): void {
+    const state = this.undoStack.pop();
+    if (!state) return;
+    if (this.currentState) this.redoStack.push(this.currentState);
+    this.restoreState(state);
+  }
+
+  redo(): void {
+    const state = this.redoStack.pop();
+    if (!state) return;
+    if (this.currentState) this.undoStack.push(this.currentState);
+    this.restoreState(state);
+  }
+
+  private restoreState(state: ArrangementState): void {
+    this.logoEnabled = state.logoEnabled;
+    this._arrangeMode = state.arrangeMode;
+    this.restoring = true;
+    try {
+      this.applyArrangement(state.cues, state.loopBars, state.musicStartSeconds, state.fit);
+    } finally {
+      this.restoring = false;
+    }
   }
 
   /** Places the logo so its anchor hits beat `anchorBeat` of the last bar, and adds the mute/fade envelopes. */
@@ -718,4 +786,14 @@ export class AudioEngine {
     this.outputLimiter.dispose();
     this.loudness.dispose();
   }
+}
+
+/** Everything needed to put an arrangement back (undo/redo). */
+interface ArrangementState {
+  cues: CueConfig[];
+  loopBars: number;
+  musicStartSeconds: number;
+  fit: FitResult | null;
+  logoEnabled: boolean;
+  arrangeMode: "auto" | "original";
 }

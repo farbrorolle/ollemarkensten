@@ -317,3 +317,63 @@ export function fitOriginal(
     warnings: [],
   };
 }
+
+/**
+ * Splits every section that is longer than its source material into visible parts:
+ * - "loop" (auto arrange): the section repeats -- the whole part again (crossfaded, with its
+ *   ring-outs), the last repeat keeping the part's own ending so it still leads into what follows;
+ * - "continue" (original form): the music simply runs on into the next part(s) of the track, as
+ *   written (after the last part it goes on from the 2nd, like `fitOriginal`).
+ */
+export function expandLongSections(
+  cues: CueConfig[],
+  totalBars: number,
+  regions: Record<string, [number, number]>,
+  mode: "loop" | "continue",
+): CueConfig[] {
+  const order = Object.entries(regions)
+    .sort((a, b) => a[1][0] - b[1][0])
+    .map(([id]) => id);
+  const out: CueConfig[] = [];
+  let bar = 1;
+  const push = (cue: CueConfig, bars: number): void => {
+    out.push({ ...cue, bar });
+    bar += bars;
+  };
+  cues.forEach((cue, i) => {
+    const length = (cues[i + 1]?.bar ?? totalBars + 1) - cue.bar;
+    const region = regions[cue.section];
+    if (!region || length <= 0) {
+      if (length > 0) push(cue, length);
+      return;
+    }
+    const src = Math.min(Math.max(cue.sourceBar ?? region[0], region[0]), region[1]);
+    const available = region[1] - src + 1;
+    if (length <= available) {
+      push(cue, length);
+      return;
+    }
+    push(cue, available);
+    let left = length - available;
+    if (mode === "loop") {
+      const regionBars = region[1] - region[0] + 1;
+      while (left > regionBars) {
+        push({ bar, section: cue.section, transition: "crossfade", sourceBar: region[0] }, regionBars);
+        left -= regionBars;
+      }
+      if (left > 0) push({ bar, section: cue.section, transition: "crossfade", sourceBar: keepEndSourceBar(region, left) }, left);
+      return;
+    }
+    let index = order.indexOf(cue.section);
+    let guard = 0;
+    while (left > 0 && guard++ < 1000) {
+      index = index + 1 < order.length ? index + 1 : Math.min(1, order.length - 1);
+      const section = order[index]!;
+      const r = regions[section]!;
+      const bars = Math.min(left, r[1] - r[0] + 1);
+      push({ bar, section, transition: "cut", sourceBar: r[0] }, bars);
+      left -= bars;
+    }
+  });
+  return out;
+}
