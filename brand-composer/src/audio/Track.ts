@@ -28,11 +28,23 @@ interface SectionTake {
  * Tone.Channel/Tone.Solo instance in the app -- using it here would also
  * silence the DrumsBus/SynthBus/MasterBus channels whenever a track solos.
  */
+/**
+ * How a single-file track is played:
+ * - "loop": the original behaviour -- one looping player from bar 1, gated per section.
+ * - "region": long-bounce projects -- ArrangementManager plays the right slice of the file for each cue.
+ * - "oneshot": the sonic logo -- started once at a computed time.
+ */
+export type TrackPlayMode = "loop" | "region" | "oneshot";
+
 export class Track {
   readonly id: string;
   readonly name: string;
   readonly busId: string;
   readonly isSectioned: boolean;
+  readonly playMode: TrackPlayMode;
+  /** Long-bounce projects: the bounce bar at which this (silence-trimmed) file starts. */
+  readonly fileStartBar: number;
+  readonly isLogo: boolean;
 
   private readonly legacyPlayer: Tone.Player | null = null;
   private readonly legacyFile: string | null = null;
@@ -41,6 +53,8 @@ export class Track {
   private readonly sidechainGain: Tone.Gain;
   /** Gain gate driven by ArrangementManager for legacy tracks, scheduled sample-accurately on cue bars. */
   readonly sectionGain: Tone.Gain;
+  /** Arrangement automation (melody mute / fade into the logo), driven by AudioEngine. */
+  readonly autoGain: Tone.Gain;
   readonly channel: Tone.Channel;
 
   private _mute: boolean;
@@ -49,20 +63,25 @@ export class Track {
   /** True once a local file (drag-and-drop / file picker) has replaced the config-provided stem. */
   isLocalFile = false;
 
-  constructor(config: TrackConfig) {
+  constructor(config: TrackConfig, playMode: TrackPlayMode = "loop") {
     this.id = config.id;
     this.name = config.name;
     this.busId = config.bus ?? "master";
     this.isSectioned = !!config.sections;
+    this.playMode = config.sections ? "loop" : playMode;
+    this.fileStartBar = config.fileStartBar ?? 1;
+    this.isLogo = config.role === "logo";
 
     this.sidechainGain = new Tone.Gain(1);
     this.sectionGain = new Tone.Gain(1);
+    this.autoGain = new Tone.Gain(1);
     this.channel = new Tone.Channel({
       volume: config.volume ?? 0,
       pan: config.pan ?? 0,
     });
     this.sidechainGain.connect(this.sectionGain);
-    this.sectionGain.connect(this.channel);
+    this.sectionGain.connect(this.autoGain);
+    this.autoGain.connect(this.channel);
 
     if (config.sections) {
       for (const [sectionId, file] of Object.entries(config.sections)) {
@@ -75,7 +94,7 @@ export class Track {
         pendingFiles.set(player, file);
       }
     } else {
-      this.legacyPlayer = new Tone.Player({ loop: true, fadeIn: 0.002, fadeOut: 0.01 });
+      this.legacyPlayer = new Tone.Player({ loop: this.playMode === "loop", fadeIn: 0.002, fadeOut: 0.01 });
       this.legacyPlayer.connect(this.sidechainGain);
       this.legacyFile = config.file ?? null;
     }
@@ -119,6 +138,11 @@ export class Track {
     return this.takes.get(sectionId)?.takeGain;
   }
 
+  /** The single-file player (loop/region/oneshot tracks), or null for per-section tracks. */
+  get filePlayer(): Tone.Player | null {
+    return this.legacyPlayer;
+  }
+
   get sectionIds(): string[] {
     return Array.from(this.takes.keys());
   }
@@ -130,6 +154,7 @@ export class Track {
    * this, an edited arrangement would pile new ones on top of stale old ones).
    */
   resyncSectionTakes(): void {
+    if (this.legacyPlayer && this.playMode !== "loop") this.legacyPlayer.unsync().sync();
     for (const take of this.takes.values()) {
       take.player.unsync().sync();
       take.takeGain.gain.cancelScheduledValues(0);
@@ -162,7 +187,8 @@ export class Track {
 
   /** Starts the legacy player synced to Tone.Transport (sectioned tracks are started/stopped by ArrangementManager instead). */
   syncToTransport(): void {
-    this.legacyPlayer?.sync().start(0);
+    if (this.playMode === "loop") this.legacyPlayer?.sync().start(0);
+    else this.legacyPlayer?.sync(); // started per cue by ArrangementManager / AudioEngine
     for (const take of this.takes.values()) take.player.sync();
   }
 
@@ -207,6 +233,7 @@ export class Track {
     }
     this.sidechainGain.dispose();
     this.sectionGain.dispose();
+    this.autoGain.dispose();
     this.channel.dispose();
     if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
   }

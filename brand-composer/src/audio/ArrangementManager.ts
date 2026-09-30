@@ -2,6 +2,7 @@ import * as Tone from "tone";
 import type { Track } from "./Track.ts";
 import type { TransitionFx } from "./TransitionFx.ts";
 import type { CueConfig, SectionConfig, TransitionType } from "../project/types.ts";
+import { regionChunks } from "../project/fitToLength.ts";
 
 const CUT_FADE_SECONDS = 0.003; // "cut": just enough to avoid a hard click, no audible blend
 const TRANSITION_LEAD = "1m"; // how far ahead of a cue a filter-sweep/riser starts building
@@ -14,10 +15,18 @@ export interface ArrangementSegment {
   sectionId: string;
   /** Transition used entering this segment. Meaningless for the arrangement's first segment. */
   transition: TransitionType;
+  /** Long-bounce projects: source bar the segment starts reading from (see CueConfig.sourceBar). */
+  sourceBar?: number;
 }
 
-function barTime(bar: number): string {
-  return `${bar - 1}m`;
+/**
+ * Where the arrangement sits on the transport. Bar 1 starts `musicStartSeconds`
+ * into the transport (= into the film), which is how the logo can hit an exact
+ * point in the film with a fixed tempo.
+ */
+export interface ArrangementTiming {
+  musicStartSeconds: number;
+  barSeconds: number;
 }
 
 /** Musical blend duration for a transition type -- scales with BPM since it's expressed in Tone.Time notation. */
@@ -32,6 +41,7 @@ function buildSegments(cues: CueConfig[], loopBars: number): ArrangementSegment[
     endBar: i + 1 < sorted.length ? sorted[i + 1]!.bar : loopBars + 1,
     sectionId: cue.section,
     transition: cue.transition ?? "crossfade",
+    sourceBar: cue.sourceBar,
   }));
 }
 
@@ -62,6 +72,7 @@ export class ArrangementManager {
   private segments: ArrangementSegment[] = [];
   private loopBars = 0;
   private currentSectionId: string | null = null;
+  private timing: ArrangementTiming = { musicStartSeconds: 0, barSeconds: 2 };
   private onSectionChange?: (sectionId: string) => void;
 
   setOnSectionChange(callback: (sectionId: string) => void): void {
@@ -80,17 +91,31 @@ export class ArrangementManager {
     return this.loopBars;
   }
 
+  get musicStartSeconds(): number {
+    return this.timing.musicStartSeconds;
+  }
+
+  /** Transport seconds at which a (1-indexed, possibly fractional) arrangement bar starts. */
+  barStartSeconds(bar: number): number {
+    return this.timing.musicStartSeconds + (bar - 1) * this.timing.barSeconds;
+  }
+
   schedule(
     cues: CueConfig[],
     loopBars: number,
     sections: Map<string, SectionConfig>,
     tracks: Track[],
     transitionFx: TransitionFx,
+    timing: ArrangementTiming,
+    regions?: Record<string, [number, number]>,
   ): void {
     const segments = buildSegments(cues, loopBars);
     this.segments = segments;
     this.loopBars = loopBars;
+    this.timing = timing;
     const transport = Tone.getTransport();
+    // Numbers are transport seconds (converted to ticks by Tone at schedule time).
+    const barTime = (bar: number): number => this.barStartSeconds(bar);
 
     transport.setLoopPoints(0, barTime(loopBars + 1));
     transport.loop = true;
@@ -114,6 +139,31 @@ export class ArrangementManager {
       }, barTime(segment.startBar));
 
       for (const track of tracks) {
+        if (track.playMode === "oneshot") continue; // the logo is placed by AudioEngine
+        if (track.playMode === "region") {
+          const region = regions?.[segment.sectionId];
+          const player = track.filePlayer;
+          if (!region || !player?.loaded) continue;
+          const bufferSeconds = player.buffer.duration;
+          const lengthBars = segment.endBar - segment.startBar;
+          for (const chunk of regionChunks(segment.startBar, lengthBars, region, segment.sourceBar)) {
+            // The file may be silence-trimmed: it starts at `fileStartBar` of the bounce.
+            let startBar = chunk.startBar;
+            let fromBar = chunk.sourceBar;
+            let bars = chunk.bars;
+            if (fromBar < track.fileStartBar) {
+              const skip = track.fileStartBar - fromBar;
+              startBar += skip;
+              fromBar += skip;
+              bars -= skip;
+            }
+            if (bars <= 0) continue;
+            const offset = (fromBar - track.fileStartBar) * timing.barSeconds;
+            if (offset >= bufferSeconds) continue;
+            player.start(barTime(startBar), offset, Math.min(bars * timing.barSeconds, bufferSeconds - offset));
+          }
+          continue;
+        }
         if (track.isSectioned) {
           const player = track.takeFor(segment.sectionId);
           const takeGain = track.takeGainFor(segment.sectionId);
@@ -134,7 +184,7 @@ export class ArrangementManager {
             takeGain.gain.linearRampToValueAtTime(0, time);
           }, barTime(segment.endBar));
         } else {
-          const active = section.activeTracks.includes(track.id);
+          const active = !section.activeTracks || section.activeTracks.includes(track.id);
           transport.schedule((time) => {
             track.sectionGain.gain.setValueAtTime(track.sectionGain.gain.value, time);
             track.sectionGain.gain.linearRampToValueAtTime(active ? 1 : 0, time + fadeSeconds);
@@ -150,8 +200,8 @@ export class ArrangementManager {
       this.currentSectionId = first.sectionId;
       const firstSection = sections.get(first.sectionId)!;
       for (const track of tracks) {
-        if (track.isSectioned) continue; // takeGain already defaults to 0; first fade-in handles it
-        track.sectionGain.gain.value = firstSection.activeTracks.includes(track.id) ? 1 : 0;
+        if (track.isSectioned || track.playMode === "oneshot") continue; // takeGain defaults to 0; the logo is never gated
+        track.sectionGain.gain.value = !firstSection.activeTracks || firstSection.activeTracks.includes(track.id) ? 1 : 0;
       }
     }
   }

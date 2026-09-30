@@ -14,7 +14,7 @@ const engine = new AudioEngine();
 const film = new VideoSync(engine);
 
 // Dev-server only: expose internals for debugging in the console and for scripts/test-video-sync.mjs.
-if (import.meta.env.DEV) Object.assign(window, { __brandComposer: { engine, film } });
+if (import.meta.env.DEV) Object.assign(window, { __brandComposer: { engine, film, Tone } });
 
 const titleEl = document.querySelector<HTMLElement>("[data-title]")!;
 const videoRoot = document.querySelector<HTMLElement>("#video-panel")!;
@@ -36,10 +36,16 @@ async function togglePlay(): Promise<void> {
 }
 
 async function bootstrap(): Promise<void> {
-  // ?config=supabase loads the same demo project with stems served from Supabase
-  // Storage instead of the bundled local WAV files -- see public/config/demo-project.supabase.json.
-  const useSupabase = new URLSearchParams(location.search).get("config") === "supabase";
-  const configUrl = useSupabase ? "/config/demo-project.supabase.json" : "/config/demo-project.json";
+  // Default: the Broadcom DNA track (long bounces + sonic logo + fit-to-length rules).
+  // ?config=demo loads the old synthetic demo; ?config=supabase the same demo with stems from
+  // Supabase Storage (see public/config/demo-project.supabase.json).
+  const configName = new URLSearchParams(location.search).get("config");
+  const configUrl =
+    configName === "supabase"
+      ? "/config/demo-project.supabase.json"
+      : configName === "demo"
+        ? "/config/demo-project.json"
+        : "/config/broadcom.json";
   const config = await loadProjectFromUrl(engine, configUrl);
   titleEl.textContent = config.title;
 
@@ -49,6 +55,20 @@ async function bootstrap(): Promise<void> {
   const timeline = mountTimeline(timelineRoot, engine, config.sections ?? [], film);
   mountTrackList(trackListRoot, engine, (trackId) => timeline.redrawTrack(trackId));
   mountSidechainPanel(sidechainRoot, engine);
+
+  // A new film: re-arrange the music so the logo ends exactly when the film ends.
+  // (The customer can then drag the logo's start line to any sync point.)
+  let fittedFilm: unknown = null;
+  film.onChange(() => {
+    const info = film.info;
+    const key = info ? `${info.name}|${info.duration}` : null;
+    if (!info || key === fittedFilm || !engine.canFit) {
+      fittedFilm = key;
+      return;
+    }
+    fittedFilm = key;
+    engine.fitToAnchor(engine.defaultAnchorForFilm(info.duration)); // the timeline redraws itself
+  });
 
   // Space = play/pause, like any DAW or video player (ignored while typing in a field).
   // Also swallows Space on a focused button, so it doesn't "click" e.g. Play a second time.

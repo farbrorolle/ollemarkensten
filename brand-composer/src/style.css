@@ -873,6 +873,90 @@ body {
   white-space: nowrap;
 }
 
+/* Late music start (exact logo sync) and the logo's draggable start line. */
+.timeline-lead-in {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0 6px, transparent 6px 12px);
+  border-right: 1px dashed var(--text-dim);
+}
+
+.timeline-lead-in-label {
+  position: absolute;
+  bottom: 3px;
+  left: 4px;
+  font-size: 10px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.timeline-logo-anchor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 2px solid var(--green);
+  z-index: 3;
+}
+
+.timeline-logo-anchor-label {
+  position: absolute;
+  top: 22px; /* below the "Filmen slutar" label, which sits at the top */
+  left: 5px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--green);
+  color: #06140c;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Wide invisible grab area around the line; the only part of the overlay that takes pointer events. */
+.timeline-logo-anchor-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -9px;
+  width: 16px;
+  pointer-events: auto;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.timeline-logo-anchor-handle::after {
+  content: "";
+  position: absolute;
+  bottom: 4px;
+  left: 1px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+}
+
+/* Near the right edge: put the label on the left of the line so it isn't clipped. */
+.timeline-logo-anchor-flip .timeline-logo-anchor-label {
+  left: auto;
+  right: 5px;
+}
+
+.timeline-logo-anchor-dragging {
+  border-left-style: dashed;
+}
+
+.timeline-logo-anchor-fixed .timeline-logo-anchor-handle {
+  cursor: default;
+}
+
+.timeline-logo-anchor-fixed .timeline-logo-anchor-handle::after {
+  display: none;
+}
+
 /* Mobile: stack the two-column layout, and shrink grid rows whose fixed-px
    columns (track mixer, sidechain params) don't otherwise fit a narrow
    screen. Placed last in the file so it wins over the base rules above at

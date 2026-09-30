@@ -1,12 +1,24 @@
 import * as Tone from "tone";
 import { Bus } from "./Bus.ts";
 import { Track } from "./Track.ts";
+import type { TrackPlayMode } from "./Track.ts";
 import { Sidechain } from "./Sidechain.ts";
 import type { SidechainTarget } from "./Sidechain.ts";
 import { ArrangementManager } from "./ArrangementManager.ts";
 import { TransitionFx } from "./TransitionFx.ts";
 import { reencodeBlobAsWav } from "./wav.ts";
-import type { CueConfig, ProjectConfig, SectionConfig } from "../project/types.ts";
+import type { CueConfig, FitConfig, LogoConfig, ProjectConfig, SectionConfig } from "../project/types.ts";
+import { fitToLength } from "../project/fitToLength.ts";
+import type { FitResult } from "../project/fitToLength.ts";
+
+/** A gain move on one track, in transport seconds: a short mute, or a linear fade to silence. */
+interface AutomationEvent {
+  track: Track;
+  from: number;
+  to: number;
+}
+
+const MUTE_RAMP_SECONDS = 0.03;
 
 /**
  * Owns Tone.Transport, the MasterBus (-> filter -> Limiter -> speakers) and
@@ -28,6 +40,14 @@ export class AudioEngine {
   private filmMode = false;
   private endEventId: number | null = null;
 
+  private regions: Record<string, [number, number]> | undefined;
+  private fitConfig: FitConfig | undefined;
+  private logoConfig: LogoConfig | undefined;
+  private logoTrack: Track | null = null;
+  private automation: AutomationEvent[] = [];
+  private _lastFit: FitResult | null = null;
+  private readonly arrangementListeners = new Set<() => void>();
+
   constructor() {
     this.masterBus = new Bus("master", "MasterBus");
     this.limiter = new Tone.Limiter(-1);
@@ -39,6 +59,13 @@ export class AudioEngine {
     this.transitionFx.connectRiser(this.masterBus.channel);
 
     Tone.getTransport().bpm.value = 120;
+
+    // Arrangement automation (melody mute, fade into the logo) is written straight onto the
+    // tracks' autoGain from wherever playback starts, so it's also right after a seek.
+    const transport = Tone.getTransport();
+    transport.on("start", (time, offset) => this.applyAutomationFrom(time, offset ?? 0));
+    transport.on("stop", (time) => this.resetAutomation(time));
+    transport.on("pause", (time) => this.holdAutomation(time));
   }
 
   get title(): string {
@@ -70,10 +97,109 @@ export class AudioEngine {
     return Tone.getTransport().bpm.value;
   }
 
-  /** Length of the whole arrangement in seconds at the current BPM (0 if there is none). */
+  /**
+   * Where playback ends, in transport (= film) seconds: the end of the last
+   * bar, or the end of the logo if it rings on longer. 0 if there's no arrangement.
+   */
   get arrangementSeconds(): number {
     const bars = this.arrangement.totalBars;
-    return bars ? Tone.Time(`${bars}m`).toSeconds() : 0;
+    if (!bars) return 0;
+    const musicEnd = this.arrangement.barStartSeconds(bars + 1);
+    return Math.max(musicEnd, this.logoEndSeconds ?? 0);
+  }
+
+  get barSeconds(): number {
+    return Tone.Time("1m").toSeconds();
+  }
+
+  get beatSeconds(): number {
+    return Tone.Time("4n").toSeconds();
+  }
+
+  /** Transport seconds at which arrangement bar `bar` starts (bar 1 = musicStartSeconds). */
+  barStartSeconds(bar: number): number {
+    return this.arrangement.barStartSeconds(bar);
+  }
+
+  /** Called after every (re-)scheduled arrangement: hand edits, fit-to-length, film changes. */
+  onArrangementChange(listener: () => void): void {
+    this.arrangementListeners.add(listener);
+  }
+
+  /** Long-bounce projects: the inclusive source-bar range of a section. */
+  sourceRegionFor(sectionId: string): [number, number] | undefined {
+    return this.regions?.[sectionId];
+  }
+
+  get musicStartSeconds(): number {
+    return this.arrangement.musicStartSeconds;
+  }
+
+  // --- Sonic logo ---------------------------------------------------------------------------
+
+  get hasLogo(): boolean {
+    return !!this.logoConfig && !!this.logoTrack;
+  }
+
+  get logo(): Track | null {
+    return this.logoTrack;
+  }
+
+  get logoSettings(): LogoConfig | undefined {
+    return this.logoConfig;
+  }
+
+  /** The logo's anchor ("plopp") in transport seconds: beat `anchorBeat` of the last bar. */
+  get logoAnchorSeconds(): number | null {
+    const bars = this.arrangement.totalBars;
+    if (!this.logoConfig || !bars) return null;
+    return this.arrangement.barStartSeconds(bars) + (this.logoConfig.anchorBeat - 1) * this.beatSeconds;
+  }
+
+  get logoStartSeconds(): number | null {
+    const anchor = this.logoAnchorSeconds;
+    return anchor === null ? null : anchor - this.logoConfig!.anchorSeconds;
+  }
+
+  get logoDurationSeconds(): number {
+    const player = this.logoTrack?.filePlayer;
+    return player?.loaded ? player.buffer.duration : 0;
+  }
+
+  get logoEndSeconds(): number | null {
+    const start = this.logoStartSeconds;
+    return start === null ? null : start + this.logoDurationSeconds;
+  }
+
+  /** Where the anchor should go so the logo ends exactly when a film of `filmSeconds` ends. */
+  defaultAnchorForFilm(filmSeconds: number): number {
+    if (!this.logoConfig) return filmSeconds;
+    return filmSeconds - (this.logoDurationSeconds - this.logoConfig.anchorSeconds);
+  }
+
+  get canFit(): boolean {
+    return !!this.fitConfig && this.hasLogo;
+  }
+
+  /** Result of the most recent fitToAnchor(), or null if the arrangement was edited by hand since. */
+  get lastFit(): FitResult | null {
+    return this._lastFit;
+  }
+
+  /**
+   * "Anpassa till längd": rebuilds the arrangement from the creator's rules
+   * so the logo's anchor lands on `anchorSeconds` (film time).
+   */
+  fitToAnchor(anchorSeconds: number): FitResult {
+    if (!this.fitConfig || !this.logoConfig) throw new Error("Projektet saknar regler för längdanpassning");
+    const result = fitToLength(
+      this.fitConfig.template,
+      anchorSeconds,
+      { barSeconds: this.barSeconds, beatSeconds: this.beatSeconds, anchorBeat: this.logoConfig.anchorBeat },
+      this.regions,
+    );
+    this.applyArrangement(result.cues, result.totalBars, result.musicStartSeconds, result);
+    return result;
   }
 
   /**
@@ -112,11 +238,10 @@ export class AudioEngine {
     }
     const bars = this.arrangement.totalBars;
     if (!bars) return;
-    transport.loop = !this.filmMode;
-    if (this.filmMode) {
-      // Scheduled in bars (ticks), so it stays on the arrangement's last barline even if the BPM changes.
-      this.endEventId = transport.schedule((time) => transport.stop(time), `${bars}m`);
-    }
+    // With a film or a logo the song plays once (the logo can't loop); otherwise it loops like before.
+    const once = this.filmMode || this.hasLogo;
+    transport.loop = !once;
+    if (once) this.endEventId = transport.schedule((time) => transport.stop(time), this.arrangementSeconds);
   }
 
   setMasterGain(db: number): void {
@@ -166,6 +291,8 @@ export class AudioEngine {
     this.buses.clear();
     Tone.getTransport().cancel(0);
     this.endEventId = null;
+    this.automation = [];
+    this.logoTrack = null;
   }
 
   /**
@@ -198,7 +325,9 @@ export class AudioEngine {
 
     // Tracks: create + route, then load audio for all of them in parallel.
     for (const trackConfig of config.tracks) {
-      const track = new Track(trackConfig);
+      const mode: TrackPlayMode =
+        trackConfig.role === "logo" ? "oneshot" : config.sourceRegions && trackConfig.file ? "region" : "loop";
+      const track = new Track(trackConfig, mode);
       const destBus = trackConfig.bus && trackConfig.bus !== "master" ? this.buses.get(trackConfig.bus) : this.masterBus;
       if (!destBus) throw new Error(`Track "${trackConfig.id}" references unknown bus "${trackConfig.bus}"`);
       track.connect(destBus.input);
@@ -220,7 +349,17 @@ export class AudioEngine {
 
     // Arrangement: schedule every cue up front (fixed positions, not a live-triggered thing).
     this.sectionsById = new Map((config.sections ?? []).map((section) => [section.id, section]));
-    if (config.arrangement && config.loopBars) {
+    this.regions = config.sourceRegions;
+    this.fitConfig = config.fit;
+    this.logoConfig = config.logo;
+    this.logoTrack = config.logo ? (this.tracks.get(config.logo.track) ?? null) : null;
+    if (config.logo && !this.logoTrack) throw new Error(`Logo references unknown track "${config.logo.track}"`);
+    this._lastFit = null;
+    if (!config.arrangement && config.fit && this.hasLogo) {
+      // No fixed arrangement: start from the creator's full template.
+      const bars = config.fit.template.reduce((sum, block) => sum + block.bars, 0);
+      this.fitToAnchor((bars - 1) * this.barSeconds + (config.logo!.anchorBeat - 1) * this.beatSeconds);
+    } else if (config.arrangement && config.loopBars) {
       this.applyArrangement(config.arrangement, config.loopBars);
     } else {
       // No arrangement given: fall back to a static initial section, no scheduling.
@@ -228,7 +367,7 @@ export class AudioEngine {
       const section = initialSection ? this.sectionsById.get(initialSection) : undefined;
       if (section) {
         for (const track of this.tracks.values()) {
-          if (!track.isSectioned) track.sectionGain.gain.value = section.activeTracks.includes(track.id) ? 1 : 0;
+          if (!track.isSectioned) track.sectionGain.gain.value = !section.activeTracks || section.activeTracks.includes(track.id) ? 1 : 0;
         }
       }
     }
@@ -242,13 +381,94 @@ export class AudioEngine {
    * before scheduling the new one, so edits never leave stale automation
    * or a section-take player started twice.
    */
-  applyArrangement(cues: CueConfig[], loopBars: number): void {
+  applyArrangement(
+    cues: CueConfig[],
+    loopBars: number,
+    musicStartSeconds = this.arrangement.musicStartSeconds,
+    fit: FitResult | null = null,
+  ): void {
     Tone.getTransport().stop(); // also resets position to 0
     Tone.getTransport().cancel(0);
     this.endEventId = null; // cancel(0) just removed it
+    this._lastFit = fit; // null = edited by hand
     for (const track of this.tracks.values()) track.resyncSectionTakes();
-    this.arrangement.schedule(cues, loopBars, this.sectionsById, Array.from(this.tracks.values()), this.transitionFx);
-    this.applyPlaybackMode(); // schedule() always turns looping on; re-apply film mode on top
+    this.arrangement.schedule(
+      cues,
+      loopBars,
+      this.sectionsById,
+      Array.from(this.tracks.values()),
+      this.transitionFx,
+      { musicStartSeconds, barSeconds: this.barSeconds },
+      this.regions,
+    );
+    this.scheduleLogo();
+    this.applyPlaybackMode(); // schedule() always turns looping on; re-apply film/logo mode on top
+    for (const listener of this.arrangementListeners) listener();
+  }
+
+  /** Places the logo so its anchor hits beat `anchorBeat` of the last bar, and sets up mute/fade automation. */
+  private scheduleLogo(): void {
+    this.automation = [];
+    const player = this.logoTrack?.filePlayer;
+    const logo = this.logoConfig;
+    const anchor = this.logoAnchorSeconds;
+    if (!player?.loaded || !logo || anchor === null) return;
+
+    const start = anchor - logo.anchorSeconds;
+    // If the arrangement is so short that the logo would start before 0, start the file part-way in.
+    player.start(Math.max(0, start), Math.max(0, -start));
+
+    const musicTracks = Array.from(this.tracks.values()).filter((t) => !t.isLogo);
+    if (logo.mute && logo.mute.tracks.length) {
+      const ids = new Set(logo.mute.tracks);
+      const at = anchor - Tone.Time(logo.mute.before).toSeconds();
+      for (const track of musicTracks) {
+        if (ids.has(track.id) || ids.has(track.busId)) this.automation.push({ track, from: at, to: at + MUTE_RAMP_SECONDS });
+      }
+    }
+    if (logo.fadeMusic) {
+      const from = anchor - Tone.Time(logo.fadeMusic).toSeconds();
+      for (const track of musicTracks) this.automation.push({ track, from, to: anchor });
+    }
+  }
+
+  /** Gain an automated track should have at transport time `t` (product of all its moves). */
+  private automationValueAt(track: Track, t: number): number {
+    let value = 1;
+    for (const e of this.automation) {
+      if (e.track !== track || t <= e.from) continue;
+      value *= t >= e.to ? 0 : 1 - (t - e.from) / (e.to - e.from);
+    }
+    return value;
+  }
+
+  private applyAutomationFrom(time: number, offset: number): void {
+    const tracks = new Set(this.automation.map((e) => e.track));
+    for (const track of tracks) {
+      const gain = track.autoGain.gain;
+      gain.cancelScheduledValues(time);
+      gain.setValueAtTime(this.automationValueAt(track, offset), time);
+    }
+    for (const e of this.automation) {
+      if (e.to <= offset) continue;
+      const gain = e.track.autoGain.gain;
+      const from = Math.max(e.from, offset);
+      gain.setValueAtTime(this.automationValueAt(e.track, from), time + (from - offset));
+      gain.linearRampToValueAtTime(this.automationValueAt(e.track, e.to), time + (e.to - offset));
+    }
+  }
+
+  private holdAutomation(time: number): void {
+    for (const track of this.tracks.values()) {
+      track.autoGain.gain.cancelScheduledValues(time);
+    }
+  }
+
+  private resetAutomation(time: number): void {
+    for (const track of this.tracks.values()) {
+      track.autoGain.gain.cancelScheduledValues(time);
+      track.autoGain.gain.setValueAtTime(1, time);
+    }
   }
 
   /**
@@ -273,7 +493,7 @@ export class AudioEngine {
     if (!loopBars) throw new Error("Inget arrangemang att exportera.");
 
     await this.unlockAudio();
-    const loopSeconds = Tone.Time(`${loopBars}m`).toSeconds();
+    const loopSeconds = this.arrangementSeconds; // includes the logo's ring-out
 
     const recorder = new Tone.Recorder();
     this.limiter.connect(recorder);

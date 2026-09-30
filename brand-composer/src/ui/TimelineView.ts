@@ -3,15 +3,19 @@ import type { AudioEngine } from "../audio/AudioEngine.ts";
 import type { Track } from "../audio/Track.ts";
 import type { CueConfig, SectionConfig, TransitionType } from "../project/types.ts";
 import type { FilmInfo, VideoSync } from "../video/VideoSync.ts";
-import { formatSecondsSv } from "../video/syncMath.ts";
+import { formatFilmTime, formatSecondsSv } from "../video/syncMath.ts";
+import { regionChunks } from "../project/fitToLength.ts";
 
 export interface TimelineHandle {
   update(): void;
+  /** Re-reads the arrangement from the engine (after a fit or any change made elsewhere) and redraws. */
+  refresh(): void;
   /** Re-draws one track's waveform (call after a local file replaces its audio). */
   redrawTrack(trackId: string): void;
 }
 
 interface EditableSegment {
+  sourceBar?: number;
   sectionId: string;
   lengthBars: number;
   /** Transition used entering this segment. Meaningless (and hidden) for whichever segment is currently first. */
@@ -21,6 +25,7 @@ interface EditableSegment {
 const LANE_HEIGHT = 40;
 const WAVE_COLOR = "#7c5cff";
 const FILM_WAVE_COLOR = "#ffb84d";
+const LOGO_WAVE_COLOR = "#33d17a";
 const DIM_TEXT_COLOR = "#8b8fa3";
 const DEFAULT_NEW_SEGMENT_BARS = 4;
 const TRANSITION_LABELS: Record<TransitionType, string> = {
@@ -52,6 +57,37 @@ function drawWaveformSlice(ctx: CanvasRenderingContext2D, data: Float32Array, x0
     const px = Math.round(x0) + x + 0.5;
     ctx.moveTo(px, mid + min * mid);
     ctx.lineTo(px, mid + max * mid);
+  }
+  ctx.stroke();
+}
+
+/** Draws samples [s0, s1) of `data` into the x-range [x0, x1) (min/max per pixel column). */
+function drawBufferRange(
+  ctx: CanvasRenderingContext2D,
+  data: Float32Array,
+  s0: number,
+  s1: number,
+  x0: number,
+  x1: number,
+  height: number,
+): void {
+  const px0 = Math.round(x0);
+  const w = Math.max(1, Math.round(x1) - px0);
+  const mid = height / 2;
+  const perPx = (s1 - s0) / w;
+  ctx.beginPath();
+  for (let x = 0; x < w; x++) {
+    const a = Math.max(0, Math.floor(s0 + x * perPx));
+    const b = Math.min(data.length, Math.max(a + 1, Math.floor(s0 + (x + 1) * perPx)));
+    let min = 0;
+    let max = 0;
+    for (let i = a; i < b; i++) {
+      const v = data[i]!;
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+    ctx.moveTo(px0 + x + 0.5, mid + min * mid);
+    ctx.lineTo(px0 + x + 0.5, mid + max * mid);
   }
   ctx.stroke();
 }
@@ -124,11 +160,29 @@ export function mountTimeline(
 
   let totalBars = Math.max(1, engine.arrangement.totalBars);
   let segments = engine.arrangement.arrangementSegments;
-  let editableSegments: EditableSegment[] = segments.map((s) => ({
-    sectionId: s.sectionId,
-    lengthBars: s.endBar - s.startBar,
-    transition: s.transition,
-  }));
+  const readSegments = (): EditableSegment[] =>
+    engine.arrangement.arrangementSegments.map((s) => ({
+      sectionId: s.sectionId,
+      lengthBars: s.endBar - s.startBar,
+      transition: s.transition,
+      sourceBar: s.sourceBar,
+    }));
+  let editableSegments: EditableSegment[] = readSegments();
+
+  /**
+   * Timeline length in transport (= film) seconds: the music (incl. any late start and the logo's
+   * ring-out) or the film, whichever is longer. Without a film, logo projects get some headroom so
+   * the logo line can be dragged later.
+   */
+  const computeSpan = (): number => {
+    const music = engine.arrangementSeconds;
+    const filmSeconds = film?.info?.duration;
+    return Math.max(0.001, music, filmSeconds ?? (engine.canFit ? music * 1.25 : music));
+  };
+  let spanSeconds = computeSpan();
+  /** x position (0..1) of a transport time, and of the start of a (1-indexed) arrangement bar. */
+  const xOfSeconds = (seconds: number): number => seconds / spanSeconds;
+  const xOfBar = (bar: number): number => xOfSeconds(engine.barStartSeconds(bar));
 
   root.innerHTML = `
     <div class="timeline-palette" data-palette></div>
@@ -137,7 +191,12 @@ export function mountTimeline(
     <div class="timeline-body" data-body>
       <div class="timeline-lanes" data-lanes></div>
       <div class="timeline-overlay" data-overlay>
+        <div class="timeline-lead-in" data-lead-in hidden><span class="timeline-lead-in-label" data-lead-in-label></span></div>
         <div class="timeline-after-film" data-after-film hidden></div>
+        <div class="timeline-logo-anchor" data-logo-anchor hidden>
+          <span class="timeline-logo-anchor-label" data-logo-anchor-label></span>
+          <span class="timeline-logo-anchor-handle" data-logo-anchor-handle></span>
+        </div>
         <div class="timeline-film-end" data-film-end hidden><span class="timeline-film-end-label" data-film-end-label></span></div>
         <div class="timeline-playhead" data-playhead></div>
       </div>
@@ -157,6 +216,11 @@ export function mountTimeline(
   const afterFilm = root.querySelector<HTMLElement>("[data-after-film]")!;
   const filmEnd = root.querySelector<HTMLElement>("[data-film-end]")!;
   const filmEndLabel = root.querySelector<HTMLElement>("[data-film-end-label]")!;
+  const leadIn = root.querySelector<HTMLElement>("[data-lead-in]")!;
+  const leadInLabel = root.querySelector<HTMLElement>("[data-lead-in-label]")!;
+  const logoAnchor = root.querySelector<HTMLElement>("[data-logo-anchor]")!;
+  const logoAnchorLabel = root.querySelector<HTMLElement>("[data-logo-anchor-label]")!;
+  const logoAnchorHandle = root.querySelector<HTMLElement>("[data-logo-anchor-handle]")!;
   const segmentList = root.querySelector<HTMLElement>("[data-segment-list]")!;
 
   for (const section of sections) {
@@ -179,7 +243,7 @@ export function mountTimeline(
       const tick = document.createElement("span");
       tick.className = "timeline-tick";
       tick.textContent = String(bar);
-      tick.style.left = `${((bar - 1) / totalBars) * 100}%`;
+      tick.style.left = `${xOfBar(bar) * 100}%`;
       ruler.appendChild(tick);
     }
   }
@@ -206,15 +270,14 @@ export function mountTimeline(
 
   /** Live, cheap re-flow of existing block elements' left/width during a resize drag (no DOM rebuild). */
   function reflowSectionPositions(): void {
-    const liveTotal = editableSegments.reduce((sum, s) => sum + s.lengthBars, 0) || 1;
     let bar = 1;
     editableSegments.forEach((seg, i) => {
       const startBar = bar;
       bar += seg.lengthBars;
       const el = blockEls[i];
       if (!el) return;
-      el.style.left = `${((startBar - 1) / liveTotal) * 100}%`;
-      el.style.width = `${(seg.lengthBars / liveTotal) * 100}%`;
+      el.style.left = `${xOfBar(startBar) * 100}%`;
+      el.style.width = `${(xOfBar(startBar + seg.lengthBars) - xOfBar(startBar)) * 100}%`;
     });
   }
 
@@ -227,7 +290,7 @@ export function mountTimeline(
       const startX = e.clientX;
       const startLength = editableSegments[index]!.lengthBars;
       const widthPx = overlay.getBoundingClientRect().width || 1;
-      const barsPerPixel = totalBars / widthPx;
+      const barsPerPixel = spanSeconds / engine.barSeconds / widthPx;
 
       const onMove = (ev: PointerEvent): void => {
         const deltaBars = Math.round((ev.clientX - startX) * barsPerPixel);
@@ -288,8 +351,8 @@ export function mountTimeline(
       const block = document.createElement("div");
       block.className = "timeline-section-block";
       block.draggable = true;
-      block.style.left = `${((startBar - 1) / totalBars) * 100}%`;
-      block.style.width = `${(seg.lengthBars / totalBars) * 100}%`;
+      block.style.left = `${xOfBar(startBar) * 100}%`;
+      block.style.width = `${(xOfBar(startBar + seg.lengthBars) - xOfBar(startBar)) * 100}%`;
 
       const label = document.createElement("span");
       label.className = "timeline-section-label";
@@ -440,6 +503,18 @@ export function mountTimeline(
     ctx.clearRect(0, 0, width, LANE_HEIGHT);
     ctx.strokeStyle = WAVE_COLOR;
 
+    if (track.playMode === "oneshot") {
+      // The sonic logo: its whole file, where it will actually play.
+      const player = track.filePlayer;
+      const start = engine.logoStartSeconds;
+      if (!player?.loaded || start === null) return;
+      ctx.strokeStyle = LOGO_WAVE_COLOR;
+      const data = player.buffer.getChannelData(0);
+      const skip = Math.max(0, -start);
+      drawBufferRange(ctx, data, skip * player.buffer.sampleRate, data.length, xOfSeconds(Math.max(0, start)) * width, xOfSeconds(start + player.buffer.duration) * width, LANE_HEIGHT);
+      return;
+    }
+
     if (segments.length === 0) {
       const player = track.displayPlayer;
       if (player.loaded) drawWaveformSlice(ctx, player.buffer.getChannelData(0), 0, width, LANE_HEIGHT);
@@ -447,8 +522,21 @@ export function mountTimeline(
     }
 
     for (const segment of segments) {
-      const x0 = ((segment.startBar - 1) / totalBars) * width;
-      const x1 = ((segment.endBar - 1) / totalBars) * width;
+      const x0 = xOfBar(segment.startBar) * width;
+      const x1 = xOfBar(segment.endBar) * width;
+
+      if (track.playMode === "region") {
+        const player = track.filePlayer;
+        const region = engine.sourceRegionFor(segment.sectionId);
+        if (!player?.loaded || !region) continue;
+        const data = player.buffer.getChannelData(0);
+        const samplesPerBar = engine.barSeconds * player.buffer.sampleRate;
+        for (const chunk of regionChunks(segment.startBar, segment.endBar - segment.startBar, region, segment.sourceBar)) {
+          const s0 = (chunk.sourceBar - track.fileStartBar) * samplesPerBar;
+          drawBufferRange(ctx, data, s0, s0 + chunk.bars * samplesPerBar, xOfBar(chunk.startBar) * width, xOfBar(chunk.startBar + chunk.bars) * width, LANE_HEIGHT);
+        }
+        continue;
+      }
 
       if (track.isSectioned) {
         const player = track.takeFor(segment.sectionId);
@@ -458,7 +546,7 @@ export function mountTimeline(
         const player = track.displayPlayer;
         if (!player.loaded) continue;
         const section = sectionById.get(segment.sectionId);
-        const active = section ? section.activeTracks.includes(track.id) : true;
+        const active = section?.activeTracks ? section.activeTracks.includes(track.id) : true;
         ctx.save();
         ctx.globalAlpha = active ? 1 : 0.15;
         drawWaveformSlice(ctx, player.buffer.getChannelData(0), x0, x1, LANE_HEIGHT);
@@ -551,14 +639,20 @@ export function mountTimeline(
     let bar = 1;
     const cues: CueConfig[] = editableSegments.map((seg) => {
       const cue: CueConfig = { bar, section: seg.sectionId, transition: seg.transition };
+      if (seg.sourceBar !== undefined) cue.sourceBar = seg.sourceBar;
       bar += seg.lengthBars;
       return cue;
     });
     const loopBars = Math.max(1, bar - 1);
 
-    engine.applyArrangement(cues, loopBars);
+    engine.applyArrangement(cues, loopBars); // -> onArrangementChange -> redrawAll()
+  }
+
+  function redrawAll(): void {
     totalBars = Math.max(1, engine.arrangement.totalBars);
     segments = engine.arrangement.arrangementSegments;
+    editableSegments = readSegments();
+    spanSeconds = computeSpan();
 
     renderRuler();
     renderSections();
@@ -572,20 +666,87 @@ export function mountTimeline(
   renderRuler();
   renderSections();
   renderSegmentList();
-
-  body.addEventListener("click", (event) => {
-    const rect = overlay.getBoundingClientRect();
-    const fraction = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-    const loopSeconds = Tone.Time(`${totalBars}m`).toSeconds();
-    Tone.getTransport().seconds = fraction * loopSeconds;
+  engine.onArrangementChange(redrawAll);
+  film?.onChange(() => {
+    if (Math.abs(computeSpan() - spanSeconds) > 1e-3) redrawAll();
   });
 
+  body.addEventListener("click", (event) => {
+    if (suppressClick) {
+      suppressClick = false;
+      return;
+    }
+    const rect = overlay.getBoundingClientRect();
+    const fraction = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    Tone.getTransport().seconds = fraction * spanSeconds;
+  });
+
+  // --- Logo anchor: the line where the logo's first "plopp" hits. Drag it to a sync point in the
+  // film; on release the music is re-arranged (fitToAnchor) so the logo lands exactly there.
+  let draggingAnchor: number | null = null;
+  let suppressClick = false;
+  logoAnchorHandle.addEventListener("pointerdown", (e) => {
+    if (!engine.canFit) return;
+    e.preventDefault();
+    e.stopPropagation();
+    logoAnchorHandle.setPointerCapture(e.pointerId);
+    const rect = overlay.getBoundingClientRect();
+    const toSeconds = (clientX: number): number =>
+      Math.max(0.5, Math.min(1, (clientX - rect.left) / rect.width) * spanSeconds);
+    draggingAnchor = toSeconds(e.clientX);
+    const onMove = (ev: PointerEvent): void => {
+      draggingAnchor = toSeconds(ev.clientX);
+    };
+    const onUp = (): void => {
+      logoAnchorHandle.removeEventListener("pointermove", onMove);
+      logoAnchorHandle.removeEventListener("pointerup", onUp);
+      logoAnchorHandle.removeEventListener("pointercancel", onUp);
+      const target = draggingAnchor;
+      draggingAnchor = null;
+      suppressClick = true;
+      window.setTimeout(() => (suppressClick = false), 0);
+      if (target !== null) engine.fitToAnchor(target); // -> onArrangementChange -> redrawAll()
+    };
+    logoAnchorHandle.addEventListener("pointermove", onMove);
+    logoAnchorHandle.addEventListener("pointerup", onUp);
+    logoAnchorHandle.addEventListener("pointercancel", onUp);
+  });
+
+  let lastAnchorText = "";
+  function updateLogo(): void {
+    const anchor = draggingAnchor ?? engine.logoAnchorSeconds;
+    logoAnchor.hidden = anchor === null;
+    logoAnchor.classList.toggle("timeline-logo-anchor-dragging", draggingAnchor !== null);
+    logoAnchor.classList.toggle("timeline-logo-anchor-fixed", !engine.canFit);
+    if (anchor !== null) {
+      logoAnchor.style.left = `${Math.min(1, xOfSeconds(anchor)) * 100}%`;
+      logoAnchor.classList.toggle("timeline-logo-anchor-flip", xOfSeconds(anchor) > 0.8);
+      const text = `Loggans start ${formatFilmTime(anchor)}`;
+      if (text !== lastAnchorText) {
+        logoAnchorLabel.textContent = text;
+        logoAnchorHandle.title = engine.canFit
+          ? "Dra till en synpunkt i filmen – musiken anpassas så att loggan startar exakt där"
+          : "";
+        lastAnchorText = text;
+      }
+    }
+    const lead = engine.musicStartSeconds;
+    leadIn.hidden = lead < 0.05;
+    if (!leadIn.hidden) {
+      leadIn.style.width = `${xOfSeconds(lead) * 100}%`;
+      leadInLabel.textContent = `Musiken startar ${formatSecondsSv(lead)} s in`;
+    }
+  }
+
   return {
+    refresh() {
+      redrawAll();
+    },
     update() {
-      const loopSeconds = Tone.Time(`${totalBars}m`).toSeconds();
-      const fraction = loopSeconds > 0 ? (Tone.getTransport().seconds / loopSeconds) % 1 : 0;
+      const fraction = spanSeconds > 0 ? (Tone.getTransport().seconds / spanSeconds) % 1 : 0;
       playhead.style.left = `${fraction * 100}%`;
-      updateFilm(loopSeconds);
+      updateFilm(spanSeconds);
+      updateLogo();
 
       for (const track of tracks) {
         const entry = lanesByTrack.get(track.id);

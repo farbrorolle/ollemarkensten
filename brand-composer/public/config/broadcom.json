@@ -1,0 +1,299 @@
+{
+  "title": "Broadcom – DNA track (150 BPM)",
+  "bpm": 150,
+  "timeSignature": [
+    4,
+    4
+  ],
+  "buses": [
+    {
+      "id": "rytm",
+      "name": "Rytm"
+    },
+    {
+      "id": "bas",
+      "name": "Bas"
+    },
+    {
+      "id": "musik",
+      "name": "Musik"
+    },
+    {
+      "id": "fx",
+      "name": "Swells & FX"
+    },
+    {
+      "id": "logo",
+      "name": "Ljudlogo"
+    }
+  ],
+  "tracks": [
+    {
+      "id": "f01",
+      "name": "1 Main ostinato",
+      "file": "/audio/broadcom/folder-01.flac",
+      "fileStartBar": 4,
+      "bus": "musik"
+    },
+    {
+      "id": "f02",
+      "name": "2 Secondary ostinato",
+      "file": "/audio/broadcom/folder-02.flac",
+      "fileStartBar": 1,
+      "bus": "musik"
+    },
+    {
+      "id": "f03",
+      "name": "3 Main motif",
+      "file": "/audio/broadcom/folder-03.flac",
+      "fileStartBar": 20,
+      "bus": "musik"
+    },
+    {
+      "id": "f04",
+      "name": "4 Pulse kick",
+      "file": "/audio/broadcom/folder-04.flac",
+      "fileStartBar": 12,
+      "bus": "rytm"
+    },
+    {
+      "id": "f05",
+      "name": "5 Percussion",
+      "file": "/audio/broadcom/folder-05.flac",
+      "fileStartBar": 1,
+      "bus": "rytm"
+    },
+    {
+      "id": "f06",
+      "name": "6 Bass",
+      "file": "/audio/broadcom/folder-06.flac",
+      "fileStartBar": 12,
+      "bus": "bas"
+    },
+    {
+      "id": "f07",
+      "name": "7 Synth arps",
+      "file": "/audio/broadcom/folder-07.flac",
+      "fileStartBar": 13,
+      "bus": "musik"
+    },
+    {
+      "id": "f08",
+      "name": "8 Sonar",
+      "file": "/audio/broadcom/folder-08.flac",
+      "fileStartBar": 7,
+      "bus": "musik"
+    },
+    {
+      "id": "f09",
+      "name": "9 Counter melody 1",
+      "file": "/audio/broadcom/folder-09.flac",
+      "fileStartBar": 13,
+      "bus": "musik"
+    },
+    {
+      "id": "f10",
+      "name": "10 Counter melody 2",
+      "file": "/audio/broadcom/folder-10.flac",
+      "fileStartBar": 17,
+      "bus": "musik"
+    },
+    {
+      "id": "f11",
+      "name": "11 Guitars",
+      "file": "/audio/broadcom/folder-11.flac",
+      "fileStartBar": 25,
+      "bus": "musik"
+    },
+    {
+      "id": "f12",
+      "name": "12 Pads",
+      "file": "/audio/broadcom/folder-12.flac",
+      "fileStartBar": 29,
+      "bus": "musik"
+    },
+    {
+      "id": "f13",
+      "name": "13 Synth swells",
+      "file": "/audio/broadcom/folder-13.flac",
+      "fileStartBar": 2,
+      "bus": "fx"
+    },
+    {
+      "id": "f14",
+      "name": "14 Sfx swells",
+      "file": "/audio/broadcom/folder-14.flac",
+      "fileStartBar": 4,
+      "bus": "fx"
+    },
+    {
+      "id": "logo",
+      "name": "Ljudlogo",
+      "file": "/audio/broadcom/logo.flac",
+      "role": "logo",
+      "bus": "logo"
+    }
+  ],
+  "sidechains": [
+    {
+      "id": "kick-to-bass",
+      "source": "f04",
+      "target": "bas",
+      "threshold": -20,
+      "ratio": 2,
+      "attack": 0.005,
+      "release": 0.18
+    }
+  ],
+  "sections": [
+    {
+      "id": "intro",
+      "name": "Intro"
+    },
+    {
+      "id": "a",
+      "name": "A"
+    },
+    {
+      "id": "b",
+      "name": "B"
+    },
+    {
+      "id": "c",
+      "name": "C"
+    },
+    {
+      "id": "d",
+      "name": "D"
+    },
+    {
+      "id": "e",
+      "name": "E"
+    },
+    {
+      "id": "break",
+      "name": "Break"
+    },
+    {
+      "id": "final",
+      "name": "Final"
+    }
+  ],
+  "sourceRegions": {
+    "intro": [
+      1,
+      4
+    ],
+    "a": [
+      5,
+      12
+    ],
+    "b": [
+      13,
+      20
+    ],
+    "c": [
+      21,
+      28
+    ],
+    "d": [
+      29,
+      36
+    ],
+    "e": [
+      37,
+      44
+    ],
+    "break": [
+      45,
+      48
+    ],
+    "final": [
+      49,
+      56
+    ]
+  },
+  "fit": {
+    "template": [
+      {
+        "section": "intro",
+        "bars": 4,
+        "minBars": 1,
+        "maxBars": 4,
+        "stepBars": 1,
+        "priority": 3,
+        "keep": "end"
+      },
+      {
+        "section": "a",
+        "bars": 8,
+        "minBars": 0,
+        "maxBars": 16,
+        "stepBars": 4,
+        "priority": 2
+      },
+      {
+        "section": "b",
+        "bars": 8,
+        "minBars": 4,
+        "maxBars": 16,
+        "stepBars": 4,
+        "priority": 3
+      },
+      {
+        "section": "c",
+        "bars": 8,
+        "minBars": 0,
+        "maxBars": 16,
+        "stepBars": 4,
+        "priority": 1
+      },
+      {
+        "section": "d",
+        "bars": 8,
+        "minBars": 0,
+        "maxBars": 16,
+        "stepBars": 4,
+        "priority": 1
+      },
+      {
+        "section": "e",
+        "bars": 8,
+        "minBars": 0,
+        "maxBars": 8,
+        "stepBars": 4,
+        "priority": 1
+      },
+      {
+        "section": "break",
+        "bars": 4,
+        "minBars": 0,
+        "maxBars": 4,
+        "stepBars": 2,
+        "priority": 2
+      },
+      {
+        "section": "final",
+        "bars": 8,
+        "minBars": 2,
+        "maxBars": 16,
+        "stepBars": 2,
+        "priority": 5
+      }
+    ]
+  },
+  "logo": {
+    "track": "logo",
+    "anchorSeconds": 1.05,
+    "anchorBeat": 3,
+    "mute": {
+      "tracks": [
+        "f03",
+        "f09",
+        "f10"
+      ],
+      "before": "1m"
+    },
+    "fadeMusic": null
+  }
+}

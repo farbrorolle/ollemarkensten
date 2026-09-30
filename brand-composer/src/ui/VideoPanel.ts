@@ -178,8 +178,12 @@ export function mountVideoPanel(
       const filmOver = position >= info.duration;
 
       const sectionId = engine.arrangement.activeSectionId;
-      const bar = Number(String(transport.position).split(":")[0]) + 1;
-      const sectionText = sectionId ? `${sectionNameById.get(sectionId) ?? sectionId} · takt ${bar}` : "";
+      const intoMusic = position - engine.musicStartSeconds;
+      const bar = Math.floor(intoMusic / engine.barSeconds) + 1;
+      const sectionText =
+        sectionId && intoMusic >= 0 && bar <= engine.arrangement.totalBars
+          ? `${sectionNameById.get(sectionId) ?? sectionId} · takt ${bar}`
+          : "";
       if (sectionText !== lastSection) {
         sectionEl.textContent = sectionText;
         sectionEl.hidden = !sectionText;
@@ -195,19 +199,38 @@ export function mountVideoPanel(
       playHint.hidden = running;
       endedEl.hidden = !(running && filmOver);
 
-      const musicSeconds = engine.arrangementSeconds;
-      const diff = musicSeconds - info.duration;
       let fitText: string;
       let fitClass: string;
-      if (Math.abs(diff) < 0.05) {
-        fitText = "✓ Musik och film är lika långa";
-        fitClass = "video-fit-ok";
-      } else if (diff > 0) {
-        fitText = `✓ Musiken räcker hela filmen (och spelar ${formatSecondsSv(diff)} s efter)`;
-        fitClass = "video-fit-ok";
+      const logoEnd = engine.logoEndSeconds;
+      if (logoEnd !== null) {
+        // Logo projects: what matters is where the logo lands relative to the film.
+        const diff = logoEnd - info.duration;
+        const warning = engine.lastFit?.warnings[0];
+        if (warning) {
+          fitText = `⚠ ${warning}`;
+          fitClass = "video-fit-warn";
+        } else if (Math.abs(diff) < 0.05) {
+          fitText = "✓ Loggan slutar när filmen slutar";
+          fitClass = "video-fit-ok";
+        } else if (diff > 0) {
+          fitText = `✓ Loggan slutar ${formatSecondsSv(diff)} s efter filmen`;
+          fitClass = diff > 2 ? "video-fit-warn" : "video-fit-ok";
+        } else {
+          fitText = `✓ Loggan slutar ${formatSecondsSv(-diff)} s före filmens slut`;
+          fitClass = "video-fit-ok";
+        }
       } else {
-        fitText = `⚠ Musiken tar slut ${formatSecondsSv(-diff)} s före filmen – förläng arrangemanget`;
-        fitClass = "video-fit-warn";
+        const diff = engine.arrangementSeconds - info.duration;
+        if (Math.abs(diff) < 0.05) {
+          fitText = "✓ Musik och film är lika långa";
+          fitClass = "video-fit-ok";
+        } else if (diff > 0) {
+          fitText = `✓ Musiken räcker hela filmen (och spelar ${formatSecondsSv(diff)} s efter)`;
+          fitClass = "video-fit-ok";
+        } else {
+          fitText = `⚠ Musiken tar slut ${formatSecondsSv(-diff)} s före filmen – förläng arrangemanget`;
+          fitClass = "video-fit-warn";
+        }
       }
       if (fitText !== lastFit || fitClass !== lastFitClass) {
         fitEl.textContent = fitText;

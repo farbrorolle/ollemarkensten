@@ -89,6 +89,47 @@ Bäst stöd: MP4 (H.264 + AAC); WebM fungerar också, MOV i Safari.
 - Klick på bilden eller mellanslag = play/paus. När transporten står still
   visar bilden rätt ruta för positionen man klickar på i tidslinjen.
 
+### Anpassa till längd + ljudlogga (Broadcom-projektet)
+
+Standardprojektet är nu `public/config/broadcom.json` (Broadcom DNA track,
+150 BPM). Det gamla syntetiska demot finns kvar på `?config=demo`.
+
+- **Långa bounces.** Alla stems är hela låten (61 takter). `sourceRegions`
+  säger var varje sektion ligger i bouncen (t.ex. `"a": [5, 12]`), och
+  motorn spelar rätt bit av filen för varje cue (`Player.start(tid, offset,
+  längd)`). En förlängd sektion upprepar sin bit, en kortad behåller slutet
+  (`keep: "end"`, så att uppbyggnaden in i nästa sektion följer med).
+  Filerna är tysta i början/slutet bortklippta; `fileStartBar` säger vilken
+  takt i bouncen filen börjar på.
+- **Mappar.** Varje mapp (1 Main ostinato … 14 Sfx swells) är i piloten en
+  förmixad stereofil (`public/audio/broadcom/folder-NN.flac`, FLAC 16 bit),
+  alltså en volymregel per mapp. De 34 enskilda spåren laddas inte ännu:
+  avkodat ljud tar ~380 kB/s per stereospår i webbläsarens minne, så alla
+  spår i full längd hade blivit över 1 GB. Skaparvyn (steg 4) ska kunna
+  ladda en mapps spår vid behov.
+- **Regler (`fit.template`).** Per sektion: `bars`, `minBars` (0 = får
+  strykas), `maxBars`, `stepBars`, `priority` (lägst ändras först) och
+  `keep`. `src/project/fitToLength.ts` väljer längder (dynamisk
+  programmering: närmast rätt antal takter, sedan minst "ändring" viktad
+  med prioritet). Enhetstestat: `node scripts/test-fit-to-length.mjs`.
+- **Ljudloggan (`logo`).** Egen fil (`role: "logo"`), spelas en gång.
+  `anchorSeconds` = var loggans första plopp ligger i filen (1,05 s),
+  `anchorBeat` = vilket slag i sista takten plopp ska landa på (3).
+  `mute` tystar valda spår/bussar (melodin: mapp 3, 9, 10) en tid före
+  plopp (`"1m"`, `"2n"` …), `fadeMusic` kan fada ner musiken in i loggan.
+- **Exakt synk med fast tempo:** plopp ligger alltid på slag 3 i sista
+  takten, och *musiken startar senare i filmen* (0–1 takt, randigt fält i
+  tidslinjen) så att plopp träffar målet exakt. Kan reglerna inte ge exakt
+  rätt antal takter startar musiken ytterligare någon takt senare.
+- **I UI:t:** när en film läses in anpassas musiken så att loggan slutar när
+  filmen slutar. Det gröna strecket "Loggans start" i tidslinjen kan dras
+  till valfri synpunkt; när man släpper räknas arrangemanget om. Sektionerna
+  går fortfarande att redigera för hand efteråt (loggan följer sista
+  takten).
+- Verifierat i headless Chromium: loggans plopp landar inom ~10 ms från
+  målet i en inspelad export; melodimutningen gäller även efter hopp i
+  tidslinjen. **Inte testat** med riktiga högtalare/Safari.
+
 ### Arrangemang: fasta cue-punkter, inte en live-knapp
 
 Sektionsbyten är inte något man triggar för hand under uppspelning — de är
