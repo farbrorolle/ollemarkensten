@@ -77,7 +77,7 @@ export function mountMasterPanel(root: HTMLElement, engine: AudioEngine): Master
   // Bus compressor.
   const compHead = document.createElement("div");
   compHead.className = "creator-subhead";
-  compHead.innerHTML = `Busskompressor <label class="checkbox-row"><label><input type="checkbox" data-comp-on /> På</label></label>`;
+  compHead.innerHTML = `Bus compressor <label class="checkbox-row"><label><input type="checkbox" data-comp-on /> On</label></label>`;
   const compOn = compHead.querySelector<HTMLInputElement>("[data-comp-on]")!;
   const comp = engine.compressorState;
   compOn.checked = comp.enabled;
@@ -92,7 +92,7 @@ export function mountMasterPanel(root: HTMLElement, engine: AudioEngine): Master
     slider("Release", 0.02, 1, 0.01, comp.release, ms, (v) => set({ release: v })),
     slider("Knee", 0, 24, 1, comp.knee, dB, (v) => set({ knee: v })),
   );
-  const compMeter = meter("Komp. GR");
+  const compMeter = meter("Comp. GR");
   root.append(compHead, compGrid, compMeter.el);
 
   // Limiter.
@@ -105,7 +105,7 @@ export function mountMasterPanel(root: HTMLElement, engine: AudioEngine): Master
     slider("Gain in", -12, 18, 0.5, engine.limiterDriveDb, (v) => `${v > 0 ? "+" : ""}${v.toFixed(1)} dB`, (v) =>
       engine.setLimiterDrive(v),
     ),
-    slider("Threshold (tak)", -24, 0, 0.5, engine.limiterThreshold, dB, (v) => engine.setLimiterThreshold(v)),
+    slider("Threshold (ceiling)", -24, 0, 0.5, engine.limiterThreshold, dB, (v) => engine.setLimiterThreshold(v)),
   );
   const limMeter = meter("Limiter GR");
   root.append(limHead, limGrid, limMeter.el);
@@ -113,13 +113,13 @@ export function mountMasterPanel(root: HTMLElement, engine: AudioEngine): Master
   // Loudness after the limiter.
   const lufsHead = document.createElement("div");
   lufsHead.className = "creator-subhead";
-  lufsHead.innerHTML = `Loudness efter limitern (LUFS) <button type="button" class="btn btn-step" data-lufs-reset title="Nollställ integrerat värde">↺</button>`;
+  lufsHead.innerHTML = `Loudness after the limiter (LUFS) <button type="button" class="btn btn-step" data-lufs-reset title="Reset integrated">↺</button>`;
   const lufs = document.createElement("div");
   lufs.className = "lufs-meter";
   lufs.innerHTML = `
     <div class="lufs-cell"><span class="lufs-label">Momentary</span><span class="lufs-value" data-m>–</span><div class="meter-track"><div class="lufs-fill" data-mf></div></div></div>
     <div class="lufs-cell"><span class="lufs-label">Short-term</span><span class="lufs-value" data-s>–</span><div class="meter-track"><div class="lufs-fill" data-sf></div></div></div>
-    <div class="lufs-cell"><span class="lufs-label">Integrerat</span><span class="lufs-value lufs-integrated" data-i>–</span></div>`;
+    <div class="lufs-cell"><span class="lufs-label">Integrated</span><span class="lufs-value lufs-integrated" data-i>–</span></div>`;
   root.append(lufsHead, lufs);
   lufsHead.querySelector("[data-lufs-reset]")!.addEventListener("click", () => engine.loudness.reset());
   const lufsEls = {
@@ -138,7 +138,7 @@ export function mountMasterPanel(root: HTMLElement, engine: AudioEngine): Master
   const exportRow = document.createElement("div");
   exportRow.className = "export-row";
   exportRow.innerHTML = `
-    <button data-export class="btn btn-accent">⇩ Exportera stereo-WAV</button>
+    <button data-export class="btn btn-accent">⇩ Export stereo WAV</button>
     <span data-export-status class="export-status"></span>`;
   root.append(exportRow);
   const exportBtn = exportRow.querySelector<HTMLButtonElement>("[data-export]")!;
@@ -148,16 +148,16 @@ export function mountMasterPanel(root: HTMLElement, engine: AudioEngine): Master
   exportBtn.addEventListener("click", async () => {
     window.clearTimeout(statusResetTimer);
     exportBtn.disabled = true;
-    exportStatus.textContent = "Exporterar… 0%";
+    exportStatus.textContent = "Exporting… 0%";
     try {
       const blob = await engine.exportStereoMix((fraction) => {
-        exportStatus.textContent = `Exporterar… ${Math.round(fraction * 100)}%`;
+        exportStatus.textContent = `Exporting… ${Math.round(fraction * 100)}%`;
       });
-      exportStatus.textContent = "Klart!";
+      exportStatus.textContent = "Done!";
       downloadBlob(blob, `${sanitizeFilename(engine.title)}.wav`);
     } catch (error) {
       console.error(error);
-      exportStatus.textContent = "Export misslyckades – se konsolen.";
+      exportStatus.textContent = "Export failed – see the console.";
     } finally {
       exportBtn.disabled = false;
       statusResetTimer = window.setTimeout(() => (exportStatus.textContent = ""), 4000);

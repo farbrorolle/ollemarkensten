@@ -6,7 +6,7 @@ import {
   computePeaks,
   decideCorrection,
   formatFilmTime,
-  formatSecondsSv,
+  formatSeconds,
   smoothDrift,
 } from "../src/video/syncMath.ts";
 
@@ -60,6 +60,6 @@ assert.deepEqual(Array.from(computePeaks(data, 2)), [-0.25, 0.5, -1, 1]);
 // Formatting.
 assert.equal(formatFilmTime(75.34), "1:15.3");
 assert.equal(formatFilmTime(3725), "1:02:05.0");
-assert.equal(formatSecondsSv(4.25), "4,3");
+assert.equal(formatSeconds(4.25), "4.3");
 
 console.log("syncMath: all tests passed");

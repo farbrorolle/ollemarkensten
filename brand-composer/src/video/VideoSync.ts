@@ -63,6 +63,13 @@ export class VideoSync {
   private _autoplayBlocked = false;
 
   private readonly engine: AudioEngine;
+  /**
+   * The film's own sound, routed through Web Audio so it has its own fader
+   * (separate from the music: not through the music mixer/limiter and not in
+   * the music export). Created lazily on the first load.
+   */
+  private filmGain: Tone.Gain | null = null;
+  private filmVolumeDb = 0;
 
   constructor(engine: AudioEngine) {
     this.engine = engine;
@@ -93,6 +100,31 @@ export class VideoSync {
 
   get info(): FilmInfo | null {
     return this.film;
+  }
+
+  /** Film sound level in dB (its own fader). */
+  get volumeDb(): number {
+    return this.filmVolumeDb;
+  }
+
+  setVolumeDb(db: number): void {
+    this.filmVolumeDb = db;
+    if (this.filmGain) this.filmGain.gain.value = Tone.dbToGain(db);
+    this.emit();
+  }
+
+  private routeAudio(): void {
+    if (this.filmGain) return;
+    try {
+      const context = Tone.getContext();
+      const source = context.createMediaElementSource(this.video);
+      this.filmGain = new Tone.Gain(Tone.dbToGain(this.filmVolumeDb));
+      Tone.connect(source, this.filmGain);
+      this.filmGain.toDestination();
+    } catch {
+      // Not supported: the film plays through the element directly (no fader).
+      this.filmGain = null;
+    }
   }
 
   get audioOn(): boolean {
@@ -133,14 +165,14 @@ export class VideoSync {
         };
         const onError = (): void => {
           cleanup();
-          reject(new Error("Webbläsaren kan inte spela upp den här filen. Prova MP4 (H.264 + AAC)."));
+          reject(new Error("The browser can't play this file. Try MP4 (H.264 + AAC)."));
         };
         video.addEventListener("loadedmetadata", onMeta);
         video.addEventListener("error", onError);
         video.src = url;
       });
       if (!Number.isFinite(video.duration) || video.duration <= 0) {
-        throw new Error("Filmens längd gick inte att läsa ut. Prova att exportera den som MP4 (H.264 + AAC).");
+        throw new Error("Couldn't read the film's length. Try exporting it as MP4 (H.264 + AAC).");
       }
     } catch (error) {
       URL.revokeObjectURL(url);
@@ -159,6 +191,7 @@ export class VideoSync {
     this.currentRate = 1;
     this.smoothedDrift = 0;
     video.muted = !DEFAULT_FILM_AUDIO_ON;
+    this.routeAudio();
     this._autoplayBlocked = false;
     this.film = { name: file.name, duration: video.duration, audioState: "decoding", peaks: null };
     this.engine.setFilmMode(true);

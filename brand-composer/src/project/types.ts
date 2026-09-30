@@ -34,8 +34,19 @@ export interface TrackConfig {
    * original bounce at which this (silence-trimmed) file starts. Default 1.
    */
   fileStartBar?: number;
-  /** "logo": the sonic logo -- played once, positioned by `ProjectConfig.logo`, never by sections. */
-  role?: "logo";
+  /**
+   * "logo": the sonic logo -- played once, positioned by `ProjectConfig.logo`, never by sections.
+   * "swell": swells/risers -- placed at the transitions (see src/project/swellPlan.ts), not per section.
+   */
+  role?: "logo" | "swell";
+  /**
+   * Long-bounce projects: seconds this track rings on after the end of each source bar
+   * (index 0 = bar 1), until its next new attack or silence. Written by scripts/analyze-stems.py;
+   * used for the ring-out when a section is left.
+   */
+  tails?: number[];
+  /** role "swell": the swell clips in this file (source seconds + the bar they lead into). */
+  swellEvents?: { start: number; end: number; anchorBar: number }[];
   volume?: number; // dB, default 0
   pan?: number; // -1..1, default 0
   mute?: boolean;

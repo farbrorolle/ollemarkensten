@@ -3,9 +3,9 @@ import type { Sidechain } from "../audio/Sidechain.ts";
 import type { SidechainConfig, SidechainCurve } from "../project/types.ts";
 
 const CURVES: Record<SidechainCurve, string> = {
-  smooth: "Mjuk (analog)",
-  exponential: "Pump (exponentiell)",
-  linear: "Linjär",
+  smooth: "Smooth (analog)",
+  exponential: "Pump (exponential)",
+  linear: "Linear",
 };
 
 let nextId = 1;
@@ -39,7 +39,7 @@ export function mountSidechainPanel(root: HTMLElement, engine: AudioEngine): Sid
     const add = document.createElement("button");
     add.type = "button";
     add.className = "btn";
-    add.textContent = "+ Lägg till sidechain";
+    add.textContent = "+ Add sidechain";
     add.disabled = sources.length < 2;
     add.addEventListener("click", () => {
       const source = sources[0]!;
@@ -72,25 +72,25 @@ export function mountSidechainPanel(root: HTMLElement, engine: AudioEngine): Sid
     el.className = "sc-card";
     el.innerHTML = `
       <div class="sc-card-head">
-        <select data-source title="Källa (det som styr)">${options(sources.map((t) => ({ id: t.id, name: t.name })), sidechain.sourceId)}</select>
-        <button type="button" class="btn btn-toggle sc-solo" data-solo-source title="Solo källan">S</button>
-        <span class="sc-arrow"> duckar →</span>
-        <select data-target title="Mål (det som sänks)">${options(engine.sidechainTargets, sidechain.targetId)}</select>
-        <button type="button" class="btn btn-toggle sc-solo" data-solo-target title="Solo målet">S</button>
-        <button type="button" class="btn btn-toggle sc-solo" data-solo-both title="Solo källa + mål – lyssna på duckningen">Solo båda</button>
-        <button type="button" class="btn btn-step" data-remove title="Ta bort">×</button>
+        <select data-source title="Source (what drives it)">${options(sources.map((t) => ({ id: t.id, name: t.name })), sidechain.sourceId)}</select>
+        <button type="button" class="btn btn-toggle sc-solo" data-solo-source title="Solo the source">S</button>
+        <span class="sc-arrow"> ducks →</span>
+        <select data-target title="Target (what gets turned down)">${options(engine.sidechainTargets, sidechain.targetId)}</select>
+        <button type="button" class="btn btn-toggle sc-solo" data-solo-target title="Solo the target">S</button>
+        <button type="button" class="btn btn-toggle sc-solo" data-solo-both title="Solo source + target – hear the ducking">Solo both</button>
+        <button type="button" class="btn btn-step" data-remove title="Remove">×</button>
       </div>
       <div class="creator-grid">
-        <label><span>Mängd <span class="value-tag" data-v="depth"></span></span><input data-depth type="range" min="0" max="24" step="0.5" /></label>
-        <label><span>Känslighet <span class="value-tag" data-v="threshold"></span></span><input data-threshold type="range" min="-60" max="0" step="1" /></label>
+        <label><span>Amount <span class="value-tag" data-v="depth"></span></span><input data-depth type="range" min="0" max="24" step="0.5" /></label>
+        <label><span>Sensitivity <span class="value-tag" data-v="threshold"></span></span><input data-threshold type="range" min="-60" max="0" step="1" /></label>
         <label><span>Attack <span class="value-tag" data-v="attack"></span></span><input data-attack type="range" min="0.001" max="0.2" step="0.001" /></label>
         <label><span>Release <span class="value-tag" data-v="release"></span></span><input data-release type="range" min="0.02" max="1" step="0.01" /></label>
-        <label><span>Kurva</span><select data-curve>${Object.entries(CURVES)
+        <label><span>Curve</span><select data-curve>${Object.entries(CURVES)
           .map(([v, t]) => `<option value="${v}"${v === p.curve ? " selected" : ""}>${t}</option>`)
           .join("")}</select></label>
       </div>
       <div class="sc-meter">
-        <span>Målet trycks ned</span>
+        <span>Target ducked by</span>
         <div class="meter-track"><div class="meter-fill" data-gr></div></div>
         <span class="meter-value" data-gr-value>0.0 dB</span>
       </div>`;

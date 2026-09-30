@@ -4,8 +4,12 @@ import { GainEnvelope } from "./GainEnvelope.ts";
 import type { EnvelopePoint } from "./GainEnvelope.ts";
 import type { CueConfig, SectionConfig, TransitionType } from "../project/types.ts";
 import { regionChunks } from "../project/fitToLength.ts";
+import { planSwells } from "../project/swellPlan.ts";
+import type { PlayedChunk } from "../project/swellPlan.ts";
 
 const CUT_FADE_SECONDS = 0.003; // "cut": just enough to avoid a hard click, no audible blend
+/** Longest ring-out after a section (sustained pads/bass would otherwise hang on too long). */
+const MAX_RING_OUT_SECONDS = 2;
 /** Fade at the very end of the music (under the logo's ring-out). */
 const END_FADE = "8n";
 
@@ -169,7 +173,9 @@ export class ArrangementManager {
     });
 
     for (const track of tracks) {
-      if (track.playMode === "region") envelopes.push(...this.scheduleRegionTrack(track, segments, timing, regions));
+      if (track.playMode !== "region") continue;
+      if (track.isSwell) envelopes.push(...this.scheduleSwellTrack(track, segments, timing, regions));
+      else envelopes.push(...this.scheduleRegionTrack(track, segments, timing, regions));
     }
 
     // Set the correct initial state up front, since the transport hasn't reached bar 1's
@@ -204,18 +210,38 @@ export class ArrangementManager {
     const bufferSeconds = voices[0]?.player.loaded ? voices[0].player.buffer.duration : 0;
     if (!voices[0] || !voices[1] || !bufferSeconds) return [];
 
-    segments.forEach((segment, index) => {
+    const chunkLists = segments.map((segment) => {
       const region = regions?.[segment.sectionId];
-      if (!region) return;
+      return region ? regionChunks(segment.startBar, segment.endBar - segment.startBar, region, segment.sourceBar) : [];
+    });
+
+    segments.forEach((segment, index) => {
+      const chunks = chunkLists[index]!;
+      if (!chunks.length) return;
       const voice = voices[index % 2]!;
       const pts = points[index % 2]!;
       const next = segments[index + 1];
-      const fadeIn = index === 0 ? CUT_FADE_SECONDS : fadeSecondsFor(segment.transition);
-      const fadeOut = next ? fadeSecondsFor(next.transition) : Tone.Time(END_FADE).toSeconds();
+      const lastChunk = chunks[chunks.length - 1]!;
+      const sourceEnd = lastChunk.sourceBar + lastChunk.bars - 1;
+      const prevChunks = chunkLists[index - 1];
+      const prevLast = prevChunks?.[prevChunks.length - 1];
+      const nextFirst = chunkLists[index + 1]?.[0];
+      // Where the source simply continues (untouched form), join seamlessly: no ring-out, no fade.
+      const continuesFromPrev = !!prevLast && prevLast.sourceBar + prevLast.bars === chunks[0]!.sourceBar;
+      const continuesIntoNext = !!nextFirst && nextFirst.sourceBar === sourceEnd + 1;
+
+      const fadeIn = index === 0 || continuesFromPrev ? CUT_FADE_SECONDS : fadeSecondsFor(segment.transition);
+      // Ring-out: let the track sound on after the section, until its next attack or silence (analysed
+      // per source bar), then fade. Swell-free tracks only; capped so sustained pads don't hang on.
+      const tail = Math.min(MAX_RING_OUT_SECONDS, track.tails[sourceEnd - 1] ?? 0);
+      const ringOut = continuesIntoNext
+        ? CUT_FADE_SECONDS
+        : next
+          ? Math.max(CUT_FADE_SECONDS, track.tails.length ? tail : fadeSecondsFor(next.transition))
+          : Math.max(Tone.Time(END_FADE).toSeconds(), tail);
       const start = this.barStartSeconds(segment.startBar);
       const end = this.barStartSeconds(segment.endBar);
 
-      const chunks = regionChunks(segment.startBar, segment.endBar - segment.startBar, region, segment.sourceBar);
       chunks.forEach((chunk, chunkIndex) => {
         // The file may be silence-trimmed: it starts at `fileStartBar` of the bounce.
         let startBar = chunk.startBar;
@@ -230,15 +256,69 @@ export class ArrangementManager {
         if (bars <= 0) return;
         const offset = (fromBar - track.fileStartBar) * timing.barSeconds;
         if (offset >= bufferSeconds) return;
-        // The section's last chunk rings on through the outgoing fade (the bounce's own continuation).
-        const ringOn = chunkIndex === chunks.length - 1 ? fadeOut : 0;
+        // The section's last chunk rings on (the bounce's own continuation after that bar).
+        const ringOn = chunkIndex === chunks.length - 1 ? ringOut : 0;
         const duration = Math.min(bars * timing.barSeconds + ringOn, bufferSeconds - offset);
         voice.player.start(this.barStartSeconds(startBar), offset, duration);
       });
 
-      pts.push({ t: start, v: 0 }, { t: start + fadeIn, v: 1 }, { t: end, v: 1 }, { t: end + fadeOut, v: 0 });
+      pts.push(
+        { t: start, v: 0 },
+        { t: start + fadeIn, v: 1 },
+        { t: end + ringOut * 0.5, v: 1 },
+        { t: end + ringOut, v: 0 },
+      );
     });
 
     return voices.map((voice, i) => new GainEnvelope(voice!.gain.gain, 0, points[i]!));
+  }
+
+  /**
+   * Swell track: not played per section. Its swell clips are placed at the
+   * transitions instead (src/project/swellPlan.ts): each lands on the downbeat
+   * it led into in the bounce -- exactly as in the original where the form is
+   * untouched, with a stand-in where the form was changed.
+   */
+  private scheduleSwellTrack(
+    track: Track,
+    segments: ArrangementSegment[],
+    timing: ArrangementTiming,
+    regions?: Record<string, [number, number]>,
+  ): GainEnvelope[] {
+    const voices = [track.regionVoice(0), track.regionVoice(1)];
+    const bufferSeconds = voices[0]?.player.loaded ? voices[0].player.buffer.duration : 0;
+    if (!voices[0] || !voices[1] || !bufferSeconds || !regions) return [];
+
+    const chunks: PlayedChunk[] = [];
+    for (const segment of segments) {
+      const region = regions[segment.sectionId];
+      if (!region) continue;
+      regionChunks(segment.startBar, segment.endBar - segment.startBar, region, segment.sourceBar).forEach((c, i) =>
+        chunks.push({ ...c, isCueStart: i === 0 }),
+      );
+    }
+    const sectionStarts = Object.values(regions).map((r) => r[0]);
+    const fileStart = (track.fileStartBar - 1) * timing.barSeconds;
+    const musicEnd = this.barStartSeconds(this.loopBars + 1);
+
+    planSwells(chunks, track.swellEvents, sectionStarts).forEach(({ event, arrangementBar }, i) => {
+      const anchorTime = this.barStartSeconds(arrangementBar);
+      if (anchorTime >= musicEnd) return;
+      const anchorSource = (event.anchorBar - 1) * timing.barSeconds;
+      let when = anchorTime - (anchorSource - event.start);
+      let offset = event.start - fileStart;
+      let duration = event.end - event.start;
+      if (when < 0) {
+        // Would start before 0: start part-way into the swell.
+        offset -= when;
+        duration += when;
+        when = 0;
+      }
+      if (duration <= 0 || offset >= bufferSeconds) return;
+      voices[i % 2]!.player.start(when, Math.max(0, offset), Math.min(duration, bufferSeconds - offset));
+    });
+
+    // Both voices always at full level (the clips carry their own shape).
+    return voices.map((voice) => new GainEnvelope(voice!.gain.gain, 1, []));
   }
 }

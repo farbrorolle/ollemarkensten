@@ -1,18 +1,18 @@
 import type { AudioEngine } from "../audio/AudioEngine.ts";
 
 const MUTE_BEFORE: [string, string][] = [
-  ["4n", "1 slag"],
-  ["2n", "½ takt"],
-  ["1m", "1 takt"],
-  ["2m", "2 takter"],
-  ["4m", "4 takter"],
+  ["4n", "1 beat"],
+  ["2n", "½ bar"],
+  ["1m", "1 bar"],
+  ["2m", "2 bars"],
+  ["4m", "4 bars"],
 ];
 
 const FADE: [string, string][] = [
-  ["", "Ingen fade"],
-  ["2n", "½ takt"],
-  ["1m", "1 takt"],
-  ["2m", "2 takter"],
+  ["", "No fade"],
+  ["2n", "½ bar"],
+  ["1m", "1 bar"],
+  ["2m", "2 bars"],
 ];
 
 /**
@@ -24,30 +24,30 @@ const FADE: [string, string][] = [
 export function mountLogoPanel(root: HTMLElement, engine: AudioEngine): void {
   const logo = engine.logoSettings;
   if (!logo) {
-    root.innerHTML = `<p class="hint">Projektet har ingen ljudlogga.</p>`;
+    root.innerHTML = `<p class="hint">This project has no sonic logo.</p>`;
     return;
   }
   const folders = Array.from(engine.tracks.values()).filter((t) => !t.isLogo);
   const muted = new Set(logo.mute?.tracks ?? []);
 
   root.innerHTML = `
-    <div class="creator-subhead">Muta melodi före loggan</div>
+    <div class="creator-subhead">Mute melody before the logo</div>
     <div class="checkbox-row" data-folders>
       ${folders
         .map((t) => `<label><input type="checkbox" value="${t.id}"${muted.has(t.id) ? " checked" : ""} /> ${t.name}</label>`)
         .join("")}
     </div>
     <div class="creator-grid" style="margin-top:12px">
-      <label><span>Mutas hur långt före loggans plopp</span>
+      <label><span>Muted how long before the logo hit</span>
         <select data-before>${MUTE_BEFORE.map(([v, t]) => `<option value="${v}"${v === (logo.mute?.before ?? "1m") ? " selected" : ""}>${t}</option>`).join("")}</select>
       </label>
-      <label><span>Fada musiken in i loggan</span>
+      <label><span>Fade the music into the logo</span>
         <select data-fade>${FADE.map(([v, t]) => `<option value="${v}"${v === (logo.fadeMusic ?? "") ? " selected" : ""}>${t}</option>`).join("")}</select>
       </label>
-      <label><span>Loggans plopp ligger (s in i filen)</span>
+      <label><span>Logo hit position (s into the file)</span>
         <input data-anchor type="number" min="0" step="0.005" value="${logo.anchorSeconds}" />
       </label>
-      <label><span>Plopp landar på slag</span>
+      <label><span>Hit lands on beat</span>
         <select data-beat>${[1, 2, 3, 4].map((b) => `<option value="${b}"${b === logo.anchorBeat ? " selected" : ""}>${b}</option>`).join("")}</select>
       </label>
     </div>`;

@@ -85,7 +85,7 @@ export function formatFilmTime(seconds: number): string {
   return `${mmss}.${tenths}`;
 }
 
-/** Swedish-style seconds with one decimal, e.g. 4.25 -> "4,3". */
-export function formatSecondsSv(seconds: number): string {
-  return (Math.round(seconds * 10) / 10).toFixed(1).replace(".", ",");
+/** Seconds with one decimal, e.g. 4.25 -> "4.3". */
+export function formatSeconds(seconds: number): string {
+  return (Math.round(seconds * 10) / 10).toFixed(1);
 }

@@ -132,7 +132,7 @@ export class AudioEngine {
       ...Array.from(this.tracks.values())
         .filter((t) => !t.isLogo)
         .map((t) => ({ id: t.id, name: t.name })),
-      ...Array.from(this.buses.values()).map((b) => ({ id: b.id, name: `Buss: ${b.name}` })),
+      ...Array.from(this.buses.values()).map((b) => ({ id: b.id, name: `Bus: ${b.name}` })),
     ];
   }
 
@@ -273,7 +273,7 @@ export class AudioEngine {
    * so the logo's anchor lands on `anchorSeconds` (film time).
    */
   fitToAnchor(anchorSeconds: number): FitResult {
-    if (!this.fitConfig || !this.logoConfig) throw new Error("Projektet saknar regler för längdanpassning");
+    if (!this.fitConfig || !this.logoConfig) throw new Error("This project has no fit-to-length rules");
     const result = fitToLength(
       this.fitConfig.template,
       anchorSeconds,
@@ -569,10 +569,10 @@ export class AudioEngine {
    */
   async exportStereoMix(onProgress?: (fraction: number) => void): Promise<Blob> {
     if (!Tone.Recorder.supported) {
-      throw new Error("Den här webbläsaren saknar stöd för MediaRecorder, kan inte exportera.");
+      throw new Error("This browser doesn't support MediaRecorder, can't export.");
     }
     const loopBars = this.arrangement.totalBars;
-    if (!loopBars) throw new Error("Inget arrangemang att exportera.");
+    if (!loopBars) throw new Error("No arrangement to export.");
 
     await this.unlockAudio();
     const loopSeconds = this.arrangementSeconds; // includes the logo's ring-out

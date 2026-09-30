@@ -92,7 +92,7 @@ export function chooseLengths(template: FitBlock[], idealBars: number): { length
     best = next;
   }
   const totals = Array.from(best.keys()).filter((t) => t > 0);
-  if (totals.length === 0) throw new Error("Mallen kan inte bli längre än 0 takter");
+  if (totals.length === 0) throw new Error("The template can't be longer than 0 bars");
   const fitting = totals.filter((t) => t <= idealBars);
   const total = fitting.length ? Math.max(...fitting) : Math.min(...totals);
   return { total, lengths: best.get(total)!.lengths };
@@ -131,10 +131,10 @@ export function fitToLength(
   const anchorInMusic = anchorOffsetInMusic(total, timing);
   let musicStartSeconds = targetAnchorSeconds - anchorInMusic;
   if (musicStartSeconds < -1e-9) {
-    warnings.push("Musiken kan inte bli så kort med de här reglerna – loggan hamnar senare än önskat.");
+    warnings.push("The music can't get this short with these rules – the logo lands later than requested.");
     musicStartSeconds = 0;
   } else if (musicStartSeconds >= timing.barSeconds + 1e-9) {
-    warnings.push("Reglerna ger inte exakt rätt antal takter – musiken startar lite senare i filmen.");
+    warnings.push("The rules can't give exactly the right number of bars – the music starts a little later in the film.");
   }
   musicStartSeconds = Math.max(0, musicStartSeconds);
   const anchorSeconds = musicStartSeconds + anchorInMusic;

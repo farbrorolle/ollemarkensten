@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="sv">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -10,10 +10,10 @@
     <div id="app">
       <header class="app-header">
         <h1 data-title>Brand Composer</h1>
-        <span class="subtitle">Anpassa musiken till din film</span>
+        <span class="subtitle">Fit the music to your film</span>
         <div class="view-switch" role="group" aria-label="Vy">
-          <button type="button" class="view-switch-btn" data-view="customer">Kundvy</button>
-          <button type="button" class="view-switch-btn" data-view="creator">Skaparvy</button>
+          <button type="button" class="view-switch-btn" data-view="customer">Customer view</button>
+          <button type="button" class="view-switch-btn" data-view="creator">Creator view</button>
         </div>
       </header>
 
@@ -26,8 +26,8 @@
         <section class="panel panel-transport" id="transport-panel"></section>
 
         <section class="panel panel-timeline">
-          <h2>Musik</h2>
-          <p class="hint">Dra i musikens högra kant för att ändra längden – musiken arrangeras om automatiskt. Klicka i tidslinjen för att hoppa.</p>
+          <h2>Music</h2>
+          <p class="hint">Drag the right edge of the music to change its length – it re-arranges automatically. Click the timeline to jump.</p>
           <div id="timeline-view"></div>
         </section>
 
@@ -42,14 +42,14 @@
         </section>
 
         <section class="panel panel-logo creator-only">
-          <h2>Ljudlogga</h2>
+          <h2>Sonic logo</h2>
           <div id="logo-panel"></div>
         </section>
 
         <section class="panel panel-tracks">
           <h2>Mixer</h2>
           <div class="track-list-header">
-            <span></span><span>Volym</span><span class="creator-only">Pan</span><span>Mute</span><span class="creator-only">Solo</span>
+            <span></span><span>Volume</span><span class="creator-only">Pan</span><span>Mute</span><span class="creator-only">Solo</span>
           </div>
           <div id="track-list"></div>
         </section>

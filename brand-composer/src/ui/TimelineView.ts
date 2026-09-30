@@ -3,7 +3,7 @@ import type { AudioEngine } from "../audio/AudioEngine.ts";
 import type { Track } from "../audio/Track.ts";
 import type { CueConfig, SectionConfig, TransitionType } from "../project/types.ts";
 import type { FilmInfo, VideoSync } from "../video/VideoSync.ts";
-import { formatFilmTime, formatSecondsSv } from "../video/syncMath.ts";
+import { formatFilmTime, formatSeconds } from "../video/syncMath.ts";
 import { regionChunks } from "../project/fitToLength.ts";
 
 export interface TimelineHandle {
@@ -126,11 +126,11 @@ function drawFilmPeaks(
 function filmAudioMessage(info: FilmInfo): string {
   switch (info.audioState) {
     case "decoding":
-      return "Läser in filmens ljud…";
+      return "Reading the film audio…";
     case "none":
-      return "Hittade inget ljudspår i filmen";
+      return "No audio track found in the film";
     case "too-long":
-      return "Filmen är för lång för att visa ljudvågen";
+      return "The film is too long to show its waveform";
     default:
       return "";
   }
@@ -188,7 +188,7 @@ export function mountTimeline(
   root.classList.add("timeline-mode-block");
   root.innerHTML = `
     <div class="timeline-toolbar">
-      <button type="button" class="btn" data-mode-toggle>Visa sektioner</button>
+      <button type="button" class="btn" data-mode-toggle>Show sections</button>
       <span class="timeline-toolbar-status" data-status></span>
     </div>
     <div class="timeline-palette" data-palette></div>
@@ -206,7 +206,7 @@ export function mountTimeline(
         <div class="timeline-film-end" data-film-end hidden><span class="timeline-film-end-label" data-film-end-label></span></div>
         <div class="timeline-music-block" data-music-block>
           <span class="timeline-music-block-label" data-music-block-label></span>
-          <span class="timeline-music-block-handle" data-music-block-handle title="Dra för att ändra musikens längd"></span>
+          <span class="timeline-music-block-handle" data-music-block-handle title="Drag to change the length of the music"></span>
         </div>
         <div class="timeline-playhead" data-playhead></div>
       </div>
@@ -243,7 +243,7 @@ export function mountTimeline(
     showSections = !showSections;
     root.classList.toggle("timeline-mode-block", !showSections);
     root.classList.toggle("timeline-mode-sections", showSections);
-    modeToggle.textContent = showSections ? "Dölj sektioner" : "Visa sektioner";
+    modeToggle.textContent = showSections ? "Hide sections" : "Show sections";
     redrawAll(); // canvases that were hidden have no width until shown
   });
   const segmentList = root.querySelector<HTMLElement>("[data-segment-list]")!;
@@ -253,7 +253,7 @@ export function mountTimeline(
     chip.type = "button";
     chip.className = "timeline-palette-chip";
     chip.textContent = `+ ${section.name}`;
-    chip.title = `Lägg till en ${section.name}-sektion i slutet av arrangemanget`;
+    chip.title = `Add a ${section.name} section at the end of the arrangement`;
     chip.addEventListener("click", () => {
       editableSegments.push({ sectionId: section.id, lengthBars: DEFAULT_NEW_SEGMENT_BARS, transition: "crossfade" });
       commit();
@@ -387,7 +387,7 @@ export function mountTimeline(
       if (index > 0) {
         const transitionSelect = document.createElement("select");
         transitionSelect.className = "timeline-section-transition";
-        transitionSelect.title = "Övergång in i den här sektionen";
+        transitionSelect.title = "Transition into this section";
         transitionSelect.draggable = false;
         for (const [value, text] of Object.entries(TRANSITION_LABELS)) {
           const option = document.createElement("option");
@@ -410,7 +410,7 @@ export function mountTimeline(
         removeBtn.type = "button";
         removeBtn.className = "timeline-section-remove";
         removeBtn.textContent = "×";
-        removeBtn.title = "Ta bort sektion";
+        removeBtn.title = "Remove section";
         removeBtn.draggable = false;
         removeBtn.addEventListener("dragstart", (e) => e.preventDefault());
         removeBtn.addEventListener("click", (e) => {
@@ -423,7 +423,7 @@ export function mountTimeline(
 
       const resizeHandle = document.createElement("span");
       resizeHandle.className = "timeline-section-resize";
-      resizeHandle.title = "Dra för att ändra längd";
+      resizeHandle.title = "Drag to change the length";
       block.appendChild(resizeHandle);
 
       attachResize(resizeHandle, index);
@@ -456,19 +456,19 @@ export function mountTimeline(
       decBtn.type = "button";
       decBtn.className = "btn btn-step";
       decBtn.textContent = "−";
-      decBtn.title = "Korta av en takt";
+      decBtn.title = "One bar shorter";
       decBtn.addEventListener("click", () => {
         seg.lengthBars = Math.max(1, seg.lengthBars - 1);
         commit();
       });
       const barsLabel = document.createElement("span");
       barsLabel.className = "segment-row-bars";
-      barsLabel.textContent = `${seg.lengthBars} takt${seg.lengthBars === 1 ? "" : "er"}`;
+      barsLabel.textContent = `${seg.lengthBars} bar${seg.lengthBars === 1 ? "" : "s"}`;
       const incBtn = document.createElement("button");
       incBtn.type = "button";
       incBtn.className = "btn btn-step";
       incBtn.textContent = "+";
-      incBtn.title = "Förläng en takt";
+      incBtn.title = "One bar longer";
       incBtn.addEventListener("click", () => {
         seg.lengthBars += 1;
         commit();
@@ -482,7 +482,7 @@ export function mountTimeline(
       leftBtn.type = "button";
       leftBtn.className = "btn btn-step";
       leftBtn.textContent = "◀";
-      leftBtn.title = "Flytta tidigare i arrangemanget";
+      leftBtn.title = "Move earlier";
       leftBtn.disabled = index === 0;
       leftBtn.addEventListener("click", () => {
         if (index === 0) return;
@@ -493,7 +493,7 @@ export function mountTimeline(
       rightBtn.type = "button";
       rightBtn.className = "btn btn-step";
       rightBtn.textContent = "▶";
-      rightBtn.title = "Flytta senare i arrangemanget";
+      rightBtn.title = "Move later";
       rightBtn.disabled = index === editableSegments.length - 1;
       rightBtn.addEventListener("click", () => {
         if (index === editableSegments.length - 1) return;
@@ -508,7 +508,7 @@ export function mountTimeline(
         removeBtn.type = "button";
         removeBtn.className = "btn btn-step";
         removeBtn.textContent = "×";
-        removeBtn.title = "Ta bort sektion";
+        removeBtn.title = "Remove section";
         removeBtn.addEventListener("click", () => {
           editableSegments.splice(index, 1);
           commit();
@@ -531,6 +531,7 @@ export function mountTimeline(
 
   function drawTrackInto(ctx: CanvasRenderingContext2D, track: Track, width: number, LANE_HEIGHT: number): void {
     ctx.strokeStyle = WAVE_COLOR;
+    if (track.isSwell) return; // swells are placed at the transitions, not per section
 
     if (track.playMode === "oneshot") {
       // The sonic logo: its whole file, where it will actually play.
@@ -633,10 +634,10 @@ export function mountTimeline(
     drawFilmLane(info, spanSeconds);
     const audioOn = film!.audioOn;
     filmLane.classList.toggle("timeline-lane-muted", !audioOn);
-    const toggleText = audioOn ? "🔊 Filmljud" : "🔇 Filmljud";
+    const toggleText = audioOn ? "🔊 Film audio" : "🔇 Film audio";
     if (toggleText !== filmToggleText) {
       filmToggle.textContent = toggleText;
-      filmToggle.title = audioOn ? "Filmens eget ljud är PÅ – klicka för att stänga av" : "Filmens eget ljud är AV – klicka för att slå på";
+      filmToggle.title = audioOn ? "Film audio is ON – click to turn it off" : "Film audio is OFF – click to turn it on";
       filmToggleText = toggleText;
     }
 
@@ -644,7 +645,7 @@ export function mountTimeline(
     const beyond = fraction > 1.0005;
     filmEnd.style.left = `${Math.min(1, fraction) * 100}%`;
     filmEnd.classList.toggle("timeline-film-end-beyond", beyond);
-    const endText = beyond ? `Filmen fortsätter ${formatSecondsSv(info.duration - spanSeconds)} s →` : "Filmen slutar";
+    const endText = beyond ? `Film continues ${formatSeconds(info.duration - spanSeconds)} s →` : "Film ends";
     if (endText !== filmEndText) {
       filmEndLabel.textContent = endText;
       filmEndText = endText;
@@ -656,7 +657,7 @@ export function mountTimeline(
   // All of the music in one lane (the customer's main view): every folder faintly on top of each other.
   const mixLane = document.createElement("div");
   mixLane.className = "timeline-lane timeline-lane-mix";
-  mixLane.innerHTML = `<span class="timeline-lane-name">Musik</span><canvas></canvas>`;
+  mixLane.innerHTML = `<span class="timeline-lane-name">Music</span><canvas></canvas>`;
   lanesEl.appendChild(mixLane);
   const mixCanvas = mixLane.querySelector("canvas")!;
 
@@ -765,11 +766,11 @@ export function mountTimeline(
     musicBlockHandle.hidden = !engine.canFit;
     const text =
       draggingEnd !== null
-        ? `Släpp för att anpassa till ${formatFilmTime(end)}`
-        : `${formatFilmTime(end - start)} · ${totalBars} takter`;
+        ? `Release to fit to ${formatFilmTime(end)}`
+        : `${formatFilmTime(end - start)} · ${totalBars} bars`;
     if (text !== lastBlockText) {
       musicBlockLabel.textContent = text;
-      statusEl.textContent = draggingEnd !== null ? "" : `Musiken slutar ${formatFilmTime(end)}`;
+      statusEl.textContent = draggingEnd !== null ? "" : `Music ends at ${formatFilmTime(end)}`;
       lastBlockText = text;
     }
   }
@@ -832,11 +833,11 @@ export function mountTimeline(
     if (anchor !== null) {
       logoAnchor.style.left = `${Math.min(1, xOfSeconds(anchor)) * 100}%`;
       logoAnchor.classList.toggle("timeline-logo-anchor-flip", xOfSeconds(anchor) > 0.8);
-      const text = `Loggans start ${formatFilmTime(anchor)}`;
+      const text = `Logo start ${formatFilmTime(anchor)}`;
       if (text !== lastAnchorText) {
         logoAnchorLabel.textContent = text;
         logoAnchorHandle.title = engine.canFit
-          ? "Dra till en synpunkt i filmen – musiken anpassas så att loggan startar exakt där"
+          ? "Drag to a sync point in the film – the music is re-arranged so the logo starts exactly there"
           : "";
         lastAnchorText = text;
       }
@@ -845,7 +846,7 @@ export function mountTimeline(
     leadIn.hidden = lead < 0.05;
     if (!leadIn.hidden) {
       leadIn.style.width = `${xOfSeconds(lead) * 100}%`;
-      leadInLabel.textContent = `Musiken startar ${formatSecondsSv(lead)} s in`;
+      leadInLabel.textContent = `Music starts ${formatSeconds(lead)} s in`;
     }
   }
 

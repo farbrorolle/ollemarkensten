@@ -1275,3 +1275,21 @@ body.view-customer .track-row {
 .lufs-cell .meter-track {
   flex: none;
 }
+
+.video-volume {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.video-volume input {
+  width: 120px;
+}
+
+.video-volume-value {
+  min-width: 56px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}

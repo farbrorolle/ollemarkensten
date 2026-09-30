@@ -26,7 +26,7 @@ export function mountTransportPanel(root: HTMLElement, engine: AudioEngine, onPl
       <span data-position class="position-value">1:1</span>
     </div>
     <div class="section-display">
-      <span class="position-label">Sektion</span>
+      <span class="position-label">Section</span>
       <span data-section class="section-value">–</span>
     </div>
   `;

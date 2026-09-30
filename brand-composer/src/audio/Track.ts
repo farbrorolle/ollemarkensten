@@ -45,6 +45,10 @@ export class Track {
   /** Long-bounce projects: the bounce bar at which this (silence-trimmed) file starts. */
   readonly fileStartBar: number;
   readonly isLogo: boolean;
+  readonly isSwell: boolean;
+  /** Ring-out seconds after each source bar (index 0 = bar 1); empty if not analysed. */
+  readonly tails: number[];
+  readonly swellEvents: { start: number; end: number; anchorBar: number }[];
 
   private readonly legacyPlayer: Tone.Player | null = null;
   /**
@@ -77,6 +81,9 @@ export class Track {
     this.playMode = config.sections ? "loop" : playMode;
     this.fileStartBar = config.fileStartBar ?? 1;
     this.isLogo = config.role === "logo";
+    this.isSwell = config.role === "swell";
+    this.tails = config.tails ?? [];
+    this.swellEvents = config.swellEvents ?? [];
 
     this.sidechainGain = new Tone.Gain(1);
     this.sectionGain = new Tone.Gain(1);

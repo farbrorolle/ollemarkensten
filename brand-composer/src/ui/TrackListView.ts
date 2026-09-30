@@ -13,8 +13,8 @@ function mountTrackRow(
   const row = document.createElement("div");
   row.className = "track-row";
   const loadControls = track.isSectioned
-    ? `<span class="track-name-hint" title="Spår med olika ljud per sektion kan inte ersättas med en enda lokal fil">per sektion</span>`
-    : `<button data-load class="btn btn-file creator-only" title="Ladda lokal WAV-fil (eller dra och släpp)">📁</button>
+    ? `<span class="track-name-hint" title="Tracks with different audio per section can't be replaced by a single local file">per section</span>`
+    : `<button data-load class="btn btn-file creator-only" title="Load a local audio file (or drag and drop)">📁</button>
        <input data-file-input type="file" accept="audio/*" hidden />`;
   row.innerHTML = `
     <span class="track-name-cell">
@@ -60,7 +60,7 @@ function mountTrackRow(
   const loadLocalFile = async (file: File): Promise<void> => {
     engine.pause(); // buffer swaps don't retrigger an already-playing source; force a clean restart
     await track.loadFromFile(file);
-    nameEl.textContent = `${track.name} (lokal fil)`;
+    nameEl.textContent = `${track.name} (local file)`;
     row.classList.add("track-row-local-file");
     onTrackChanged?.(track.id);
   };
