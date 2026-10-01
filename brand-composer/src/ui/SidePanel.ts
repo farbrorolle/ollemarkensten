@@ -86,18 +86,6 @@ export function mountSidePanel(
   tune.dataset.stepPanel = "tune";
   tune.innerHTML = `
     <div class="side-head"><h2>Fine-tune</h2><button type="button" class="btn-link" data-goto-fit>Done</button></div>
-    <div class="side-tabs" role="tablist">
-      <button type="button" class="side-tab" data-tab="parts" role="tab">Parts &amp; layers</button>
-      <button type="button" class="side-tab" data-tab="levels" role="tab">Levels</button>
-    </div>
-    <div class="side-tab-panel" data-tab-panel="parts">
-      <div class="side-label">Parts of the track</div>
-      <p class="side-note">Drag a part into the Form lane: between two parts to add it, onto a part to replace it. Click a part in the timeline for its options.</p>
-      <div data-parts-slot></div>
-      <div class="side-label">Layers</div>
-      <p class="side-note">Extra sounds that play on top of a part: drag onto the Layers or Swells lane.</p>
-      <div data-layers-slot></div>
-    </div>
     <div class="side-tab-panel" data-tab-panel="levels"></div>`;
 
   sideRoot.prepend(fit, tune);
@@ -156,8 +144,17 @@ export function mountSidePanel(
     logoCutRow.appendChild(cutGroup);
   }
   const [partsRow, layersRow] = paletteRows;
-  if (partsRow) q(tune, "[data-parts-slot]")!.appendChild(partsRow);
-  if (layersRow) q(tune, "[data-layers-slot]")!.appendChild(layersRow);
+  // Parts and layers: their own box above the timeline (Fine-tune only), one row each, like before.
+  const partsBox = document.createElement("section");
+  partsBox.className = "panel panel-parts";
+  partsBox.innerHTML = `
+    <div class="parts-box-head">
+      <h2>Parts &amp; layers</h2>
+      <p class="hint">Drag a part into the Form lane – between two parts to add it, onto a part to replace it. Layers play on top of a part. Click a part in the timeline for its options.</p>
+    </div>`;
+  if (partsRow) partsBox.appendChild(partsRow);
+  if (layersRow) partsBox.appendChild(layersRow);
+  timelineRoot.closest(".panel-timeline")?.before(partsBox);
   // The toolbar row the arrange switch lived in may now be empty.
   timelineRoot.querySelectorAll<HTMLElement>(".timeline-toolbar").forEach((bar) => {
     if (!bar.querySelector("button:not([hidden]), [data-status]")) bar.classList.add("is-empty");
@@ -290,19 +287,6 @@ export function mountSidePanel(
 
   // --- Steps ---------------------------------------------------------------------------------
   let step: Step = "fit";
-  const tabs = Array.from(tune.querySelectorAll<HTMLButtonElement>("[data-tab]"));
-  let tab: "parts" | "levels" = "parts";
-  const setTab = (t: "parts" | "levels"): void => {
-    tab = t;
-    for (const b of tabs) {
-      b.classList.toggle("is-active", b.dataset.tab === t);
-      b.setAttribute("aria-selected", String(b.dataset.tab === t));
-    }
-    tune.querySelectorAll<HTMLElement>("[data-tab-panel]").forEach((p) => (p.hidden = p.dataset.tabPanel !== t));
-  };
-  for (const b of tabs) b.addEventListener("click", () => setTab(b.dataset.tab === "levels" ? "levels" : "parts"));
-  setTab(tab);
-
   function setStep(next: Step): void {
     step = next;
     document.body.classList.toggle("step-fit", step === "fit");

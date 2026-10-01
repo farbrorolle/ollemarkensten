@@ -72,7 +72,6 @@ export function mountMasterPanel(root: HTMLElement, engine: AudioEngine): Master
   const gainGrid = document.createElement("div");
   gainGrid.className = "creator-grid";
   gainGrid.append(slider("Music level (same as the Music fader)", -24, 6, 0.5, engine.masterGain, dB, (v) => engine.setMasterGain(v)));
-  root.append(gainGrid);
 
   // Bus compressor.
   const compHead = document.createElement("div");
@@ -93,7 +92,7 @@ export function mountMasterPanel(root: HTMLElement, engine: AudioEngine): Master
     slider("Knee", 0, 24, 1, comp.knee, dB, (v) => set({ knee: v })),
   );
   const compMeter = meter("Comp. GR");
-  root.append(compHead, compGrid, compMeter.el);
+  // (appended below, after the limiter)
 
   // Limiter.
   const limHead = document.createElement("div");
@@ -111,7 +110,8 @@ export function mountMasterPanel(root: HTMLElement, engine: AudioEngine): Master
     slider("Threshold (ceiling)", -24, 0, 0.5, engine.limiterThreshold, dB, (v) => engine.setLimiterThreshold(v)),
   );
   const limMeter = meter("Limiter GR");
-  root.append(limHead, limGrid, limMeter.el);
+  // Order: limiter first, then the bus compressor, then the music level.
+  root.append(limHead, limGrid, limMeter.el, compHead, compGrid, compMeter.el, gainGrid);
 
   // Loudness after the limiter.
   const lufsHead = document.createElement("div");

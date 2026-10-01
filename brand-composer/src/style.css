@@ -3616,3 +3616,57 @@ body.step-fit .timeline-lane-cues {
 .composer-grid {
   grid-template-columns: minmax(0, 1fr);
 }
+
+/* Parts & layers box above the timeline (Fine-tune step). */
+.panel-parts {
+  padding: 12px 16px;
+}
+body.step-fit .panel-parts {
+  display: none;
+}
+.parts-box-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.parts-box-head h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text);
+}
+.parts-box-head .hint {
+  margin: 0;
+  font-size: 12px;
+}
+.panel-parts .timeline-palette-row {
+  margin-bottom: 6px;
+}
+.panel-parts .timeline-palette-row:last-child {
+  margin-bottom: 0;
+}
+.side-levels-title {
+  margin-top: 4px;
+}
+.output-faders .video-limiter-ceiling {
+  display: contents;
+}
+.output-faders .video-limiter-toggle {
+  justify-self: start;
+  font-size: 12px;
+  color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+body.view-customer .output-faders .video-limiter-toggle,
+body.view-customer .output-faders .video-limiter-ceiling {
+  display: none;
+}
+.video-volume input[type="checkbox"] {
+  width: auto;
+}

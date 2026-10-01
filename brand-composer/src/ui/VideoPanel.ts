@@ -62,7 +62,7 @@ export function mountVideoPanel(
             <span class="video-volume-value" data-music-volume-value></span>
           </label>
           <span class="video-volume video-limiter" title="Master limiter on the film audio and the music together: turn up to make everything louder without clipping">
-            <label class="video-limiter-toggle creator-only"><input type="checkbox" data-out-lim-on /> On</label>
+            <label class="video-limiter-toggle creator-only"><input type="checkbox" data-out-lim-on /> Final limiter on (film + music)</label>
             <span>Limiter gain</span>
             <input type="range" min="0" max="18" step="0.5" data-out-lim title="Gain into the master limiter" />
             <span class="video-volume-value" data-out-lim-value></span>
