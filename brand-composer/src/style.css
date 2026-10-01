@@ -2080,3 +2080,74 @@ body.view-customer .track-row {
 .section-menu-tracks .cue-menu-check {
   margin: 0;
 }
+
+/* Swells lane: each swell as a rising wedge ending on the downbeat it leads into. */
+.timeline-lane-swells {
+  height: 26px;
+  cursor: default;
+  align-items: stretch;
+}
+
+.timeline-lane-swells[hidden] {
+  display: none;
+}
+
+.timeline-swells {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  margin: 3px 0;
+  cursor: copy;
+}
+
+.swell-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 14px;
+  --swell: #4dd4ff;
+  border-right: 2px solid var(--swell);
+  cursor: default;
+}
+
+.swell-mark::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to right, transparent, color-mix(in srgb, var(--swell) 60%, transparent));
+  clip-path: polygon(0 100%, 100% 0, 100% 100%);
+  pointer-events: none;
+}
+
+.swell-lead-in {
+  --swell: #ffd166;
+}
+
+.swell-added {
+  --swell: #7ee787;
+}
+
+.swell-removed {
+  border: 1px dashed rgba(154, 164, 184, 0.6);
+  border-radius: 3px;
+}
+
+.swell-removed::before {
+  display: none;
+}
+
+.swell-btn {
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(11, 13, 18, 0.75);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 14px;
+  cursor: pointer;
+}

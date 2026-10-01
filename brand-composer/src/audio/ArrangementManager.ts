@@ -5,7 +5,7 @@ import type { EnvelopePoint } from "./GainEnvelope.ts";
 import type { CueConfig, SectionConfig, TransitionType } from "../project/types.ts";
 import { regionChunks } from "../project/fitToLength.ts";
 import { planSwells } from "../project/swellPlan.ts";
-import type { PlayedChunk } from "../project/swellPlan.ts";
+import type { PlayedChunk, SwellEvent } from "../project/swellPlan.ts";
 
 const CUT_FADE_SECONDS = 0.003; // "cut": just enough to avoid a hard click, no audible blend
 /** Longest ring-out after a section (sustained pads/bass would otherwise hang on too long). */
@@ -14,6 +14,26 @@ const MAX_RING_OUT_SECONDS = 2;
 const CROSSFADE_RING_OUT_SECONDS = 0.35;
 /** "Cut": the outgoing part stops right at the boundary (just enough to avoid a click). */
 const CUT_RING_OUT_SECONDS = 0.03;
+/** A late music start this long (or longer) gets a swell into bar 1. */
+const LEAD_IN_SWELL_MIN_SECONDS = 0.75;
+
+/** The customer's swell edits, by the arrangement bar a swell leads into. */
+export interface SwellEdits {
+  removed: number[];
+  added: number[];
+}
+
+/** A swell in the arrangement (synth + sfx together), for the timeline. */
+export interface SwellMark {
+  /** Arrangement bar whose downbeat it leads into. */
+  bar: number;
+  /** Transport seconds it starts / lands. */
+  start: number;
+  anchor: number;
+  kind: "auto" | "lead-in" | "added";
+  /** An automatic swell the customer switched off (shown so it can be put back). */
+  removed: boolean;
+}
 /** How long the chosen tracks fade away under the logo after its hit. */
 const LOGO_RING_OUT_SECONDS = 1.5;
 /** Fade at the very end of the music (under the logo's ring-out). */
@@ -86,6 +106,10 @@ function buildSegments(cues: CueConfig[], loopBars: number): ArrangementSegment[
  * (a *repeating* transport event) instead of scheduled once directly.
  */
 export class ArrangementManager {
+  /** The customer's swell edits: auto swells removed (by the bar they lead into) and swells added. */
+  swellEdits: SwellEdits = { removed: [], added: [] };
+  /** Where swells play in the current arrangement (for the timeline), by the bar they lead into. */
+  readonly swellMarks = new Map<number, SwellMark>();
   /** Per section: tracks that never ring over into it (from the project config). */
   private sectionCutInto = new Map<string, string[]>();
   private segments: ArrangementSegment[] = [];
@@ -139,6 +163,7 @@ export class ArrangementManager {
   ): GainEnvelope[] {
     const envelopes: GainEnvelope[] = [];
     const segments = buildSegments(cues, loopBars);
+    this.swellMarks.clear();
     this.sectionCutInto = new Map(Array.from(sections.values()).map((sec) => [sec.id, sec.cutInto ?? []]));
     this.segments = segments;
     this.loopBars = loopBars;
@@ -400,8 +425,55 @@ export class ArrangementManager {
     const beatSec = timing.barSeconds / 4;
     let fadeEnd: number | null = null;
 
+    // The automatic plan, plus: a swell into bar 1 when the music starts late enough to leave room
+    // for one, and the swells the customer added; minus the ones they removed.
+    type Placed = { event: SwellEvent; arrangementBar: number; kind: SwellMark["kind"] };
+    const placed: Placed[] = planSwells(chunks, track.swellEvents, sectionStarts).map((p) => ({ ...p, kind: "auto" as const }));
+    const starts = new Set(sectionStarts);
+    const groups = new Map<number, SwellEvent[]>();
+    for (const e of track.swellEvents) if (starts.has(e.anchorBar)) groups.set(e.anchorBar, [...(groups.get(e.anchorBar) ?? []), e]);
+    const preRoll = (events: SwellEvent[]): number => Math.max(...events.map((e) => (e.anchorBar - 1) * timing.barSeconds - e.start));
+    const sourceBarAt = (bar: number): number => {
+      const chunk = chunks.find((c) => bar >= c.startBar && bar < c.startBar + c.bars);
+      return chunk ? chunk.sourceBar + (bar - chunk.startBar) : 1;
+    };
+    const standIn = (bar: number): SwellEvent[] => {
+      if (!groups.size) return [];
+      const source = sourceBarAt(bar);
+      const anchor = Array.from(groups.keys()).reduce((best, a) => (Math.abs(a - source) < Math.abs(best - source) ? a : best));
+      return groups.get(anchor)!;
+    };
+    const has = (bar: number): boolean => placed.some((p) => p.arrangementBar === bar);
+    if (timing.musicStartSeconds >= LEAD_IN_SWELL_MIN_SECONDS && !has(1) && groups.size) {
+      // The longest swell that fits in the silence before bar 1 (else the shortest, started part-way).
+      const all = Array.from(groups.values());
+      const fitting = all.filter((g) => preRoll(g) <= timing.musicStartSeconds + 0.3);
+      const pick = fitting.length
+        ? fitting.reduce((a, b) => (preRoll(b) > preRoll(a) ? b : a))
+        : all.reduce((a, b) => (preRoll(b) < preRoll(a) ? b : a));
+      for (const event of pick) placed.push({ event, arrangementBar: 1, kind: "lead-in" });
+    }
+    for (const bar of this.swellEdits.added) {
+      if (has(bar) || bar < 1 || bar > this.loopBars) continue;
+      for (const event of standIn(bar)) placed.push({ event, arrangementBar: bar, kind: "added" });
+    }
+    placed.sort((a, b) => a.arrangementBar - b.arrangementBar || a.event.start - b.event.start);
+    const removed = new Set(this.swellEdits.removed);
+    for (const p of placed) {
+      const anchorTime = this.barStartSeconds(p.arrangementBar);
+      const start = Math.max(0, anchorTime - ((p.event.anchorBar - 1) * timing.barSeconds - p.event.start));
+      const mark = this.swellMarks.get(p.arrangementBar);
+      this.swellMarks.set(p.arrangementBar, {
+        bar: p.arrangementBar,
+        start: Math.min(start, mark?.start ?? Infinity),
+        anchor: anchorTime,
+        kind: mark?.kind === "added" ? "added" : p.kind,
+        removed: removed.has(p.arrangementBar),
+      });
+    }
+
     const swellLast = [-Infinity, -Infinity];
-    planSwells(chunks, track.swellEvents, sectionStarts).forEach(({ event, arrangementBar }, i) => {
+    placed.filter((p) => !removed.has(p.arrangementBar)).forEach(({ event, arrangementBar }, i) => {
       const anchorTime = this.barStartSeconds(arrangementBar);
       if (anchorTime >= musicEnd) return;
       const anchorSource = (event.anchorBar - 1) * timing.barSeconds;

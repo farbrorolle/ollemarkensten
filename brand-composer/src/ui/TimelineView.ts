@@ -1463,6 +1463,51 @@ export function mountTimeline(
   lanesEl.appendChild(mixLane);
   const mixCanvas = mixLane.querySelector("canvas")!;
 
+  // --- Swells lane: where the synth/sfx swells play (each leads into a downbeat). The automatic
+  // ones can be switched off (×) and put back (↺); click anywhere to add one into that bar.
+  const swellLane = document.createElement("div");
+  swellLane.className = "timeline-lane timeline-lane-swells";
+  swellLane.hidden = !engine.hasSwellTracks;
+  swellLane.innerHTML = `<span class="timeline-lane-name" title="Swells (synth + sfx) leading into new parts – click the lane to add one, × to remove">Swells</span><div class="timeline-swells" data-swells></div>`;
+  mixLane.after(swellLane);
+  const swellsEl = swellLane.querySelector<HTMLElement>("[data-swells]")!;
+  swellLane.addEventListener("click", (e) => e.stopPropagation());
+  swellsEl.addEventListener("click", (e) => {
+    if (e.target !== swellsEl) return;
+    const rect = swellsEl.getBoundingClientRect();
+    const seconds = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * spanSeconds;
+    const bar = Math.max(1, Math.min(totalBars, Math.round(1 + (seconds - engine.musicStartSeconds) / engine.barSeconds)));
+    engine.addSwell(bar);
+  });
+
+  function renderSwells(): void {
+    swellsEl.innerHTML = "";
+    for (const mark of engine.swellMarks) {
+      const el = document.createElement("div");
+      el.className = `swell-mark swell-${mark.kind}${mark.removed ? " swell-removed" : ""}`;
+      const x0 = xOfSeconds(mark.start);
+      const x1 = xOfSeconds(mark.anchor);
+      el.style.left = `${x0 * 100}%`;
+      el.style.width = `${Math.max(0.004, x1 - x0) * 100}%`;
+      const what = mark.kind === "lead-in" ? "Swell into the start" : mark.kind === "added" ? "Added swell" : "Swell";
+      el.title = mark.removed
+        ? `${what} into bar ${mark.bar} – switched off (click ↺ to put it back)`
+        : `${what} into bar ${mark.bar} (${formatFilmTime(mark.anchor)})`;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "swell-btn";
+      btn.textContent = mark.removed ? "↺" : "×";
+      btn.title = mark.removed ? "Put this swell back" : "Remove this swell";
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (mark.removed) engine.addSwell(mark.bar);
+        else engine.removeSwell(mark.bar);
+      });
+      el.appendChild(btn);
+      swellsEl.appendChild(el);
+    }
+  }
+
   // --- Volume cue points: an instrument's level changes from a point in the timeline onward.
   // Click the lane to add one (by default only for that part: it comes back after it), click a
   // cue to change or delete it, drag it sideways to move it (snaps to beats).
@@ -1751,6 +1796,7 @@ export function mountTimeline(
     syncArrangeButtons();
     renderCues();
     renderLayers();
+    renderSwells();
     if (showSections) {
       for (const track of tracks) {
         const entry = lanesByTrack.get(track.id);
@@ -1854,6 +1900,7 @@ export function mountTimeline(
   renderSegmentList();
   renderCues();
   renderLayers();
+  renderSwells();
   engine.onArrangementChange(redrawAll);
   film?.onChange(() => {
     syncFitButtons();

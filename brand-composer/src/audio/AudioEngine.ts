@@ -5,6 +5,7 @@ import type { TrackPlayMode } from "./Track.ts";
 import { Sidechain } from "./Sidechain.ts";
 import type { SidechainTarget } from "./Sidechain.ts";
 import { ArrangementManager } from "./ArrangementManager.ts";
+import type { SwellEdits, SwellMark } from "./ArrangementManager.ts";
 import { GainEnvelope } from "./GainEnvelope.ts";
 import { LoudnessMeter } from "./LoudnessMeter.ts";
 import type { EnvelopePoint } from "./GainEnvelope.ts";
@@ -621,6 +622,7 @@ export class AudioEngine {
       this.redoStack.length = 0;
     }
     this.currentState = {
+      swellEdits: { removed: [...this._swellEdits.removed], added: [...this._swellEdits.added] },
       layers: this._layers.map((l) => ({ ...l })),
       volumeCues: this._volumeCues.map((c) => ({ ...c })),
       cues: cues.map((c) => ({ ...c })),
@@ -640,6 +642,7 @@ export class AudioEngine {
     this._lastFit = fit; // null = edited by hand
     for (const track of this.tracks.values()) track.resyncSectionTakes();
     this.arrangement.swellCutoffBeat = this.hasLogo ? this.logoConfig!.anchorBeat : 0;
+    this.arrangement.swellEdits = { removed: [...this._swellEdits.removed], added: [...this._swellEdits.added] };
     const ring = new Set(this.logoConfig?.ringOut ?? []);
     this.arrangement.logoRingOut = new Set(
       Array.from(this.tracks.values())
@@ -662,6 +665,49 @@ export class AudioEngine {
     this.applyPlaybackMode(); // schedule() always turns looping on; re-apply film/logo mode on top
     if (wasPlaying && (this.filmMode || playedFrom < this.arrangementSeconds - 0.1)) Tone.getTransport().start(undefined, playedFrom);
     for (const listener of this.arrangementListeners) listener();
+  }
+
+  // --- Swells: the automatic ones can be switched off, and extra ones added anywhere -------------
+
+  private _swellEdits: SwellEdits = { removed: [], added: [] };
+
+  /** Where swells play now (by the bar they lead into), including switched-off automatic ones. */
+  get swellMarks(): SwellMark[] {
+    return Array.from(this.arrangement.swellMarks.values()).sort((a, b) => a.bar - b.bar);
+  }
+
+  get hasSwellTracks(): boolean {
+    return Array.from(this.tracks.values()).some((t) => t.isSwell);
+  }
+
+  /** Switches the swell into `bar` off (an automatic one) or removes it (an added one). */
+  removeSwell(bar: number): void {
+    const added = this._swellEdits.added.filter((b) => b !== bar);
+    const removed = this._swellEdits.added.includes(bar) ? this._swellEdits.removed : [...new Set([...this._swellEdits.removed, bar])];
+    this.setSwellEdits({ removed, added });
+  }
+
+  /** Puts a swell into `bar` (back): un-removes an automatic one, or adds one. */
+  addSwell(bar: number): void {
+    if (this._swellEdits.removed.includes(bar)) {
+      this.setSwellEdits({ removed: this._swellEdits.removed.filter((b) => b !== bar), added: this._swellEdits.added });
+    } else if (!this.arrangement.swellMarks.has(bar)) {
+      this.setSwellEdits({ removed: this._swellEdits.removed, added: [...this._swellEdits.added, bar] });
+    }
+  }
+
+  private setSwellEdits(edits: SwellEdits): void {
+    const state = this.currentState;
+    if (!state) return;
+    this.undoStack.push(state);
+    this.redoStack.length = 0;
+    this._swellEdits = { removed: [...edits.removed], added: [...edits.added] };
+    this.restoring = true;
+    try {
+      this.applyArrangement(state.cues, state.loopBars, state.musicStartSeconds, state.fit);
+    } finally {
+      this.restoring = false;
+    }
   }
 
   // --- Layers: e.g. the melody dragged over another part ---------------------------------------
@@ -855,6 +901,7 @@ export class AudioEngine {
   private restoreState(state: ArrangementState): void {
     this._volumeCues = state.volumeCues.map((c) => ({ ...c }));
     this._layers = state.layers.map((l) => ({ ...l }));
+    this._swellEdits = { removed: [...state.swellEdits.removed], added: [...state.swellEdits.added] };
     this.logoEnabled = state.logoEnabled;
     this._arrangeMode = state.arrangeMode;
     this._fitAllParts = state.fitAllParts;
@@ -988,6 +1035,7 @@ export class AudioEngine {
 
 /** Everything needed to put an arrangement back (undo/redo). */
 interface ArrangementState {
+  swellEdits: SwellEdits;
   layers: LayerBlock[];
   volumeCues: VolumeCue[];
   cues: CueConfig[];
