@@ -1,11 +1,8 @@
-import type { AudioEngine } from "../audio/AudioEngine.ts";
-
 /**
  * The Levels tab (design 2a, Fine-tune → Levels):
- *   Groups  – one fader per mix bus (Rhythm, Bass, Music, Swells, Sonic logo).
- *   Output  – film audio, music, loudness boost (limiter gain) and the master strip; these are
- *             the film panel's own controls, moved here with their listeners.
- *   Individual tracks – the existing mixer with Levels per part, folded away in the customer view.
+ *   Film & output – film audio, music, loudness boost (limiter gain) and the master strip; these
+ *                   are the film panel's own controls, moved here with their listeners.
+ *   Folders       – the existing mixer: one fader per folder of the track, with Levels per part.
  *
  * Also tidies the film panel: the film's name and Replace/Remove sit on the picture, the film
  * audio on/off button joins the transport, and the fit message moves to the timeline header.
@@ -16,7 +13,6 @@ export function mountLevelsPanel(
   transportRoot: HTMLElement,
   timelineHead: HTMLElement,
   tracksPanel: HTMLElement,
-  engine: AudioEngine,
 ): void {
   const section = (title: string, note?: string): HTMLElement => {
     const el = document.createElement("div");
@@ -28,46 +24,6 @@ export function mountLevelsPanel(
     return el;
   };
 
-  // --- Groups: one fader per bus ---
-  const buses = [...engine.buses.values()].filter((b) => b.id !== "master");
-  if (buses.length) {
-    const groups = section("Groups", "Turn a whole group of instruments up or down.");
-    const memberNames = (busId: string): string =>
-      [...engine.tracks.values()]
-        .filter((t) => t.busId === busId)
-        .map((t) => t.name.replace(/^\d+\s+/, ""))
-        .join(", ");
-    for (const bus of buses) {
-      const row = document.createElement("label");
-      row.className = "level-row";
-      row.innerHTML = `<span class="level-name"><span class="level-title"></span><span class="level-sub"></span></span>
-        <input type="range" min="-40" max="6" step="0.5" />
-        <span class="level-value"></span>`;
-      row.querySelector(".level-title")!.textContent = bus.name;
-      const sub = memberNames(bus.id);
-      row.querySelector(".level-sub")!.textContent = sub;
-      row.title = sub ? `${bus.name}: ${sub}` : bus.name;
-      const input = row.querySelector("input")!;
-      const value = row.querySelector<HTMLElement>(".level-value")!;
-      const show = (): void => {
-        const muted = bus.mute;
-        value.textContent = muted ? "muted" : `${bus.volume > 0 ? "+" : ""}${bus.volume.toFixed(1)}`;
-      };
-      input.value = String(bus.volume);
-      input.addEventListener("input", () => {
-        const v = Number(input.value);
-        // All the way down = muted.
-        const mute = v <= Number(input.min);
-        if (bus.mute && !mute) bus.mute = false;
-        if (!mute) bus.volume = v;
-        else bus.mute = true;
-        show();
-      });
-      show();
-      groups.appendChild(row);
-    }
-  }
-
   // --- Output: the film panel's level controls ---
   const output = section("Film & output");
   const volumes = Array.from(videoRoot.querySelectorAll<HTMLElement>(".video-bar-actions > .video-volume"));
@@ -77,18 +33,10 @@ export function mountLevelsPanel(
   const limiterLabel = output.querySelector<HTMLElement>(".video-limiter > span:not([class])");
   if (limiterLabel && limiterLabel.textContent === "Limiter gain") limiterLabel.textContent = "Loudness boost";
 
-  // --- Individual tracks + levels per part ---
-  const details = document.createElement("details");
-  details.className = "levels-tracks";
-  const count = [...engine.tracks.values()].length;
-  details.innerHTML = `<summary>Individual tracks (${count}) &amp; levels per part</summary>`;
-  details.appendChild(tracksPanel);
-  levelsRoot.appendChild(details);
-  const syncOpen = (): void => {
-    if (document.body.classList.contains("view-creator")) details.open = true;
-  };
-  syncOpen();
-  new MutationObserver(syncOpen).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+  // --- The project's folders (one fader each, as exported from the session) + levels per part ---
+  const folders = section("Folders", "One fader per folder of the track. Levels per part sets them for just one part.");
+  folders.classList.add("levels-folders");
+  folders.appendChild(tracksPanel);
 
   // --- Film panel tidy-up ---
   const stage = videoRoot.querySelector<HTMLElement>("[data-stage]");

@@ -139,7 +139,6 @@ async function bootstrap(): Promise<void> {
     transportRoot,
     document.querySelector<HTMLElement>(".panel-timeline .panel-head")!,
     tracksPanel,
-    engine,
   );
 
 
