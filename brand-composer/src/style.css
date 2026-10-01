@@ -3144,8 +3144,8 @@ body.view-customer .ws-side .track-row {
 }
 
 /* Which step is showing (customer view). The composer view keeps everything visible. */
-body.step-fit .side-tune,
-body.step-tune .side-fit {
+body.side-tab-fit .side-tune,
+body.side-tab-levels .side-fit {
   display: none;
 }
 body.step-fit .timeline-lane-form,
@@ -3669,4 +3669,12 @@ body.view-customer .output-faders .video-limiter-ceiling {
 }
 .video-volume input[type="checkbox"] {
   width: auto;
+}
+
+.side-tabs-top {
+  margin: 14px 20px 0;
+}
+.switch-row:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }

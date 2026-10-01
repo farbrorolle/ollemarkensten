@@ -85,10 +85,26 @@ export function mountSidePanel(
   tune.className = "panel side-step side-tune";
   tune.dataset.stepPanel = "tune";
   tune.innerHTML = `
-    <div class="side-head"><h2>Fine-tune</h2><button type="button" class="btn-link" data-goto-fit>Done</button></div>
     <div class="side-tab-panel" data-tab-panel="levels"></div>`;
 
-  sideRoot.prepend(fit, tune);
+  // Tabs at the top of the panel: switch between fitting the length and the levels at any time.
+  const sideTabs = document.createElement("div");
+  sideTabs.className = "side-tabs side-tabs-top";
+  sideTabs.setAttribute("role", "tablist");
+  sideTabs.innerHTML = `<button type="button" class="side-tab" data-side-tab="fit" role="tab">Fit the length</button><button type="button" class="side-tab" data-side-tab="levels" role="tab">Levels</button>`;
+  sideRoot.prepend(sideTabs, fit, tune);
+  type SideTab = "fit" | "levels";
+  const setSideTab = (t: SideTab): void => {
+    document.body.classList.toggle("side-tab-fit", t === "fit");
+    document.body.classList.toggle("side-tab-levels", t === "levels");
+    sideTabs.querySelectorAll<HTMLElement>("[data-side-tab]").forEach((b) => {
+      b.classList.toggle("is-active", b.dataset.sideTab === t);
+      b.setAttribute("aria-selected", String(b.dataset.sideTab === t));
+    });
+  };
+  sideTabs.querySelectorAll<HTMLButtonElement>("[data-side-tab]").forEach((b) =>
+    b.addEventListener("click", () => setSideTab(b.dataset.sideTab === "levels" ? "levels" : "fit")),
+  );
   const q = <T extends HTMLElement>(el: HTMLElement, sel: string): T | null => el.querySelector<T>(sel);
 
   // Move the timeline's own controls in (they keep their listeners and state handling).
@@ -124,7 +140,7 @@ export function mountSidePanel(
   if (autoBtn) cards.appendChild(autoBtn);
   if (fitAllBtn) {
     fitAllBtn.classList.add("switch-row");
-    fitAllBtn.innerHTML = `<span class="switch-text"><span class="switch-title">Use every part of the track</span><span class="switch-sub">All parts are in, each shortened or stretched in proportion to the original (whole 4-bar phrases).</span></span><span class="switch" aria-hidden="true"></span>`;
+    fitAllBtn.innerHTML = `<span class="switch-text"><span class="switch-title">Keep every part of the track</span><span class="switch-sub">All parts stay in, each shortened or stretched in proportion to the original (whole 4-bar phrases). Works with Auto arrange.</span></span><span class="switch" aria-hidden="true"></span>`;
     cards.appendChild(fitAllBtn);
   }
   arrangeSwitch?.remove();
@@ -289,6 +305,7 @@ export function mountSidePanel(
   let step: Step = "fit";
   function setStep(next: Step): void {
     step = next;
+    setSideTab(step === "fit" ? "fit" : "levels");
     document.body.classList.toggle("step-fit", step === "fit");
     document.body.classList.toggle("step-tune", step === "tune");
     stepperRoot.querySelectorAll<HTMLElement>("[data-step]").forEach((b) => {
@@ -302,7 +319,6 @@ export function mountSidePanel(
     b.addEventListener("click", () => setStep(b.dataset.step === "tune" ? "tune" : "fit")),
   );
   q(fit, "[data-goto-tune]")!.addEventListener("click", () => setStep("tune"));
-  q(tune, "[data-goto-fit]")!.addEventListener("click", () => setStep("fit"));
   setStep("fit");
 
   // --- Live state ----------------------------------------------------------------------------
