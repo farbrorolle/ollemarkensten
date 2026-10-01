@@ -3169,3 +3169,142 @@ body.view-customer.step-fit .timeline-lane-cues {
   padding: 6px 10px;
   font-size: 12px;
 }
+
+/* --- Levels tab --- */
+.levels-section {
+  margin-bottom: 20px;
+}
+.levels-section .side-note {
+  margin: -4px 0 10px;
+}
+.level-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px 48px;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+.level-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+.level-title {
+  font-size: 13px;
+}
+.level-sub {
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.level-value {
+  font: 11.5px var(--font-mono);
+  color: var(--text-dim);
+  text-align: right;
+}
+.levels-section .video-volume {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px 64px;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--text);
+}
+.levels-section .video-volume input[type="range"] {
+  width: 100%;
+}
+.levels-section .video-limiter {
+  grid-template-columns: minmax(0, 1fr) 120px 64px;
+}
+.levels-section .video-limiter .video-limiter-toggle,
+.levels-section .video-limiter .video-limiter-ceiling {
+  grid-column: 1 / -1;
+}
+.levels-section .master-strip {
+  margin-top: 8px;
+  width: 100%;
+}
+.levels-tracks {
+  border-top: 1px solid var(--panel-border);
+  padding-top: 12px;
+}
+.levels-tracks > summary {
+  cursor: pointer;
+  color: var(--accent-text);
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+.levels-tracks .panel-tracks {
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+.levels-tracks .panel-tracks > h2 {
+  display: none;
+}
+
+/* Film: name + Replace/Remove on the picture; the bar under it is gone. */
+.video-file-chip {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 6px 5px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+  font-size: 12px;
+  cursor: default;
+}
+.video-file-chip .video-file-name {
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.video-file-chip .video-file-length {
+  font: 11.5px var(--font-mono);
+  color: var(--text-dim);
+}
+.video-file-chip .btn {
+  padding: 3px 8px;
+  font-size: 12px;
+  background: transparent;
+  border-color: transparent;
+  color: var(--accent-text);
+}
+.video-file-chip .btn:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.video-bar.is-empty {
+  display: none;
+}
+.transport-film-audio {
+  margin-left: auto;
+  min-width: 0 !important;
+}
+.transport-film-audio[hidden] {
+  display: none;
+}
+.panel-timeline .panel-head {
+  flex-wrap: wrap;
+}
+.panel-timeline .panel-head .video-fit {
+  margin-left: auto;
+  font-size: 12px;
+}
+.video-file-chip .btn,
+.video-file-chip .video-file {
+  white-space: nowrap;
+}
+.timeline-viewbar.is-empty {
+  display: none;
+}
+.timeline-toolbar-2 .zoom-group {
+  margin-left: auto;
+}

@@ -90,9 +90,6 @@ export function mountTransportPanel(root: HTMLElement, engine: AudioEngine, onPl
     if (Number.isFinite(value) && value > 0) engine.setBpm(value);
   });
 
-  engine.arrangement.setOnSectionChange((sectionId) => {
-    sectionEl.textContent = sectionId;
-  });
 
   return {
     update() {
@@ -100,6 +97,9 @@ export function mountTransportPanel(root: HTMLElement, engine: AudioEngine, onPl
       const t = Tone.getTransport().seconds;
       const m = Math.floor(t / 60);
       timeEl.textContent = `${m}:${(t - m * 60).toFixed(1).padStart(4, "0")}`;
+      const sectionId = engine.sectionAtSeconds(Math.max(0, engine.audibleSeconds));
+      const sectionText = sectionId ? engine.sectionName(sectionId) : "–";
+      if (sectionEl.textContent !== sectionText) sectionEl.textContent = sectionText;
       const label = playing() ? "⏸ Pause" : "▶ Play";
       if (playBtn.textContent !== label) playBtn.textContent = label;
     },

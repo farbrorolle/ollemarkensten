@@ -21,7 +21,6 @@ export function mountSidePanel(
   sideRoot: HTMLElement,
   stepperRoot: HTMLElement,
   timelineRoot: HTMLElement,
-  tracksPanel: HTMLElement,
   engine: AudioEngine,
   film: VideoSync,
   playFrom: (seconds: number) => void,
@@ -154,7 +153,6 @@ export function mountSidePanel(
   const [partsRow, layersRow] = paletteRows;
   if (partsRow) q(tune, "[data-parts-slot]")!.appendChild(partsRow);
   if (layersRow) q(tune, "[data-layers-slot]")!.appendChild(layersRow);
-  q(tune, '[data-tab-panel="levels"]')!.appendChild(tracksPanel);
   // The toolbar row the arrange switch lived in may now be empty.
   timelineRoot.querySelectorAll<HTMLElement>(".timeline-toolbar").forEach((bar) => {
     if (!bar.querySelector("button:not([hidden]), [data-status]")) bar.classList.add("is-empty");

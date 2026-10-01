@@ -324,6 +324,15 @@ export class AudioEngine {
     return this.anchorForEnd(filmSeconds);
   }
 
+  /** The part (section id) playing at a transport time, from the arrangement itself (seek-safe). */
+  sectionAtSeconds(seconds: number): string | null {
+    const bars = this.arrangement.totalBars;
+    if (!bars) return null;
+    const bar = Math.floor((seconds - this.musicStartSeconds) / this.barSeconds) + 1;
+    if (bar < 1 || bar > bars) return null;
+    return this.arrangement.arrangementSegments.find((s) => bar >= s.startBar && bar < s.endBar)?.sectionId ?? null;
+  }
+
   sectionName(id: string): string {
     return this.sectionsById.get(id)?.name ?? id;
   }

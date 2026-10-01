@@ -317,7 +317,7 @@ export function mountVideoPanel(
       const position = Math.max(0, engine.audibleSeconds);
       const filmOver = position >= info.duration;
 
-      const sectionId = engine.arrangement.activeSectionId;
+      const sectionId = engine.sectionAtSeconds(position);
       const intoMusic = position - engine.musicStartSeconds;
       const bar = Math.floor(intoMusic / engine.barSeconds) + 1;
       const sectionText =
