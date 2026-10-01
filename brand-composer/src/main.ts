@@ -12,6 +12,7 @@ import { mountVideoPanel } from "./ui/VideoPanel.ts";
 import { VideoSync } from "./video/VideoSync.ts";
 import { findCuts } from "./video/cutDetect.ts";
 import { mountExportBar } from "./ui/ExportBar.ts";
+import { mountSidePanel } from "./ui/SidePanel.ts";
 
 const engine = new AudioEngine();
 const film = new VideoSync(engine);
@@ -106,6 +107,18 @@ async function bootstrap(): Promise<void> {
   const trackList = mountTrackList(trackListRoot, engine, (trackId) => timeline.redrawTrack(trackId));
   const sidechainPanel = mountSidechainPanel(sidechainRoot, engine);
   mountLogoPanel(logoRoot, engine);
+  const sidePanel = mountSidePanel(
+    document.querySelector<HTMLElement>("[data-side-content]")!,
+    document.querySelector<HTMLElement>("[data-stepper]")!,
+    timelineRoot,
+    document.querySelector<HTMLElement>(".panel-tracks")!,
+    engine,
+    film,
+    (seconds) => {
+      Tone.getTransport().seconds = seconds;
+      if (Tone.getTransport().state !== "started") void togglePlay();
+    },
+  );
 
   // A new film: re-arrange the music so the logo ends exactly when the film ends.
   // (The customer can then drag the logo's start line to any sync point.)
@@ -160,6 +173,7 @@ async function bootstrap(): Promise<void> {
     sidechainPanel.update();
     trackList.update();
     timeline.update();
+    sidePanel.update();
     requestAnimationFrame(tick);
   };
   tick();

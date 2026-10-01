@@ -2749,3 +2749,423 @@ body.view-creator {
   border-radius: 999px;
   background: transparent;
 }
+
+/* --- Stepper (top bar) --- */
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.step {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 14px 5px 6px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.step:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.step.is-active {
+  background: var(--panel-2);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+.step-num {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  font: 600 11px var(--font-mono);
+}
+.step.is-active .step-num {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.step-num.is-done {
+  background: var(--green);
+  border-color: var(--green);
+  color: #0d1a10;
+}
+.step-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+.step-title {
+  font-size: 13px;
+  font-weight: 500;
+}
+.step-sub {
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+.step-sep {
+  width: 18px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* --- Side panel steps --- */
+.side-step h2 {
+  margin: 0 0 4px;
+}
+.side-sub {
+  margin: 0 0 16px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.side-group {
+  margin-bottom: 18px;
+}
+.side-group[hidden] {
+  display: none;
+}
+.side-label {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.side-note {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.side-tab-panel .side-note {
+  margin: -4px 0 10px;
+}
+.side-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--accent-text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.chip:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+.chip.is-active {
+  border-color: var(--accent);
+  background: rgba(124, 99, 255, 0.16);
+  color: #fff;
+}
+.custom-length {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.custom-length[hidden] {
+  display: none;
+}
+.custom-length input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: var(--bg);
+  color: var(--text);
+  font: 13px var(--font-mono);
+}
+.custom-length input.is-invalid {
+  border-color: #ff6b6b;
+}
+
+/* Logo lands on: ◀ Previous cut · End card 0:27.0 · Next cut ▶ */
+.logo-cut-row .cut-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+.logo-cut-current {
+  flex: 1;
+  text-align: center;
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--green) 55%, transparent);
+  border-radius: 8px;
+  color: var(--green);
+  font: 600 12px var(--font-mono);
+  white-space: nowrap;
+}
+
+/* Arrangement modes as cards. */
+.arrange-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.arrange-card,
+.arrange-card + .arrange-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--text-dim);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.arrange-card:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.arrange-card.is-active {
+  border-color: var(--accent);
+  background: rgba(124, 99, 255, 0.1);
+}
+.arrange-card-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.arrange-card-text {
+  font-size: 12px;
+  line-height: 1.4;
+}
+.arrange-card[hidden] {
+  display: none;
+}
+
+/* On/off rows with a switch on the right ("Use every part", "Keep the film's length"). */
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.switch-row.is-active,
+.switch-row.toggle-btn.is-active,
+.switch-row.lock-btn.is-active {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+.switch-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+.switch-title {
+  font-weight: 500;
+}
+.switch-sub {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  line-height: 1.35;
+}
+.switch,
+.lock-btn.switch-row::after {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  position: relative;
+  transition: background 0.15s;
+}
+.lock-btn.switch-row {
+  justify-content: space-between;
+}
+.lock-btn.switch-row::after {
+  content: "";
+  background:
+    radial-gradient(circle at 10px 10px, #fff 7px, transparent 7.5px),
+    rgba(255, 255, 255, 0.14);
+}
+.lock-btn.switch-row.is-active::after {
+  background:
+    radial-gradient(circle at 24px 10px, #fff 7px, transparent 7.5px),
+    var(--accent);
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #fff;
+  transition: left 0.15s;
+}
+.is-active > .switch {
+  background: var(--accent);
+}
+.is-active > .switch::after {
+  left: 17px;
+}
+.side-switches {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.side-links .reset-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 16px;
+}
+.side-links .reset-group .btn {
+  background: transparent;
+  font-size: 12px;
+  padding: 6px 10px;
+}
+.side-next {
+  width: 100%;
+  padding: 11px 14px;
+  font-weight: 600;
+}
+
+/* Aha card: the music has been fitted to the film. */
+.aha-card {
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--green) 45%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--green) 9%, var(--panel));
+}
+.aha-card[hidden] {
+  display: none;
+}
+.aha-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.aha-dot {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--green);
+  color: #0d1a10;
+  font-weight: 700;
+  font-size: 14px;
+}
+.aha-title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.aha-text {
+  margin: 6px 0 10px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.aha-play {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Fine-tune tabs. */
+.side-tabs {
+  display: flex;
+  padding: 3px;
+  margin-bottom: 14px;
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+.side-tab {
+  flex: 1;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.side-tab.is-active {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--text);
+}
+.side-tab-panel[hidden] {
+  display: none;
+}
+.side-tab-panel .timeline-palette-row .palette-label {
+  display: none;
+}
+.side-tab-panel .timeline-palette-row {
+  margin-bottom: 16px;
+}
+.side-tab-panel .panel-tracks {
+  padding: 0;
+  border: none;
+}
+.side-tab-panel .panel-tracks > h2 {
+  display: none;
+}
+.timeline-toolbar.is-empty {
+  display: none;
+}
+
+/* Which step is showing (customer view). The composer view keeps everything visible. */
+body.view-customer.step-fit .side-tune,
+body.view-customer.step-tune .side-fit {
+  display: none;
+}
+body.view-customer.step-fit .timeline-lane-form,
+body.view-customer.step-fit .timeline-lane-layers,
+body.view-customer.step-fit .timeline-lane-swells,
+body.view-customer.step-fit .timeline-lane-cues {
+  display: none;
+}
+.logo-cut-row .cut-group {
+  border: none;
+  padding: 0;
+}
+.logo-cut-row .cut-group[hidden] {
+  display: none;
+}
+.logo-cut-row .cut-group .btn {
+  white-space: nowrap;
+  padding: 6px 10px;
+  font-size: 12px;
+}

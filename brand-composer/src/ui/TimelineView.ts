@@ -200,8 +200,8 @@ export function mountTimeline(
         <button type="button" class="arrange-btn" data-arrange-mode="auto" title="The track as composed, in its own order, ending cleanly at the logo (no stubs of a part); longer music goes round again">Auto arrange</button>
         <button type="button" class="arrange-btn" data-arrange-mode="original" title="The track plays as written and is simply cut at the end">Original form</button>
       </div>
-      <button type="button" class="btn toggle-btn" data-fit-all aria-pressed="false" title="Keep every part of the track in the music, each with the same share of the length as in the original">Include all parts</button>
-      <button type="button" class="btn lock-btn is-active" data-lock aria-pressed="true" hidden title="While on, adding, removing or resizing parts never changes the total length: other parts are shortened or lengthened to make room">🔒 Always lock to video length</button>
+      <button type="button" class="btn toggle-btn" data-fit-all aria-pressed="false" title="Keep every part of the track in the music, each with the same share of the length as in the original">Use every part of the track</button>
+      <button type="button" class="btn lock-btn is-active" data-lock aria-pressed="true" hidden title="While on, adding, removing or resizing parts never changes the total length: other parts are shortened or lengthened to make room">Keep the film's length</button>
       <span class="reset-group">
         <button type="button" class="btn" data-reset-original title="Back to the track exactly as composed: every part once, at full length">↺ Reset to original form</button>
         <button type="button" class="btn" data-reset-film hidden title="Re-arrange from scratch to the film's length (logo on the film's last cut)">↺ Reset to film length</button>
@@ -436,7 +436,7 @@ export function mountTimeline(
     lockOn = !lockOn;
     lockBtn.classList.toggle("is-active", lockOn);
     lockBtn.setAttribute("aria-pressed", String(lockOn));
-    lockBtn.textContent = lockOn ? "🔒 Always lock to video length" : "🔓 Always lock to video length";
+    lockBtn.textContent = "Keep the film's length";
   });
   let lockMessage = "";
 

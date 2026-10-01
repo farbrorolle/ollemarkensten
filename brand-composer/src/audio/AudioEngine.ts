@@ -707,6 +707,11 @@ export class AudioEngine {
     for (const listener of this.arrangementListeners) listener();
   }
 
+  /** The section longer music goes round again from (config `fit.loopFrom`), if set. */
+  get loopFromSectionId(): string | undefined {
+    return this.fitConfig?.loopFrom;
+  }
+
   /** Template index the music goes round again from (config `fit.loopFrom`). */
   private get loopFromIndex(): number | undefined {
     const id = this.fitConfig?.loopFrom;
