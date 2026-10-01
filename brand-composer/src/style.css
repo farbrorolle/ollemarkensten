@@ -2291,3 +2291,22 @@ body.view-customer .track-row {
   height: 100%;
   pointer-events: none;
 }
+
+/* Swell marks sit with their right edge on the downbeat (left = the anchor, pulled back by their width). */
+.swell-mark {
+  transform: translateX(-100%);
+  box-sizing: border-box;
+  min-width: 16px;
+}
+
+.swell-size-small::before {
+  top: 45%;
+}
+
+.swell-size-small {
+  border-right-width: 1px;
+}
+
+.swell-card-small {
+  border-style: dashed;
+}

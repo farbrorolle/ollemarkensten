@@ -46,6 +46,8 @@ export class Track {
   readonly fileStartBar: number;
   readonly isLogo: boolean;
   readonly isSwell: boolean;
+  /** Swell tracks: "big" ones (e.g. the synth swell) only play in big swells, "small" ones (sfx) in all. */
+  readonly swellSize: "big" | "small";
   /** Ring-out seconds after each source bar (index 0 = bar 1); empty if not analysed. */
   readonly tails: number[];
   /** Ring-out after each source beat (index 0 = end of beat 1), for the logo's mid-bar hit. */
@@ -96,6 +98,7 @@ export class Track {
     this.beatTails = config.beatTails ?? [];
     this.pickups = config.pickups ?? {};
     this.swellEvents = config.swellEvents ?? [];
+    this.swellSize = config.swellSize ?? "big";
 
     this.sidechainGain = new Tone.Gain(1);
     this.sectionGain = new Tone.Gain(1);

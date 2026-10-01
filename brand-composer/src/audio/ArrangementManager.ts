@@ -12,18 +12,27 @@ const CUT_FADE_SECONDS = 0.003; // "cut": just enough to avoid a hard click, no 
 const MAX_RING_OUT_SECONDS = 2;
 /** Into a *different* part (other chords): the outgoing part only rings on this long. */
 const CROSSFADE_RING_OUT_SECONDS = 0.35;
+/** Where the bounce itself moves on into another part, the outgoing part only gets this release. */
+const BOUNDARY_RING_OUT_SECONDS = 0.08;
 /** "Cut": the outgoing part stops right at the boundary (just enough to avoid a click). */
 const CUT_RING_OUT_SECONDS = 0.03;
 /** A late music start this long (or longer) gets a swell into bar 1. */
 const LEAD_IN_SWELL_MIN_SECONDS = 0.75;
 /** Swell clips quieter than this (peak, dBFS) aren't shown in the Swells lane. */
 const AUDIBLE_SWELL_DB = -24;
+/** (Small swells -- the sfx -- are quieter by nature.) */
+const AUDIBLE_SMALL_SWELL_DB = -36;
+/** A big swell needs at least this many bars since the previous big one, else it's kept small. */
+const SWELL_SPACING_BARS = 8;
 
 /** The customer's swell edits, by the arrangement bar a swell leads into. */
 export interface SwellEdits {
   removed: number[];
-  added: number[];
+  added: { bar: number; size: SwellSize }[];
 }
+
+/** "small" = the sfx swell only, "big" = synth + sfx. */
+export type SwellSize = "small" | "big";
 
 /** A swell in the arrangement (synth + sfx together), for the timeline. */
 export interface SwellMark {
@@ -33,6 +42,7 @@ export interface SwellMark {
   start: number;
   anchor: number;
   kind: "auto" | "lead-in" | "added";
+  size: SwellSize;
   /** An automatic swell the customer switched off (shown so it can be put back). */
   removed: boolean;
 }
@@ -112,6 +122,33 @@ export class ArrangementManager {
   swellEdits: SwellEdits = { removed: [], added: [] };
   /** Where swells play in the current arrangement (for the timeline), by the bar they lead into. */
   readonly swellMarks = new Map<number, SwellMark>();
+  /** Part starts whose automatic swell is kept small (it comes soon after a big one). */
+  private smallSwellBars = new Set<number>();
+
+  /**
+   * Big swells are saved for new parts that come a while after the last big one: an automatic
+   * swell within SWELL_SPACING_BARS of the previous big swell is made small (sfx only).
+   */
+  private planSwellSizes(segments: ArrangementSegment[], timing: ArrangementTiming): Set<number> {
+    const removed = new Set(this.swellEdits.removed);
+    const added = new Map(this.swellEdits.added.map((a) => [a.bar, a.size]));
+    const bars = new Set<number>();
+    segments.forEach((seg, i) => {
+      if (i > 0 && segments[i - 1]!.sectionId !== seg.sectionId) bars.add(seg.startBar);
+    });
+    if (timing.musicStartSeconds >= LEAD_IN_SWELL_MIN_SECONDS) bars.add(1);
+    for (const bar of added.keys()) bars.add(bar);
+    const small = new Set<number>();
+    let lastBig = -Infinity;
+    for (const bar of Array.from(bars).sort((a, b) => a - b)) {
+      if (removed.has(bar)) continue;
+      const size = added.get(bar) ?? (bar - lastBig >= SWELL_SPACING_BARS ? "big" : "small");
+      if (size === "big") lastBig = bar;
+      else small.add(bar);
+    }
+    return small;
+  }
+
   /** Per section: tracks that never ring over into it (from the project config). */
   private sectionCutInto = new Map<string, string[]>();
   private segments: ArrangementSegment[] = [];
@@ -166,6 +203,7 @@ export class ArrangementManager {
     const envelopes: GainEnvelope[] = [];
     const segments = buildSegments(cues, loopBars);
     this.swellMarks.clear();
+    this.smallSwellBars = this.planSwellSizes(segments, timing);
     this.sectionCutInto = new Map(Array.from(sections.values()).map((sec) => [sec.id, sec.cutInto ?? []]));
     this.segments = segments;
     this.loopBars = loopBars;
@@ -275,6 +313,7 @@ export class ArrangementManager {
       lastStart[v] = when;
       return true;
     };
+    const sectionStartBars = new Set(Object.values(regions ?? {}).map((r) => r[0]));
     const chunkLists = segments.map((segment) => {
       const region = regions?.[segment.sectionId];
       return region ? regionChunks(segment.startBar, segment.endBar - segment.startBar, region, segment.sourceBar) : [];
@@ -317,18 +356,22 @@ export class ArrangementManager {
       const cutsHere =
         !!next &&
         (next.transition === "cut" || (next.cutTracks ?? this.sectionCutInto.get(next.sectionId) ?? []).includes(track.id));
+      // The ring-over is the bounce playing on past the part's end. Where the bounce moves into
+      // another part right there, that is the *other* part's material (other chords, its kick on
+      // the 1): only the briefest release. The analysed tail never forces a minimum -- if a new
+      // attack comes right on the downbeat, the outgoing part stops there (no double kick).
+      const bounceMovesOn = sectionStartBars.has(sourceEnd + 1);
+      const ringCap = bounceMovesOn ? BOUNDARY_RING_OUT_SECONDS : nextIsLoop ? MAX_RING_OUT_SECONDS : CROSSFADE_RING_OUT_SECONDS;
       let ringOut = continuesIntoNext
         ? CUT_FADE_SECONDS
         : next
           ? cutsHere
             ? CUT_RING_OUT_SECONDS
-            : nextIsLoop
-              ? Math.max(CUT_FADE_SECONDS, track.tails.length ? tail : fadeSecondsFor(next.transition))
-              : Math.max(fadeSecondsFor(next.transition), Math.min(CROSSFADE_RING_OUT_SECONDS, tail))
+            : Math.max(CUT_RING_OUT_SECONDS, Math.min(ringCap, track.tails.length ? tail : fadeSecondsFor(next.transition)))
           : Tone.Time(END_FADE).toSeconds();
       const start = this.barStartSeconds(segment.startBar);
       let end = this.barStartSeconds(segment.endBar);
-      let hold = 0.5; // share of the ring-out held at full level before fading
+      let hold = bounceMovesOn ? 0 : 0.5; // share of the ring-out held at full level before fading
       if (strayPickup) {
         // Stop before the pickup bar(s) instead (a short ring-out of what came before).
         end -= strayPickup * barSec;
@@ -457,9 +500,14 @@ export class ArrangementManager {
         : all.reduce((a, b) => (preRoll(b) < preRoll(a) ? b : a));
       for (const event of pick) placed.push({ event, arrangementBar: 1, kind: "lead-in" });
     }
-    for (const bar of this.swellEdits.added) {
+    for (const { bar, size } of this.swellEdits.added) {
       if (has(bar) || bar < 1 || bar > this.loopBars) continue;
+      if (size === "small" && track.swellSize === "big") continue;
       for (const event of standIn(bar)) placed.push({ event, arrangementBar: bar, kind: "added" });
+    }
+    // Swells close after a big one are kept small: the big track sits those out.
+    if (track.swellSize === "big") {
+      for (let k = placed.length - 1; k >= 0; k--) if (placed[k]!.kind !== "added" && this.smallSwellBars.has(placed[k]!.arrangementBar)) placed.splice(k, 1);
     }
     placed.sort((a, b) => a.arrangementBar - b.arrangementBar || a.event.start - b.event.start);
     const removed = new Set(this.swellEdits.removed);
@@ -468,7 +516,7 @@ export class ArrangementManager {
     const partStarts = new Set(segments.map((seg) => seg.startBar));
     for (const p of placed) {
       if (p.kind === "auto" && !partStarts.has(p.arrangementBar)) continue;
-      if (p.kind === "auto" && track.peakDb(p.event.start, p.event.end) < AUDIBLE_SWELL_DB) continue;
+      if (p.kind === "auto" && track.peakDb(p.event.start, p.event.end) < (track.swellSize === "small" ? AUDIBLE_SMALL_SWELL_DB : AUDIBLE_SWELL_DB)) continue;
       const anchorTime = this.barStartSeconds(p.arrangementBar);
       const start = Math.max(0, anchorTime - ((p.event.anchorBar - 1) * timing.barSeconds - p.event.start));
       const mark = this.swellMarks.get(p.arrangementBar);
@@ -477,6 +525,7 @@ export class ArrangementManager {
         start: Math.min(start, mark?.start ?? Infinity),
         anchor: anchorTime,
         kind: mark?.kind === "added" ? "added" : p.kind,
+        size: mark?.size === "big" || track.swellSize === "big" ? "big" : "small",
         removed: removed.has(p.arrangementBar),
       });
     }

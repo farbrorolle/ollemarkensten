@@ -1563,24 +1563,29 @@ export function mountTimeline(
   if (engine.hasSwellTracks) {
     const layerRow = root.querySelector<HTMLElement>("[data-layer-row]")!;
     layerRow.hidden = false;
-    const swellCard = document.createElement("button");
-    swellCard.type = "button";
-    swellCard.className = "timeline-palette-chip timeline-palette-swell";
-    swellCard.draggable = true;
-    swellCard.innerHTML = `<span class="chip-name">↗ Swell</span><span class="chip-bars">synth + sfx into a downbeat</span>`;
-    swellCard.title = "Drag onto the Swells lane to add a swell into that bar (or click to add one at the playhead)";
-    swellCard.addEventListener("dragstart", (e) => {
-      e.dataTransfer?.setData(SWELL_MIME, "swell");
-      e.dataTransfer?.setData("text/plain", "Swell");
-      if (e.dataTransfer) e.dataTransfer.effectAllowed = "copy";
-      swellLane.classList.add("timeline-lane-drop-target");
-    });
-    swellCard.addEventListener("dragend", () => swellLane.classList.remove("timeline-lane-drop-target"));
-    swellCard.addEventListener("click", () => {
-      const t = Tone.getTransport().seconds;
-      engine.addSwell(Math.max(1, Math.min(totalBars, Math.round(1 + (t - engine.musicStartSeconds) / engine.barSeconds))));
-    });
-    root.querySelector<HTMLElement>("[data-layer-palette]")!.appendChild(swellCard);
+    for (const size of ["small", "big"] as const) {
+      const swellCard = document.createElement("button");
+      swellCard.type = "button";
+      swellCard.className = `timeline-palette-chip timeline-palette-swell swell-card-${size}`;
+      swellCard.draggable = true;
+      swellCard.innerHTML =
+        size === "small"
+          ? `<span class="chip-name">↗ Small swell</span><span class="chip-bars">sfx – a light lift</span>`
+          : `<span class="chip-name">⇗ Big swell</span><span class="chip-bars">synth + sfx – a big lift</span>`;
+      swellCard.title = `Drag onto the Swells lane to add a ${size} swell into that bar (or click to add one at the playhead)`;
+      swellCard.addEventListener("dragstart", (e) => {
+        e.dataTransfer?.setData(SWELL_MIME, size);
+        e.dataTransfer?.setData("text/plain", `${size} swell`);
+        if (e.dataTransfer) e.dataTransfer.effectAllowed = "copy";
+        swellLane.classList.add("timeline-lane-drop-target");
+      });
+      swellCard.addEventListener("dragend", () => swellLane.classList.remove("timeline-lane-drop-target"));
+      swellCard.addEventListener("click", () => {
+        const t = Tone.getTransport().seconds;
+        engine.addSwell(Math.max(1, Math.min(totalBars, Math.round(1 + (t - engine.musicStartSeconds) / engine.barSeconds))), size);
+      });
+      root.querySelector<HTMLElement>("[data-layer-palette]")!.appendChild(swellCard);
+    }
     swellsEl.addEventListener("dragover", (e) => {
       if (!e.dataTransfer?.types.includes(SWELL_MIME)) return;
       e.preventDefault();
@@ -1590,7 +1595,8 @@ export function mountTimeline(
       if (!e.dataTransfer?.types.includes(SWELL_MIME)) return;
       e.preventDefault();
       swellLane.classList.remove("timeline-lane-drop-target");
-      engine.addSwell(swellBarAt(e.clientX));
+      const size = e.dataTransfer.getData(SWELL_MIME) === "small" ? "small" : "big";
+      engine.addSwell(swellBarAt(e.clientX), size);
     });
   }
 
@@ -1598,12 +1604,13 @@ export function mountTimeline(
     swellsEl.innerHTML = "";
     for (const mark of engine.swellMarks) {
       const el = document.createElement("div");
-      el.className = `swell-mark swell-${mark.kind}${mark.removed ? " swell-removed" : ""}`;
+      el.className = `swell-mark swell-${mark.kind} swell-size-${mark.size}${mark.removed ? " swell-removed" : ""}`;
       const x0 = xOfSeconds(mark.start);
       const x1 = xOfSeconds(mark.anchor);
-      el.style.left = `${x0 * 100}%`;
-      el.style.width = `${Math.max(0.004, x1 - x0) * 100}%`;
-      const what = mark.kind === "lead-in" ? "Swell into the start" : mark.kind === "added" ? "Added swell" : "Swell";
+      // Anchored by its right edge, which sits exactly on the downbeat it leads into.
+      el.style.left = `${x1 * 100}%`;
+      el.style.width = `${Math.max(0, x1 - x0) * 100}%`;
+      const what = `${mark.size === "big" ? "Big" : "Small"} swell${mark.kind === "lead-in" ? " into the start" : mark.kind === "added" ? " (added)" : ""}`;
       el.title = mark.removed
         ? `${what} into bar ${mark.bar} – switched off (click ↺ to put it back)`
         : `${what} into bar ${mark.bar} (${formatFilmTime(mark.anchor)})`;

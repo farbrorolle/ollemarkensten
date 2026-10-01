@@ -51,6 +51,8 @@ export interface TrackConfig {
   pickups?: Record<string, number>;
   /** role "swell": the swell clips in this file (source seconds + the bar they lead into). */
   swellEvents?: { start: number; end: number; anchorBar: number }[];
+  /** Swell tracks: "big" (only in big swells, e.g. the synth swell) or "small" (in every swell, e.g. sfx). Default "big". */
+  swellSize?: "big" | "small";
   volume?: number; // dB, default 0
   pan?: number; // -1..1, default 0
   mute?: boolean;

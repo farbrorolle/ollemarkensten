@@ -5,7 +5,7 @@ import type { TrackPlayMode } from "./Track.ts";
 import { Sidechain } from "./Sidechain.ts";
 import type { SidechainTarget } from "./Sidechain.ts";
 import { ArrangementManager } from "./ArrangementManager.ts";
-import type { SwellEdits, SwellMark } from "./ArrangementManager.ts";
+import type { SwellEdits, SwellMark, SwellSize } from "./ArrangementManager.ts";
 import { GainEnvelope } from "./GainEnvelope.ts";
 import { LoudnessMeter } from "./LoudnessMeter.ts";
 import type { EnvelopePoint } from "./GainEnvelope.ts";
@@ -627,7 +627,7 @@ export class AudioEngine {
       this.redoStack.length = 0;
     }
     this.currentState = {
-      swellEdits: { removed: [...this._swellEdits.removed], added: [...this._swellEdits.added] },
+      swellEdits: { removed: [...this._swellEdits.removed], added: this._swellEdits.added.map((a) => ({ ...a })) },
       layers: this._layers.map((l) => ({ ...l })),
       volumeCues: this._volumeCues.map((c) => ({ ...c })),
       cues: cues.map((c) => ({ ...c })),
@@ -647,7 +647,7 @@ export class AudioEngine {
     this._lastFit = fit; // null = edited by hand
     for (const track of this.tracks.values()) track.resyncSectionTakes();
     this.arrangement.swellCutoffBeat = this.hasLogo ? this.logoConfig!.anchorBeat : 0;
-    this.arrangement.swellEdits = { removed: [...this._swellEdits.removed], added: [...this._swellEdits.added] };
+    this.arrangement.swellEdits = { removed: [...this._swellEdits.removed], added: this._swellEdits.added.map((a) => ({ ...a })) };
     const ring = new Set(this.logoConfig?.ringOut ?? []);
     this.arrangement.logoRingOut = new Set(
       Array.from(this.tracks.values())
@@ -705,18 +705,23 @@ export class AudioEngine {
 
   /** Switches the swell into `bar` off (an automatic one) or removes it (an added one). */
   removeSwell(bar: number): void {
-    const added = this._swellEdits.added.filter((b) => b !== bar);
-    const removed = this._swellEdits.added.includes(bar) ? this._swellEdits.removed : [...new Set([...this._swellEdits.removed, bar])];
+    const wasAdded = this._swellEdits.added.some((a) => a.bar === bar);
+    const added = this._swellEdits.added.filter((a) => a.bar !== bar);
+    const removed = wasAdded ? this._swellEdits.removed : [...new Set([...this._swellEdits.removed, bar])];
     this.setSwellEdits({ removed, added });
   }
 
   /** Puts a swell into `bar` (back): un-removes an automatic one, or adds one. */
-  addSwell(bar: number): void {
-    if (this._swellEdits.removed.includes(bar)) {
+  addSwell(bar: number, size?: SwellSize): void {
+    if (this._swellEdits.removed.includes(bar) && !size) {
       this.setSwellEdits({ removed: this._swellEdits.removed.filter((b) => b !== bar), added: this._swellEdits.added });
-    } else if (!this.arrangement.swellMarks.has(bar)) {
-      this.setSwellEdits({ removed: this._swellEdits.removed, added: [...this._swellEdits.added, bar] });
+      return;
     }
+    // A new swell (or one of another size) into this bar.
+    this.setSwellEdits({
+      removed: this._swellEdits.removed.filter((b) => b !== bar),
+      added: [...this._swellEdits.added.filter((a) => a.bar !== bar), { bar, size: size ?? "big" }],
+    });
   }
 
   private setSwellEdits(edits: SwellEdits): void {
@@ -724,7 +729,7 @@ export class AudioEngine {
     if (!state) return;
     this.undoStack.push(state);
     this.redoStack.length = 0;
-    this._swellEdits = { removed: [...edits.removed], added: [...edits.added] };
+    this._swellEdits = { removed: [...edits.removed], added: edits.added.map((a) => ({ ...a })) };
     this.restoring = true;
     try {
       this.applyArrangement(state.cues, state.loopBars, state.musicStartSeconds, state.fit);
@@ -924,7 +929,7 @@ export class AudioEngine {
   private restoreState(state: ArrangementState): void {
     this._volumeCues = state.volumeCues.map((c) => ({ ...c }));
     this._layers = state.layers.map((l) => ({ ...l }));
-    this._swellEdits = { removed: [...state.swellEdits.removed], added: [...state.swellEdits.added] };
+    this._swellEdits = { removed: [...state.swellEdits.removed], added: state.swellEdits.added.map((a) => ({ ...a })) };
     this.logoEnabled = state.logoEnabled;
     this._arrangeMode = state.arrangeMode;
     this._fitAllParts = state.fitAllParts;
