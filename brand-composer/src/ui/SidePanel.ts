@@ -54,6 +54,12 @@ export function mountSidePanel(
     </div>
     <h2>Fit the length</h2>
     <p class="side-sub" data-fit-sub></p>
+    <div class="side-group" data-arrange-group>
+      <div class="side-label">How the music is arranged</div>
+      <div class="arrange-cards" data-arrange-cards></div>
+    </div>
+    <div class="side-group side-switches" data-switches></div>
+    <div class="side-links" data-links></div>
     <div class="side-group" data-logo-group hidden>
       <div class="side-label">Logo lands on</div>
       <div class="logo-cut-row" data-logo-cut-row></div>
@@ -61,10 +67,10 @@ export function mountSidePanel(
     </div>
     <div class="length-tip" data-length-tip hidden>
       <div class="length-tip-title">Try another length</div>
-      <p>Drag the music's right edge in the timeline, or choose a preset below. The track re-arranges itself, always in time – or add your film and it fits itself.</p>
+      <p>Drag the music's right edge in the timeline – the track re-arranges itself, always in time. Or add your film and it fits itself.</p>
     </div>
-    <div class="side-group">
-      <div class="side-label">Length</div>
+    <div class="side-group side-other-lengths">
+      <div class="side-label">Other lengths <span class="side-optional">optional</span></div>
       <div class="chip-row" data-length-chips></div>
       <form class="custom-length" data-custom hidden>
         <input type="text" inputmode="decimal" placeholder="e.g. 45 or 1:20" aria-label="Length in seconds or m:ss" data-custom-input />
@@ -72,12 +78,6 @@ export function mountSidePanel(
       </form>
       <p class="side-note" data-length-note></p>
     </div>
-    <div class="side-group" data-arrange-group>
-      <div class="side-label">When the length changes</div>
-      <div class="arrange-cards" data-arrange-cards></div>
-    </div>
-    <div class="side-group side-switches" data-switches></div>
-    <div class="side-links" data-links></div>
     <button type="button" class="btn side-next" data-goto-tune>Customize the arrangement: parts, melody &amp; swells →</button>`;
 
   // --- Step 2: Fine-tune ---------------------------------------------------------------------
@@ -148,7 +148,13 @@ export function mountSidePanel(
     lockBtn.classList.add("switch-row");
     q(fit, "[data-switches]")!.appendChild(lockBtn);
   }
-  if (resetGroup) q(fit, "[data-links]")!.appendChild(resetGroup);
+  if (resetGroup) {
+    q(fit, "[data-links]")!.appendChild(resetGroup);
+    const ro = resetGroup.querySelector<HTMLElement>("[data-reset-original]");
+    const rf = resetGroup.querySelector<HTMLElement>("[data-reset-film]");
+    if (ro) ro.textContent = "↺ Original length";
+    if (rf) rf.textContent = "↺ Fit to the film again";
+  }
   const logoGroup = q<HTMLElement>(fit, "[data-logo-group]")!;
   const logoCutRow = q<HTMLElement>(fit, "[data-logo-cut-row]")!;
   const endCardLabel = document.createElement("span");
@@ -209,11 +215,6 @@ export function mountSidePanel(
     if (!engine.canFit) return;
     engine.fitToAnchor(engine.anchorForEnd(seconds));
   };
-  const fitToFilm = (): void => {
-    const info = film.info;
-    if (!info || !engine.canFit) return;
-    engine.fitToAnchor(film.detectedCut ?? engine.defaultAnchorForFilm(info.duration));
-  };
   const parseLength = (text: string): number | null => {
     const t = text.trim().replace(",", ".");
     const m = /^(\d+):(\d{1,2}(?:\.\d+)?)$/.exec(t);
@@ -248,10 +249,6 @@ export function mountSidePanel(
 
   function renderChips(): void {
     const items: { label: string; choice: Choice; title: string; run: () => void }[] = [];
-    if (film.info) {
-      items.push({ label: `Film · ${formatFilmTime(film.info.duration)}`, choice: "film", title: "Fit the music to the film (logo on its end card)", run: fitToFilm });
-    }
-    items.push({ label: "Original", choice: "original", title: "The track exactly as composed", run: () => engine.resetToOriginalForm() });
     for (const n of [60, 30, 15]) items.push({ label: `${n} s`, choice: n, title: `Make the music ${n} seconds long`, run: () => fitToEnd(n) });
     chipsEl.innerHTML = "";
     for (const item of items) {
@@ -284,9 +281,7 @@ export function mountSidePanel(
       renderChips();
     });
     chipsEl.appendChild(custom);
-    lengthNote.textContent = film.info
-      ? "Fitted to the film. Pick another length to override, or drag the music's right edge."
-      : "Or drag the music's right edge to any length. The logo always lands at the end.";
+    lengthNote.textContent = "Or drag the music's right edge to any length. The logo always lands at the end.";
   }
 
   // --- Aha card ------------------------------------------------------------------------------
