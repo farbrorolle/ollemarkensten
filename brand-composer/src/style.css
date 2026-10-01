@@ -3890,3 +3890,10 @@ body.view-customer [data-mode-toggle] {
 .parts-card[data-layers-card] .timeline-palette {
   flex-wrap: nowrap;
 }
+/* Levels per part: the status line has its own reserved row, so the faders don't jump when it appears. */
+.part-levels-status {
+  flex-basis: 100%;
+  min-height: 16px;
+  font-size: 12px;
+  color: var(--green);
+}

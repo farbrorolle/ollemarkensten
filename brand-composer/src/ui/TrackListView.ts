@@ -3,6 +3,15 @@ import { MUSIC_CUE_TRACK, VOLUME_CUE_MUTE_DB } from "../audio/AudioEngine.ts";
 import type { AudioEngine } from "../audio/AudioEngine.ts";
 import type { Track } from "../audio/Track.ts";
 
+/**
+ * The level (dB vs the mix) a track already has in the part the Levels buttons work on. The faders
+ * show that level plus what you're trying, so after "Set levels for this part" a fader stays where
+ * you put it instead of jumping back to 0. Set by mountPartLevels.
+ */
+let partLevelOf: (trackId: string) => number = () => 0;
+/** Faders being dragged right now (not re-synced while in the hand). */
+const draggingFaders = new Set<HTMLInputElement>();
+
 /** Buttons whose state can also be changed elsewhere (e.g. solo from the sidechain panel). */
 const liveButtons: {
   track: Track;
@@ -30,7 +39,7 @@ function mountTrackRow(
       ${loadControls}
       <span class="track-part-level" data-part-level></span>
     </span>
-    <input data-volume type="range" min="-60" max="6" step="0.5" title="Volume (dB)" />
+    <input data-volume type="range" min="-40" max="6" step="0.5" title="Volume (dB) – all the way down = muted" />
     <input data-pan class="creator-only" type="range" min="-1" max="1" step="0.05" title="Pan" />
     <button data-mute class="btn btn-toggle">M</button>
     <button data-solo class="btn btn-toggle creator-only">S</button>
@@ -46,12 +55,21 @@ function mountTrackRow(
   const soloBtn = row.querySelector<HTMLButtonElement>("[data-solo]")!;
 
   liveButtons.push({ track, solo: soloBtn, mute: muteBtn, volume: volumeInput, partLevel: row.querySelector<HTMLElement>("[data-part-level]")! });
+  const baseVolume = track.volume;
   volumeInput.value = String(track.volume);
   panInput.value = String(track.pan);
   muteBtn.classList.toggle("btn-toggle-active", track.mute);
   soloBtn.classList.toggle("btn-toggle-active", track.solo);
 
-  volumeInput.addEventListener("input", () => (track.volume = Number(volumeInput.value)));
+  // The fader shows the level heard in the part (its set level + the change you're trying).
+  volumeInput.addEventListener("input", () => {
+    const v = Number(volumeInput.value);
+    track.volume = v <= Number(volumeInput.min) ? -Infinity : baseVolume + v - partLevelOf(track.id);
+  });
+  volumeInput.addEventListener("pointerdown", () => draggingFaders.add(volumeInput));
+  // (released anywhere – the pointer may leave the fader while dragging)
+  window.addEventListener("pointerup", () => draggingFaders.delete(volumeInput));
+  window.addEventListener("pointercancel", () => draggingFaders.delete(volumeInput));
   panInput.addEventListener("input", () => (track.pan = Number(panInput.value)));
   muteBtn.addEventListener("click", () => {
     track.mute = !track.mute;
@@ -132,9 +150,13 @@ function mountPartLevels(panel: HTMLElement, engine: AudioEngine, base: Map<stri
   };
   const trialOffset = (t: Track): number => t.volume - (base.get(t.id) ?? 0);
   const levelIn = (trackId: string, startBar: number): number => engine.volumeAt(trackId, startBar + 0.001);
+  partLevelOf = (trackId: string): number => {
+    const part = currentPart();
+    return part ? levelIn(trackId, part.startBar) : 0;
+  };
   const resetFaders = (): void => {
     for (const t of tracks()) t.volume = base.get(t.id) ?? 0;
-    for (const lb of liveButtons) lb.volume.value = String(lb.track.volume);
+    // (The faders then show the part's new level – see the sync below – so they don't jump to 0.)
   };
   const clampDb = (db: number): number => Math.max(VOLUME_CUE_MUTE_DB, Math.min(12, Math.round(db * 2) / 2));
 
@@ -223,6 +245,12 @@ function mountPartLevels(panel: HTMLElement, engine: AudioEngine, base: Map<stri
       const db = part ? levelIn(lb.track.id, part.startBar) : 0;
       const text = Math.abs(db) < 0.01 ? "" : db <= VOLUME_CUE_MUTE_DB ? "muted in this part" : `${db > 0 ? "+" : ""}${db} dB in this part`;
       if (lb.partLevel.textContent !== text) lb.partLevel.textContent = text;
+      // Fader = level heard in this part (set level + what you're trying), unless it's in your hand.
+      if (!draggingFaders.has(lb.volume)) {
+        const heard = db + trialOffset(lb.track);
+        const shown = Number.isFinite(heard) ? Math.max(Number(lb.volume.min), Math.min(Number(lb.volume.max), heard)) : Number(lb.volume.min);
+        if (Math.abs(Number(lb.volume.value) - shown) > 0.01) lb.volume.value = String(shown);
+      }
     }
   };
 }
