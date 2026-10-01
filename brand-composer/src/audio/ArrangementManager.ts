@@ -16,6 +16,8 @@ const CROSSFADE_RING_OUT_SECONDS = 0.35;
 const CUT_RING_OUT_SECONDS = 0.03;
 /** A late music start this long (or longer) gets a swell into bar 1. */
 const LEAD_IN_SWELL_MIN_SECONDS = 0.75;
+/** Swell clips quieter than this (peak, dBFS) aren't shown in the Swells lane. */
+const AUDIBLE_SWELL_DB = -24;
 
 /** The customer's swell edits, by the arrangement bar a swell leads into. */
 export interface SwellEdits {
@@ -461,7 +463,12 @@ export class ArrangementManager {
     }
     placed.sort((a, b) => a.arrangementBar - b.arrangementBar || a.event.start - b.event.start);
     const removed = new Set(this.swellEdits.removed);
+    // The lane shows the swells that lead into a part (and the start / added ones) and can be heard;
+    // swells inside a part just play as part of the music, and near-silent clips aren't shown.
+    const partStarts = new Set(segments.map((seg) => seg.startBar));
     for (const p of placed) {
+      if (p.kind === "auto" && !partStarts.has(p.arrangementBar)) continue;
+      if (p.kind === "auto" && track.peakDb(p.event.start, p.event.end) < AUDIBLE_SWELL_DB) continue;
       const anchorTime = this.barStartSeconds(p.arrangementBar);
       const start = Math.max(0, anchorTime - ((p.event.anchorBar - 1) * timing.barSeconds - p.event.start));
       const mark = this.swellMarks.get(p.arrangementBar);

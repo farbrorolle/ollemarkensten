@@ -238,6 +238,7 @@ export function mountTimeline(
     <div class="timeline-body" data-body>
       <div class="timeline-lanes" data-lanes></div>
       <div class="timeline-overlay" data-overlay>
+        <canvas class="timeline-grid" data-grid></canvas>
         <div class="timeline-lead-in" data-lead-in hidden><span class="timeline-lead-in-label" data-lead-in-label></span></div>
         <div class="timeline-after-film" data-after-film hidden></div>
         <div class="timeline-logo-anchor" data-logo-anchor hidden>
@@ -784,10 +785,33 @@ export function mountTimeline(
     Tone.getTransport().seconds = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * spanSeconds;
   });
 
+  /** Bar lines across the lanes (stronger every 4 bars), so parts can be dragged to bars by eye. */
+  const gridCanvas = root.querySelector<HTMLCanvasElement>("[data-grid]")!;
+  function drawGrid(): void {
+    const width = overlay.clientWidth;
+    const height = overlay.clientHeight;
+    if (!width || !height) return;
+    gridCanvas.width = width;
+    gridCanvas.height = height;
+    const ctx = gridCanvas.getContext("2d")!;
+    ctx.clearRect(0, 0, width, height);
+    const pxPerBar = (width * engine.barSeconds) / spanSeconds;
+    const every = pxPerBar >= 6 ? 1 : pxPerBar >= 1.5 ? 4 : 16;
+    for (let bar = 1; bar <= totalBars + 1; bar += every) {
+      const x = Math.round(xOfBar(bar) * width) + 0.5;
+      const phrase = (bar - 1) % 4 === 0;
+      ctx.fillStyle = phrase ? "rgba(255, 255, 255, 0.13)" : "rgba(255, 255, 255, 0.05)";
+      ctx.fillRect(x, 0, 1, height);
+    }
+  }
+
   function renderRuler(): void {
     renderTimeRuler();
+    requestAnimationFrame(drawGrid);
     ruler.innerHTML = "";
-    const barStep = totalBars > 32 ? Math.ceil(totalBars / 32) : 1;
+    // Bar numbers as dense as the zoom allows (at the start of whole phrases when sparse).
+    const pxPerBar = ((ruler.clientWidth || 800) * engine.barSeconds) / spanSeconds;
+    const barStep = [1, 2, 4, 8, 16, 32].find((n) => n * pxPerBar >= 22) ?? 32;
     for (let bar = 1; bar <= totalBars; bar += barStep) {
       const tick = document.createElement("span");
       tick.className = "timeline-tick";

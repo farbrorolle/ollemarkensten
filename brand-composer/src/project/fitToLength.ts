@@ -313,31 +313,17 @@ export function expandLongSections(
       return;
     }
     if (mode === "loop") {
-      // Loops in whole 4-bar phrases. The part plays up to its last phrase (its ending: fill /
-      // lead-in into the next part), then the phrase before the ending repeats as often as needed,
-      // and the ending comes once, at the very end -- so it still leads into what follows.
-      // Short parts (one phrase) simply repeat whole.
+      // The part repeats *whole* (all its phrases, in order) as many times as fits; what is left
+      // over (whole phrases) is its last phrases once more, so the music still runs out through
+      // the part's own ending into what follows.
       const regionBars = region[1] - region[0] + 1;
-      const endStart = region[1] - (PHRASE - 1); // first bar of the ending phrase
-      const loopStart = endStart - PHRASE; // first bar of the phrase that loops
-      if (regionBars < 2 * PHRASE || src > loopStart) {
-        push(cue, available);
-        let left = length - available;
-        while (left > 0) {
-          const n = Math.min(left, regionBars);
-          push({ bar, section: cue.section, transition: "crossfade", sourceBar: n < regionBars ? keepEndSourceBar(region, n) : region[0] }, n);
-          left -= n;
-        }
-        return;
+      push(cue, available);
+      let left = length - available;
+      while (left >= regionBars) {
+        push({ bar, section: cue.section, transition: "crossfade", sourceBar: region[0] }, regionBars);
+        left -= regionBars;
       }
-      push(cue, endStart - src);
-      let extra = length - available;
-      while (extra >= PHRASE) {
-        push({ bar, section: cue.section, transition: "crossfade", sourceBar: loopStart }, PHRASE);
-        extra -= PHRASE;
-      }
-      if (extra > 0) push({ bar, section: cue.section, transition: "crossfade", sourceBar: endStart - extra }, extra);
-      push({ bar, section: cue.section, transition: "crossfade", sourceBar: endStart }, PHRASE);
+      if (left > 0) push({ bar, section: cue.section, transition: "crossfade", sourceBar: keepEndSourceBar(region, left) }, left);
       return;
     }
     push(cue, available);

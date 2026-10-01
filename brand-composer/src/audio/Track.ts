@@ -191,6 +191,29 @@ export class Track {
     if (this.layerVoice && this.legacyPlayer?.loaded) this.layerVoice.player.buffer = this.legacyPlayer.buffer;
   }
 
+  private swellPeaks = new Map<number, number>();
+
+  /** Peak level (dBFS) of a stretch of this track's file (source seconds), e.g. one swell clip. */
+  peakDb(startSeconds: number, endSeconds: number): number {
+    const cached = this.swellPeaks.get(startSeconds);
+    if (cached !== undefined) return cached;
+    const player = this.legacyPlayer;
+    if (!player?.loaded) return 0;
+    const buffer = player.buffer;
+    const sr = buffer.sampleRate;
+    const offset = (this.fileStartBar - 1) * (60 / Tone.getTransport().bpm.value) * 4;
+    const a = Math.max(0, Math.floor((startSeconds - offset) * sr));
+    const b = Math.min(buffer.length, Math.ceil((endSeconds - offset) * sr));
+    let peak = 0;
+    for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+      const data = buffer.getChannelData(ch);
+      for (let i = a; i < b; i++) peak = Math.max(peak, Math.abs(data[i]!));
+    }
+    const db = 20 * Math.log10(peak + 1e-9);
+    this.swellPeaks.set(startSeconds, db);
+    return db;
+  }
+
   /** Region mode: voice `i` (0 or 1) -- its player and its gain. */
   regionVoice(i: number): { player: Tone.Player; gain: Tone.Gain } | undefined {
     return this.regionVoices[i];
