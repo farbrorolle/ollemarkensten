@@ -140,7 +140,7 @@ export function mountSidePanel(
   if (autoBtn) cards.appendChild(autoBtn);
   if (fitAllBtn) {
     fitAllBtn.classList.add("switch-row");
-    fitAllBtn.innerHTML = `<span class="switch-text"><span class="switch-title">Keep every part of the track</span><span class="switch-sub">All parts stay in, each shortened or stretched in proportion to the original (whole 4-bar phrases). Works with Auto arrange.</span></span><span class="switch" aria-hidden="true"></span>`;
+    fitAllBtn.innerHTML = `<span class="switch-text"><span class="switch-title">Use every part of the track</span><span class="switch-sub">All parts stay in, each shortened or stretched in proportion to the original (whole 4-bar phrases). Works with Auto arrange.</span></span><span class="switch" aria-hidden="true"></span>`;
     cards.appendChild(fitAllBtn);
   }
   arrangeSwitch?.remove();

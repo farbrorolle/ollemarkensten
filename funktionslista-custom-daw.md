@@ -15,7 +15,7 @@ Ingen funktion i listan får försvinna när designen 2a byggs in (2a Workspace 
 | Musikens startpunkt i filmen | Tidslinjen | Oförändrad |
 | Längdval Original / 60 / 30 / 15 s / Custom | – | Högerpanel "Length" (**ny**) |
 | Auto arrange / Original form | Verktygsrad | Högerpanel "When the length changes" (texterna rättas) |
-| Include all parts | Verktygsrad | "Keep every part of the track" (alltid synlig, aktiv med Auto arrange) |
+| Include all parts | Verktygsrad | "Use every part of the track" (alltid synlig, aktiv med Auto arrange) |
 | Lock to video length | Verktygsrad | "Keep the film's length" |
 | Reset to original form / Reset to film length | Verktygsrad | Högerpanel, diskret länkrad |
 | Undo / Redo (+ ⌘Z, ⇧⌘Z) | Verktygsrad | Ikonknappar vid tidslinjen |
