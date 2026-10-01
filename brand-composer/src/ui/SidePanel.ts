@@ -163,24 +163,6 @@ export function mountSidePanel(
     cutGroup.insertBefore(endCardLabel, next);
     logoCutRow.appendChild(cutGroup);
   }
-  // The same Previous / Next cut also right on the timeline's tool row, where the logo line is.
-  const cutPrevBtn = cutGroup?.querySelector<HTMLButtonElement>("[data-cut-prev]") ?? null;
-  const cutNextBtn = cutGroup?.querySelector<HTMLButtonElement>("[data-cut-next]") ?? null;
-  const tlCuts = document.createElement("span");
-  tlCuts.className = "timeline-cut-mirror";
-  tlCuts.innerHTML = `<span class="timeline-cut-label">Logo on</span><button type="button" class="btn btn-small" data-mirror-prev>◀ Previous cut</button><button type="button" class="btn btn-small" data-mirror-next>Next cut ▶</button>`;
-  const mirrorPrev = tlCuts.querySelector<HTMLButtonElement>("[data-mirror-prev]")!;
-  const mirrorNext = tlCuts.querySelector<HTMLButtonElement>("[data-mirror-next]")!;
-  mirrorPrev.addEventListener("click", () => cutPrevBtn?.click());
-  mirrorNext.addEventListener("click", () => cutNextBtn?.click());
-  timelineRoot.querySelector(".timeline-toolbar-2")?.appendChild(tlCuts);
-  const syncMirror = (): void => {
-    tlCuts.hidden = !cutGroup || cutGroup.hidden;
-    mirrorPrev.disabled = !!cutPrevBtn?.disabled;
-    mirrorNext.disabled = !!cutNextBtn?.disabled;
-    mirrorPrev.title = cutPrevBtn?.title ?? "";
-    mirrorNext.title = cutNextBtn?.title ?? "";
-  };
   const [partsRow, layersRow] = paletteRows;
   // Parts and layers: their own box above the timeline (Fine-tune only), one row each, like before.
   const partsBox = document.createElement("section");
@@ -334,7 +316,6 @@ export function mountSidePanel(
   // --- Live state ----------------------------------------------------------------------------
   let lastKey = "";
   function update(): void {
-    syncMirror();
     const info = film.info;
     const anchor = engine.logoAnchorSeconds;
     const onCut = info && film.detectedCut !== null && anchor !== null && Math.abs(anchor - film.detectedCut) < 0.05;
