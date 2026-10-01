@@ -47,13 +47,15 @@ export function mountSidePanel(
   fit.className = "panel side-step side-fit";
   fit.dataset.stepPanel = "fit";
   fit.innerHTML = `
+    <div class="length-tip" data-length-tip hidden>
+      <div class="length-tip-title">Try another length</div>
+      <p>Drag the music's right edge in the timeline – the track re-arranges itself, always in time. Or add your film and it fits itself.</p>
+    </div>
     <div class="aha-card" data-aha hidden>
       <div class="aha-head"><span class="aha-dot" aria-hidden="true">✓</span><span class="aha-title" data-aha-title></span></div>
       <p class="aha-text" data-aha-text></p>
       <button type="button" class="btn btn-small aha-play" data-aha-play>▶ Hear the ending</button>
     </div>
-    <h2>Fit the length</h2>
-    <p class="side-sub" data-fit-sub></p>
     <div class="side-group" data-arrange-group>
       <div class="side-label">How the music is arranged</div>
       <div class="arrange-cards" data-arrange-cards></div>
@@ -64,10 +66,6 @@ export function mountSidePanel(
       <div class="side-label">Logo lands on</div>
       <div class="logo-cut-row" data-logo-cut-row></div>
       <p class="side-note" data-logo-note></p>
-    </div>
-    <div class="length-tip" data-length-tip hidden>
-      <div class="length-tip-title">Try another length</div>
-      <p>Drag the music's right edge in the timeline – the track re-arranges itself, always in time. Or add your film and it fits itself.</p>
     </div>
     <div class="side-group side-other-lengths">
       <div class="side-label">Other lengths <span class="side-optional">optional</span></div>
@@ -205,7 +203,6 @@ export function mountSidePanel(
   const customForm = q<HTMLFormElement>(fit, "[data-custom]")!;
   const customInput = q<HTMLInputElement>(fit, "[data-custom-input]")!;
   const lengthNote = q<HTMLElement>(fit, "[data-length-note]")!;
-  const fitSub = q<HTMLElement>(fit, "[data-fit-sub]")!;
   type Choice = "film" | "original" | "custom" | number;
   let chosen: { choice: Choice; seconds: number } | null = null;
   const remember = (choice: Choice): void => {
@@ -346,9 +343,6 @@ export function mountSidePanel(
     lastKey = key;
 
     q<HTMLElement>(fit, "[data-length-tip]")!.hidden = !!info;
-    fitSub.textContent = info
-      ? "The music is fitted to your film. Change the length, move the logo to another cut, or choose how it is arranged."
-      : "Start from the track as composed – or add your film and the music fits itself.";
     renderChips();
 
     const fitted = !!info && engine.canFit;
