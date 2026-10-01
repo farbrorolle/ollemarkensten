@@ -56,7 +56,11 @@ export class AudioEngine {
   /** Gain into the output limiter. */
   readonly outputDrive: Tone.Gain;
   readonly outputLimiter: Tone.Limiter;
+  /** Brick wall after the limiter: whatever overshoots its attack is clipped at the ceiling. */
+  readonly outputClip: Tone.WaveShaper;
   readonly loudness: LoudnessMeter;
+  /** Taps the final output (after the master limiter) for the peak meters. */
+  private readonly outputAnalyser: Tone.Analyser;
   private musicLimiterOn = true;
   private musicLimiterThreshold = -1;
   private outputLimiterOn = true;
@@ -97,11 +101,22 @@ export class AudioEngine {
     this.outputBus = new Tone.Gain(1);
     this.outputDrive = new Tone.Gain(1);
     this.outputLimiter = new Tone.Limiter(0);
+    // Tone's Limiter is a compressor with the default 30 dB soft knee, which barely limits at all
+    // near the threshold (peaks went +6 dB over at high gain). Hard knee + fastest attack.
+    const outComp = (this.outputLimiter as unknown as { _compressor: Tone.Compressor })._compressor;
+    outComp.knee.value = 0;
+    outComp.attack.value = 0.001;
+    outComp.release.value = 0.05;
     this.limiter.connect(this.outputBus);
     this.outputBus.connect(this.outputDrive);
+    this.outputClip = new Tone.WaveShaper(clipCurve(0));
+    this.outputClip.oversample = "4x";
     this.outputDrive.connect(this.outputLimiter);
-    this.outputLimiter.connect(Tone.getDestination());
-    this.loudness = new LoudnessMeter(this.outputLimiter);
+    this.outputLimiter.connect(this.outputClip);
+    this.outputClip.connect(Tone.getDestination());
+    this.loudness = new LoudnessMeter(this.outputClip);
+    this.outputAnalyser = new Tone.Analyser({ type: "waveform", size: 2048, channels: 2 });
+    this.outputClip.connect(this.outputAnalyser);
 
     Tone.getTransport().bpm.value = 120;
 
@@ -462,6 +477,7 @@ export class AudioEngine {
   setOutputLimiterOn(on: boolean): void {
     this.outputLimiterOn = on;
     this.outputLimiter.threshold.value = on ? this.outputCeiling : 0;
+    this.outputClip.curve = clipCurve(on ? this.outputCeiling : 0);
   }
 
   private outputCeiling = 0;
@@ -469,7 +485,10 @@ export class AudioEngine {
   /** The output limiter's ceiling (dBFS). Default 0: the customer only pushes gain into it. */
   setOutputCeiling(db: number): void {
     this.outputCeiling = Math.min(0, db);
-    if (this.outputLimiterOn) this.outputLimiter.threshold.value = this.outputCeiling;
+    if (this.outputLimiterOn) {
+      this.outputLimiter.threshold.value = this.outputCeiling;
+      this.outputClip.curve = clipCurve(this.outputCeiling);
+    }
   }
 
   get outputCeilingDb(): number {
@@ -478,6 +497,18 @@ export class AudioEngine {
 
   get isOutputLimiterOn(): boolean {
     return this.outputLimiterOn;
+  }
+
+  /** Sample peaks (linear, L and R) of the final output over the last ~40 ms. */
+  outputPeaks(): [number, number] {
+    const value = this.outputAnalyser.getValue();
+    const chans = Array.isArray(value) ? value : [value, value];
+    const peak = (a: Float32Array | undefined): number => {
+      let m = 0;
+      if (a) for (let i = 0; i < a.length; i++) m = Math.max(m, Math.abs(a[i]!));
+      return m;
+    };
+    return [peak(chans[0]), peak(chans[1] ?? chans[0])];
   }
 
   get outputLimiterReduction(): number {
@@ -1062,7 +1093,7 @@ export class AudioEngine {
     destination.mute = true; // the capture taps before the speakers
     try {
       const startAt = Tone.now() + 0.25;
-      const capture = captureOutput(this.outputLimiter, startAt, seconds, onProgress);
+      const capture = captureOutput(this.outputClip, startAt, seconds, onProgress);
       Tone.getTransport().start(startAt, 0);
       const result = await capture;
       return capturedToWav(result);
@@ -1081,7 +1112,9 @@ export class AudioEngine {
     this.outputBus.dispose();
     this.outputDrive.dispose();
     this.outputLimiter.dispose();
+    this.outputClip.dispose();
     this.loudness.dispose();
+    this.outputAnalyser.dispose();
   }
 }
 
@@ -1119,4 +1152,16 @@ export interface LayerBlock {
   layerId: string;
   startBar: number;
   bars: number;
+}
+
+/** A hard-clip transfer curve at `ceilingDb` dBFS (input range -1..1, which is also 0 dBFS). */
+function clipCurve(ceilingDb: number): Float32Array {
+  const c = Math.min(1, Tone.dbToGain(ceilingDb));
+  const n = 4097;
+  const curve = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1;
+    curve[i] = Math.max(-c, Math.min(c, x));
+  }
+  return curve;
 }

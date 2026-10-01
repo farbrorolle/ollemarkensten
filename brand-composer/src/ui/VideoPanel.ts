@@ -66,8 +66,22 @@ export function mountVideoPanel(
             <span>Limiter gain</span>
             <input type="range" min="0" max="18" step="0.5" data-out-lim title="Gain into the master limiter" />
             <span class="video-volume-value" data-out-lim-value></span>
-            <span class="mini-gr" title="How much the limiter is turning the sound down"><span class="mini-gr-fill" data-out-lim-gr></span></span>
             <span class="creator-only video-limiter-ceiling">Ceiling <input type="range" min="-6" max="0" step="0.1" data-out-ceil title="Master limiter ceiling (dBFS)" /> <span class="video-volume-value" data-out-ceil-value></span></span>
+          </span>
+          <span class="master-strip" title="Master output: peak level (L/R, 0 dB = the limit), how much the limiter turns down (GR), and loudness (LUFS)">
+            <span class="ms-scale" aria-hidden="true">
+              <span data-ms-tick="0">0</span><span data-ms-tick="-6">-6</span><span data-ms-tick="-12">-12</span><span data-ms-tick="-24">-24</span><span data-ms-tick="-48">-48</span>
+            </span>
+            <span class="ms-meter" data-ms-ch="0"><span class="ms-fill"></span><span class="ms-hold"></span><span class="ms-zero"></span><span class="ms-label">L</span></span>
+            <span class="ms-meter" data-ms-ch="1"><span class="ms-fill"></span><span class="ms-hold"></span><span class="ms-zero"></span><span class="ms-label">R</span></span>
+            <span class="ms-meter ms-gr" title="Gain reduction: how much the limiter is turning the sound down"><span class="ms-fill" data-ms-gr></span><span class="ms-label">GR</span></span>
+            <span class="ms-readout">
+              <span class="ms-row"><span>Peak</span><b data-ms-peak>–</b></span>
+              <span class="ms-row"><span>GR</span><b data-ms-grv>0.0</b></span>
+              <span class="ms-row"><span>LUFS M</span><b data-ms-m>–</b></span>
+              <span class="ms-row"><span>LUFS S</span><b data-ms-s>–</b></span>
+              <span class="ms-row"><span>LUFS I</span><b data-ms-i>–</b></span>
+            </span>
           </span>
           <button type="button" class="btn" data-replace>Replace film</button>
           <button type="button" class="btn" data-remove>Remove</button>
@@ -151,22 +165,24 @@ export function mountVideoPanel(
   const volumeInput = q<HTMLInputElement>("[data-film-volume]");
   const volumeValue = q("[data-film-volume-value]");
   volumeInput.value = String(film.volumeDb);
-  volumeInput.addEventListener("input", () => film.setVolumeDb(Number(volumeInput.value)));
+  // All the way down = muted (not just -40 dB).
+  const faderDb = (input: HTMLInputElement): number => (Number(input.value) <= Number(input.min) ? -Infinity : Number(input.value));
+  const dbLabel = (db: number): string => (db === -Infinity ? "muted" : `${db > 0 ? "+" : ""}${db.toFixed(1)} dB`);
+  volumeInput.addEventListener("input", () => film.setVolumeDb(faderDb(volumeInput)));
 
   // Music level + the output limiter over film audio and music together.
   const signed = (v: number): string => `${v > 0 ? "+" : ""}${v.toFixed(1)} dB`;
   const musicInput = q<HTMLInputElement>("[data-music-volume]");
   const musicValue = q("[data-music-volume-value]");
   musicInput.value = String(engine.masterGain);
-  musicValue.textContent = signed(engine.masterGain);
+  musicValue.textContent = dbLabel(engine.masterGain);
   musicInput.addEventListener("input", () => {
-    engine.setMasterGain(Number(musicInput.value));
-    musicValue.textContent = signed(Number(musicInput.value));
+    engine.setMasterGain(faderDb(musicInput));
+    musicValue.textContent = dbLabel(faderDb(musicInput));
   });
   const limOn = q<HTMLInputElement>("[data-out-lim-on]");
   const limInput = q<HTMLInputElement>("[data-out-lim]");
   const limValue = q("[data-out-lim-value]");
-  const limGr = q("[data-out-lim-gr]");
   limOn.checked = engine.isOutputLimiterOn;
   limOn.addEventListener("change", () => engine.setOutputLimiterOn(limOn.checked));
   limInput.value = String(engine.outputDriveDb);
@@ -194,7 +210,7 @@ export function mountVideoPanel(
     nameEl.title = info.name;
     lengthEl.textContent = formatFilmTime(info.duration);
 
-    volumeValue.textContent = `${film.volumeDb > 0 ? "+" : ""}${film.volumeDb.toFixed(1)} dB`;
+    volumeValue.textContent = dbLabel(film.volumeDb);
     const on = film.audioOn;
     audioBtn.textContent = on ? "🔊 Film audio: ON" : "🔇 Film audio: OFF";
     audioBtn.classList.toggle("video-audio-on", on);
@@ -215,6 +231,75 @@ export function mountVideoPanel(
   film.onChange(renderFilmState);
   renderFilmState();
 
+  // Master strip: peak meters (-48..+3 dB, 0 dB marked), peak hold, GR (0..12 dB) and LUFS.
+  const METER_MIN = -48;
+  const METER_MAX = 3;
+  // Classic meter scale: more room near the top (piecewise linear in dB).
+  const SCALE: [number, number][] = [[METER_MIN, 0], [-24, 0.2], [-12, 0.45], [-6, 0.65], [0, 0.92], [METER_MAX, 1]];
+  const meterPos = (db: number): number => {
+    if (!(db > METER_MIN)) return 0;
+    if (db >= METER_MAX) return 1;
+    for (let i = 1; i < SCALE.length; i++) {
+      const [d1, p1] = SCALE[i]!;
+      const [d0, p0] = SCALE[i - 1]!;
+      if (db <= d1) return p0 + ((db - d0) / (d1 - d0)) * (p1 - p0);
+    }
+    return 1;
+  };
+  root.querySelectorAll<HTMLElement>("[data-ms-tick]").forEach((el) => {
+    el.style.bottom = `${meterPos(Number(el.dataset.msTick)) * 100}%`;
+  });
+  root.querySelectorAll<HTMLElement>(".ms-zero").forEach((el) => (el.style.bottom = `${meterPos(0) * 100}%`));
+  const channels = [0, 1].map((ch) => {
+    const el = root.querySelector<HTMLElement>(`[data-ms-ch="${ch}"]`)!;
+    return { fill: el.querySelector<HTMLElement>(".ms-fill")!, hold: el.querySelector<HTMLElement>(".ms-hold")!, level: -Infinity, holdDb: -Infinity, holdAt: 0 };
+  });
+  const grFill = q("[data-ms-gr]");
+  const peakEl = q("[data-ms-peak]");
+  const grValEl = q("[data-ms-grv]");
+  const lufsEls = [q("[data-ms-m]"), q("[data-ms-s]"), q("[data-ms-i]")];
+  let maxPeak = -Infinity;
+  let lastMeterTime = performance.now();
+  let lastReadout = 0;
+  const fmtDb = (db: number): string => (Number.isFinite(db) ? db.toFixed(1) : "–");
+  function updateMeters(): void {
+    const now = performance.now();
+    const dt = Math.min(0.2, (now - lastMeterTime) / 1000);
+    lastMeterTime = now;
+    const peaks = engine.outputPeaks();
+    channels.forEach((c, i) => {
+      const db = peaks[i]! > 0 ? 20 * Math.log10(peaks[i]!) : -Infinity;
+      // Instant attack, ~20 dB/s fall (like a classic peak meter).
+      c.level = Math.max(db, (Number.isFinite(c.level) ? c.level : METER_MIN) - 20 * dt);
+      if (db >= c.holdDb || now - c.holdAt > 1500) {
+        c.holdDb = db;
+        c.holdAt = now;
+      }
+      maxPeak = Math.max(maxPeak, db);
+      c.fill.style.height = `${meterPos(c.level) * 100}%`;
+      c.fill.classList.toggle("is-hot", c.level > -6);
+      c.fill.classList.toggle("is-over", c.level > -0.1);
+      c.hold.style.bottom = `${meterPos(c.holdDb) * 100}%`;
+      c.hold.hidden = !Number.isFinite(c.holdDb) || c.holdDb < METER_MIN;
+    });
+    const gr = Math.min(12, Math.abs(engine.outputLimiterReduction));
+    grFill.style.height = `${(gr / 12) * 100}%`;
+    if (now - lastReadout > 200) {
+      lastReadout = now;
+      peakEl.textContent = fmtDb(maxPeak);
+      peakEl.classList.toggle("is-over", maxPeak > -0.1);
+      grValEl.textContent = gr > 0.05 ? `-${gr.toFixed(1)}` : "0.0";
+      const l = engine.loudness;
+      const vals = l.available ? [l.momentary, l.shortTerm, l.integrated] : [-Infinity, -Infinity, -Infinity];
+      vals.forEach((v, i) => (lufsEls[i]!.textContent = Number.isFinite(v) && v > -70 ? v.toFixed(1) : "–"));
+    }
+  }
+  // Click the readout to reset the peak value.
+  q(".ms-readout").addEventListener("click", () => {
+    maxPeak = -Infinity;
+    peakEl.textContent = "–";
+  });
+
   // Only touch the DOM when a value actually changes -- update() runs every frame.
   let lastSection = "";
   let lastTime = "";
@@ -223,9 +308,7 @@ export function mountVideoPanel(
 
   return {
     update() {
-      const reduction = Math.min(12, Math.abs(engine.outputLimiterReduction));
-      limGr.style.width = `${(reduction / 12) * 100}%`;
-      limGr.title = `${reduction.toFixed(1)} dB`;
+      updateMeters();
       const info = film.info;
       if (!info) return;
 

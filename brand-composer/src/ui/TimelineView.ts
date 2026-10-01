@@ -730,18 +730,48 @@ export function mountTimeline(
       ghostEl.className = "timeline-section-ghost";
     }
     if (!ghostEl.isConnected) sectionsRow.appendChild(ghostEl);
+    ghostEl.classList.remove("is-replace");
     const startBar = 1 + editableSegments.slice(0, index).reduce((sum, s) => sum + s.lengthBars, 0);
     ghostEl.style.left = `${xOfBar(startBar) * 100}%`;
     ghostEl.style.width = `${(bars * engine.barSeconds * 100) / spanSeconds}%`;
     const name = sectionNameById.get(sectionId) ?? sectionId;
     ghostEl.textContent = `+ ${name} · ${bars} bars`;
   }
+  /** Over the middle half of a part: replace it. Near its edges: insert before/after it. */
+  const replaceIndexAt = (clientX: number): number | null => {
+    for (let i = 0; i < blockEls.length; i++) {
+      const r = blockEls[i]!.getBoundingClientRect();
+      if (clientX >= r.left + r.width * 0.25 && clientX <= r.right - r.width * 0.25) return i;
+    }
+    return null;
+  };
+  function showReplaceGhost(index: number, sectionId: string): void {
+    const seg = editableSegments[index];
+    if (!seg) return;
+    showGhost(index, sectionId, seg.lengthBars);
+    ghostEl!.classList.add("is-replace");
+    const name = sectionNameById.get(sectionId) ?? sectionId;
+    const oldName = sectionNameById.get(seg.sectionId) ?? seg.sectionId;
+    ghostEl!.textContent = `⇄ Replace ${oldName} with ${name}`;
+  }
+  function replaceSection(index: number, sectionId: string): void {
+    const seg = editableSegments[index];
+    if (!seg || seg.sectionId === sectionId) return;
+    const region = engine.sourceRegionFor(sectionId);
+    const next: EditableSegment = { sectionId, lengthBars: seg.lengthBars, transition: seg.transition };
+    if (region) next.sourceBar = region[0];
+    fixSource(next);
+    editableSegments[index] = next;
+    commit();
+  }
   sectionsRow.addEventListener("dragover", (e) => {
     if (!e.dataTransfer?.types.includes(SECTION_MIME)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
-    const i = insertIndexAt(e.clientX);
-    if (paletteDrag) showGhost(i, paletteDrag, regionLength(paletteDrag));
+    if (!paletteDrag) return;
+    const r = replaceIndexAt(e.clientX);
+    if (r !== null) showReplaceGhost(r, paletteDrag);
+    else showGhost(insertIndexAt(e.clientX), paletteDrag, regionLength(paletteDrag));
   });
   sectionsRow.addEventListener("dragleave", (e) => {
     if (!(e.relatedTarget instanceof Node && sectionsRow.contains(e.relatedTarget))) clearDropIndicator();
@@ -753,7 +783,9 @@ export function mountTimeline(
     e.stopPropagation();
     clearDropIndicator();
     paletteDrag = null;
-    openLengthMenu(insertIndexAt(e.clientX), sectionId, e.clientX);
+    const r = replaceIndexAt(e.clientX);
+    if (r !== null) replaceSection(r, sectionId);
+    else openLengthMenu(insertIndexAt(e.clientX), sectionId, e.clientX);
   });
 
   /** The time ruler: minutes and seconds, ticks as dense as the zoom allows. */

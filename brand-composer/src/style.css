@@ -774,6 +774,7 @@ body {
 .video-bar-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
 }
 
@@ -1455,6 +1456,12 @@ body.view-customer .track-row {
   overflow: visible;
   pointer-events: none;
   box-shadow: -2px 0 0 var(--text);
+}
+.timeline-section-ghost.is-replace {
+  border: 2px solid var(--accent, #fff);
+  background: rgba(255, 255, 255, 0.22);
+  box-shadow: none;
+  justify-content: center;
 }
 
 /* Section cards: as wide as the part will be; length choice inside. */
@@ -2309,4 +2316,111 @@ body.view-customer .track-row {
 
 .swell-card-small {
   border-style: dashed;
+}
+
+/* Master strip: classic peak meters (L/R) with a 0 dB line, gain reduction, LUFS readout. */
+.master-strip {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 4px;
+  height: 86px;
+  padding: 6px 8px 4px 4px;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  background: var(--bg);
+  font-variant-numeric: tabular-nums;
+}
+.ms-scale {
+  position: relative;
+  width: 20px;
+  margin-bottom: 12px;
+  font-size: 8px;
+  color: var(--muted, #888);
+}
+.ms-scale > span {
+  position: absolute;
+  right: 0;
+  transform: translateY(50%);
+  line-height: 1;
+}
+.ms-scale > span[data-ms-tick="0"] {
+  color: var(--text);
+  font-weight: 700;
+}
+.ms-meter {
+  position: relative;
+  width: 9px;
+  margin-bottom: 12px;
+  background: #111;
+  border: 1px solid var(--panel-border);
+  border-radius: 2px;
+}
+.ms-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0;
+  background: var(--green, #3c6);
+}
+.ms-fill.is-hot {
+  background: linear-gradient(to top, var(--green, #3c6) 0, var(--green, #3c6) 70%, var(--amber, #fb3) 100%);
+}
+.ms-fill.is-over {
+  background: linear-gradient(to top, var(--green, #3c6) 0, var(--amber, #fb3) 85%, #f33 100%);
+}
+.ms-hold {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--text);
+  transform: translateY(50%);
+}
+.ms-zero {
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  height: 1px;
+  background: #f33;
+  opacity: 0.8;
+}
+.ms-gr {
+  margin-left: 3px;
+}
+.ms-gr .ms-fill {
+  top: 0;
+  bottom: auto;
+  background: var(--amber, #fb3);
+}
+.ms-label {
+  position: absolute;
+  bottom: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 8px;
+  color: var(--muted, #888);
+}
+.ms-readout {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  margin-left: 6px;
+  font-size: 10px;
+  line-height: 1.25;
+  cursor: pointer;
+  min-width: 82px;
+}
+.ms-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted, #888);
+}
+.ms-row b {
+  color: var(--text);
+  font-weight: 600;
+}
+.ms-row b.is-over {
+  color: #f33;
 }
