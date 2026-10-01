@@ -1929,3 +1929,154 @@ body.view-customer .track-row {
   border-color: #f7a8ff;
   background: rgba(247, 168, 255, 0.12);
 }
+
+.transport-buttons {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.transport-btn {
+  font-size: 18px;
+  padding: 6px 12px;
+  line-height: 1;
+}
+
+.transport-play {
+  min-width: 104px;
+  font-size: 15px;
+}
+
+/* Section colours: cards, form blocks and the music lane share one colour per part. */
+.timeline-palette-chip {
+  --sec: var(--accent);
+}
+
+.timeline-palette-row .timeline-palette-chip:not(.timeline-palette-logo):not(.timeline-palette-layer) {
+  border-color: var(--sec);
+  background: color-mix(in srgb, var(--sec) 16%, transparent);
+  box-shadow: inset 4px 0 0 var(--sec);
+}
+
+.timeline-lane-form .timeline-section-block:not(.timeline-section-logo) {
+  --sec: var(--accent);
+  border-color: var(--sec);
+  background: color-mix(in srgb, var(--sec) 20%, transparent);
+  color: color-mix(in srgb, var(--sec) 75%, white);
+}
+
+.timeline-lane-form .timeline-section-block .timeline-section-remove {
+  color: inherit;
+}
+
+.timeline-lane-form .timeline-section-block .timeline-section-remove:hover {
+  background: var(--sec);
+  color: #0b0d12;
+}
+
+.timeline-lane-form .timeline-section-loop {
+  border-style: dashed;
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--sec) 20%, transparent) 0 6px, color-mix(in srgb, var(--sec) 8%, transparent) 6px 12px);
+}
+
+.timeline-section-fade {
+  flex: 0 0 auto;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.timeline-form-dragging {
+  outline: 1px dashed var(--text-dim);
+  outline-offset: -1px;
+}
+
+/* Palette rows: parts, and layers on a row of their own. */
+.timeline-palette-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.timeline-palette-row[hidden] {
+  display: none;
+}
+
+.timeline-palette-row .timeline-palette {
+  margin-bottom: 0;
+  flex: 1;
+}
+
+.palette-label {
+  width: 52px;
+  flex: 0 0 auto;
+  padding-top: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.timeline-toolbar {
+  flex-wrap: wrap;
+}
+
+.timeline-toolbar-2 {
+  margin-top: -2px;
+}
+
+.reset-group {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.toggle-btn.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.toggle-btn[hidden],
+.reset-group .btn[hidden] {
+  display: none;
+}
+
+/* Section options popup. */
+.section-menu {
+  border-color: var(--sec, var(--accent));
+  min-width: 300px;
+  max-width: 360px;
+}
+
+.section-menu [hidden] {
+  display: none;
+}
+
+.section-menu-cut {
+  margin: 4px 0 10px;
+  font-size: 11px;
+}
+
+.section-menu-cut summary {
+  cursor: pointer;
+  color: var(--text-dim);
+}
+
+.section-menu-help {
+  color: var(--text-dim);
+  margin: 6px 0;
+}
+
+.section-menu-tracks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 8px;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.section-menu-tracks .cue-menu-check {
+  margin: 0;
+}

@@ -4798,31 +4798,41 @@
   "sections": [
     {
       "id": "intro",
-      "name": "Intro"
+      "name": "Intro",
+      "color": "#5b8def"
     },
     {
       "id": "intro2",
-      "name": "Intro 2"
+      "name": "Intro 2",
+      "color": "#4fb3d9"
     },
     {
       "id": "groove",
-      "name": "Main groove"
+      "name": "Main groove",
+      "color": "#3fbf8f"
     },
     {
       "id": "motif",
-      "name": "Main motif"
+      "name": "Main motif",
+      "color": "#e0a43a"
     },
     {
       "id": "breakdown",
-      "name": "Breakdown"
+      "name": "Breakdown",
+      "color": "#a77bf3",
+      "cutInto": [
+        "f06"
+      ]
     },
     {
       "id": "uplifter",
-      "name": "Uplifter"
+      "name": "Uplifter",
+      "color": "#e8687a"
     },
     {
       "id": "outro",
-      "name": "Outro"
+      "name": "Outro",
+      "color": "#8a95a8"
     }
   ],
   "sourceRegions": {

@@ -20,7 +20,7 @@ import type {
   SidechainConfig,
   TransitionType,
 } from "../project/types.ts";
-import { expandLongSections, fitOriginal, fitToLength, regionChunks } from "../project/fitToLength.ts";
+import { anchorOffsetInMusic, expandLongSections, fitAllParts, fitOriginal, fitToLength, regionChunks } from "../project/fitToLength.ts";
 import type { FitResult } from "../project/fitToLength.ts";
 
 const MUTE_RAMP_SECONDS = 0.03;
@@ -312,6 +312,30 @@ export class AudioEngine {
     return !!this.fitConfig && !!this.logoConfig && !!this.logoTrack;
   }
 
+  private _fitAllParts = false;
+
+  /** Auto arrange option: keep every part in the music, each with its original share of the length. */
+  get fitAllParts(): boolean {
+    return this._fitAllParts;
+  }
+
+  setFitAllParts(on: boolean): void {
+    if (on === this._fitAllParts) return;
+    this._fitAllParts = on;
+    const anchor = this.logoAnchorSeconds;
+    if (anchor !== null && this.canFit && this._arrangeMode === "auto") this.fitToAnchor(anchor);
+  }
+
+  /** Back to the track exactly as composed: every part once, at full length, from the start. */
+  resetToOriginalForm(): void {
+    if (!this.fitConfig || !this.logoConfig) return;
+    const template = this.fitConfig.template;
+    const total = template.reduce((sum, b) => sum + b.bars, 0);
+    const timing = { barSeconds: this.barSeconds, beatSeconds: this.beatSeconds, anchorBeat: this.logoConfig.anchorBeat };
+    const result = fitOriginal(template, anchorOffsetInMusic(total, timing), timing, this.regions);
+    this.applyArrangement(result.cues, result.totalBars, result.musicStartSeconds, result);
+  }
+
   get arrangeMode(): "auto" | "original" {
     return this._arrangeMode;
   }
@@ -335,7 +359,7 @@ export class AudioEngine {
    */
   fitToAnchor(anchorSeconds: number): FitResult {
     if (!this.fitConfig || !this.logoConfig) throw new Error("This project has no fit-to-length rules");
-    const fit = this._arrangeMode === "original" ? fitOriginal : fitToLength;
+    const fit = this._arrangeMode === "original" ? fitOriginal : this._fitAllParts ? fitAllParts : fitToLength;
     const result = fit(
       this.fitConfig.template,
       anchorSeconds,
@@ -605,6 +629,7 @@ export class AudioEngine {
       fit,
       logoEnabled: this.logoEnabled,
       arrangeMode: this._arrangeMode,
+      fitAllParts: this._fitAllParts,
     };
     // Edited while playing: keep playing from the same spot in the new arrangement.
     const wasPlaying = Tone.getTransport().state === "started";
@@ -832,6 +857,7 @@ export class AudioEngine {
     this._layers = state.layers.map((l) => ({ ...l }));
     this.logoEnabled = state.logoEnabled;
     this._arrangeMode = state.arrangeMode;
+    this._fitAllParts = state.fitAllParts;
     this.restoring = true;
     try {
       this.applyArrangement(state.cues, state.loopBars, state.musicStartSeconds, state.fit);
@@ -970,6 +996,7 @@ interface ArrangementState {
   fit: FitResult | null;
   logoEnabled: boolean;
   arrangeMode: "auto" | "original";
+  fitAllParts: boolean;
 }
 
 /** A volume cue point: from `bar` on, the instrument plays at `db` (until its next cue). */

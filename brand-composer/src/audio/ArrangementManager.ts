@@ -10,6 +10,10 @@ import type { PlayedChunk } from "../project/swellPlan.ts";
 const CUT_FADE_SECONDS = 0.003; // "cut": just enough to avoid a hard click, no audible blend
 /** Longest ring-out after a section (sustained pads/bass would otherwise hang on too long). */
 const MAX_RING_OUT_SECONDS = 2;
+/** Into a *different* part (other chords): the outgoing part only rings on this long. */
+const CROSSFADE_RING_OUT_SECONDS = 0.35;
+/** "Cut": the outgoing part stops right at the boundary (just enough to avoid a click). */
+const CUT_RING_OUT_SECONDS = 0.03;
 /** How long the chosen tracks fade away under the logo after its hit. */
 const LOGO_RING_OUT_SECONDS = 1.5;
 /** Fade at the very end of the music (under the logo's ring-out). */
@@ -25,6 +29,8 @@ export interface ArrangementSegment {
   transition: TransitionType;
   /** Long-bounce projects: source bar the segment starts reading from (see CueConfig.sourceBar). */
   sourceBar?: number;
+  /** Tracks that cut (no ring-over) into this segment. */
+  cutTracks?: string[];
 }
 
 /**
@@ -50,6 +56,7 @@ function buildSegments(cues: CueConfig[], loopBars: number): ArrangementSegment[
     sectionId: cue.section,
     transition: cue.transition ?? "crossfade",
     sourceBar: cue.sourceBar,
+    cutTracks: cue.cutTracks,
   }));
 }
 
@@ -79,6 +86,8 @@ function buildSegments(cues: CueConfig[], loopBars: number): ArrangementSegment[
  * (a *repeating* transport event) instead of scheduled once directly.
  */
 export class ArrangementManager {
+  /** Per section: tracks that never ring over into it (from the project config). */
+  private sectionCutInto = new Map<string, string[]>();
   private segments: ArrangementSegment[] = [];
   private loopBars = 0;
   private currentSectionId: string | null = null;
@@ -130,6 +139,7 @@ export class ArrangementManager {
   ): GainEnvelope[] {
     const envelopes: GainEnvelope[] = [];
     const segments = buildSegments(cues, loopBars);
+    this.sectionCutInto = new Map(Array.from(sections.values()).map((sec) => [sec.id, sec.cutInto ?? []]));
     this.segments = segments;
     this.loopBars = loopBars;
     this.timing = timing;
@@ -271,10 +281,21 @@ export class ArrangementManager {
       // Ring-out: let the track sound on after the section, until its next attack or silence (analysed
       // per source bar), then fade. Capped so sustained pads don't hang on.
       const tail = Math.min(MAX_RING_OUT_SECONDS, track.tails[sourceEnd - 1] ?? 0);
+      // How far the outgoing part may ring over: a loop of the same part (same chords) as analysed;
+      // into another part only briefly; not at all with a cut, or for tracks that must not ring
+      // into that part (e.g. the bass into a part in other chords).
+      const nextIsLoop = !!next && next.sectionId === segment.sectionId;
+      const cutsHere =
+        !!next &&
+        (next.transition === "cut" || (next.cutTracks ?? this.sectionCutInto.get(next.sectionId) ?? []).includes(track.id));
       let ringOut = continuesIntoNext
         ? CUT_FADE_SECONDS
         : next
-          ? Math.max(CUT_FADE_SECONDS, track.tails.length ? tail : fadeSecondsFor(next.transition))
+          ? cutsHere
+            ? CUT_RING_OUT_SECONDS
+            : nextIsLoop
+              ? Math.max(CUT_FADE_SECONDS, track.tails.length ? tail : fadeSecondsFor(next.transition))
+              : Math.max(fadeSecondsFor(next.transition), Math.min(CROSSFADE_RING_OUT_SECONDS, tail))
           : Tone.Time(END_FADE).toSeconds();
       const start = this.barStartSeconds(segment.startBar);
       let end = this.barStartSeconds(segment.endBar);
@@ -360,13 +381,15 @@ export class ArrangementManager {
     if (!voices[0] || !voices[1] || !bufferSeconds || !regions) return [];
 
     const chunks: PlayedChunk[] = [];
-    for (const segment of segments) {
+    segments.forEach((segment, index) => {
       const region = regions[segment.sectionId];
-      if (!region) continue;
+      if (!region) return;
+      // The same part straight after itself = a loop: no swell builds up into it.
+      const repeatsPrevious = index > 0 && segments[index - 1]!.sectionId === segment.sectionId;
       regionChunks(segment.startBar, segment.endBar - segment.startBar, region, segment.sourceBar).forEach((c, i) =>
-        chunks.push({ ...c, isCueStart: i === 0 }),
+        chunks.push({ ...c, isCueStart: i === 0, isLoop: i > 0 || repeatsPrevious }),
       );
-    }
+    });
     const sectionStarts = Object.values(regions).map((r) => r[0]);
     const fileStart = (track.fileStartBar - 1) * timing.barSeconds;
     const musicEnd = this.barStartSeconds(this.loopBars + 1);

@@ -55,4 +55,18 @@ const bars = (placed) => placed.map((p) => `${p.event.anchorBar}@${p.arrangement
 // The first bar of the music never gets a lead-in.
 assert.deepEqual(planSwells([{ startBar: 1, sourceBar: 5, bars: 2, isCueStart: true }], events, sectionStarts), []);
 
+// A loop of the same part gets no lead-in swell.
+{
+  const events = [{ start: 30, end: 31.6, anchorBar: 21 }];
+  const looped = planSwells(
+    [
+      { startBar: 1, sourceBar: 21, bars: 8, isCueStart: true },
+      { startBar: 9, sourceBar: 21, bars: 8, isCueStart: true, isLoop: true },
+    ],
+    events,
+    [21],
+  );
+  assert.equal(looped.length, 0);
+}
+
 console.log("swellPlan: all tests passed");

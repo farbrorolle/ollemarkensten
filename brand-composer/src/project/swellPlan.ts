@@ -31,6 +31,8 @@ export interface PlayedChunk {
   bars: number;
   /** True when this chunk begins a section (a cue), false for a loop repeat inside one. */
   isCueStart: boolean;
+  /** The same part again (a loop): gets no swell leading into it -- it would build up to a new part that doesn't come. */
+  isLoop?: boolean;
 }
 
 export interface PlacedSwell {
@@ -53,8 +55,9 @@ export function planSwells(chunks: PlayedChunk[], events: SwellEvent[], sectionS
     const prev = chunks[index - 1];
     const contiguous = !!prev && prev.sourceBar + prev.bars === first;
 
-    // Lead-in into the chunk's first bar (not before the very first bar of the music).
-    if (index > 0) {
+    // Lead-in into the chunk's first bar (not before the very first bar of the music, and not
+    // into a loop of the same part: swells only lead into new parts).
+    if (index > 0 && !chunk.isLoop) {
       const own = events.filter((e) => e.anchorBar === first);
       if (own.length) {
         for (const event of own) placed.push({ event, arrangementBar: chunk.startBar });

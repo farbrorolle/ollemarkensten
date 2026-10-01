@@ -95,6 +95,10 @@ export interface SectionConfig {
   name: string;
   /** Omit to mean "every track" (the usual case for long-bounce projects, where the bounce itself decides what plays). */
   activeTracks?: string[];
+  /** Tracks that never ring over into this section (e.g. the bass into a part in other chords). */
+  cutInto?: string[];
+  /** Display colour (CSS) for this section's cards, blocks and labels. */
+  color?: string;
 }
 
 /**
@@ -111,6 +115,8 @@ export interface CueConfig {
   bar: number;
   /** Section id (from `sections`) that becomes active at this bar. */
   section: string;
+  /** Tracks that cut (no ring-over) into this cue, on top of the section's own `cutInto`. */
+  cutTracks?: string[];
   /** Transition into this cue. Ignored for the arrangement's first cue. Defaults to "crossfade". */
   transition?: TransitionType;
   /**

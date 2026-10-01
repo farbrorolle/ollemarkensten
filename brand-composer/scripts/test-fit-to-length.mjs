@@ -1,6 +1,6 @@
 // Unit tests for "anpassa till längd". Run: node scripts/test-fit-to-length.mjs
 import assert from "node:assert/strict";
-import { anchorOffsetInMusic, blockOptions, chooseLengths, expandLongSections, fitOriginal, fitToLength, regionChunks } from "../src/project/fitToLength.ts";
+import { anchorOffsetInMusic, blockOptions, chooseLengths, expandLongSections, fitAllParts, fitOriginal, fitToLength, regionChunks } from "../src/project/fitToLength.ts";
 
 const timing = { barSeconds: 1.6, beatSeconds: 0.4, anchorBeat: 3 }; // 150 BPM 4/4, logo plopp on beat 3
 
@@ -28,7 +28,7 @@ const regions = { intro: [1, 4], a: [5, 12], b: [13, 20], final: [49, 56] };
   assert.deepEqual(r.cues.map((c) => c.bar), [1, 5, 13, 21]);
 }
 
-// Shorter than the original: the parts that fit, the next one brought in from its start once half of it fits.
+// Shorter than the original: the original form, the last part from its start.
 {
   const r = fitToLength(template, 27, timing, regions);
   assert.ok(Math.abs(r.errorSeconds) < 1e-9, "anchor exact");
@@ -37,32 +37,29 @@ const regions = { intro: [1, 4], a: [5, 12], b: [13, 20], final: [49, 56] };
   assert.ok(r.musicStartSeconds < timing.barSeconds);
 }
 
-// Shorter, but not room for half the next part: the last part loops on (the intro stays whole).
+// Shorter, with only a few bars left for the next part: the part before loops a little further instead.
 {
   const r = fitToLength(template, anchorOffsetInMusic(15, timing), timing, regions);
   assert.equal(r.totalBars, 15);
   assert.deepEqual(r.lengths, [4, 11, 0, 0], `extended: ${r.lengths}`);
 }
 
-// Longer than the template: the extra length is spread over the loopable sections.
+// Longer than the template: like the original form, it goes on from the 2nd part.
 {
   const r = fitToLength(template, anchorOffsetInMusic(36, timing), timing, regions);
   assert.equal(r.totalBars, 36);
-  assert.deepEqual(r.lengths, [4, 12, 12, 8], `spread: ${r.lengths}`);
+  assert.deepEqual(r.cues.map((c) => c.section), ["intro", "a", "b", "final", "a"]);
   assert.ok(Math.abs(r.errorSeconds) < 1e-9);
 }
 
-// Much longer: every loopable section grows, none beyond its max.
+// "Fit all parts": every part, each with its original share of the length.
 {
-  const long = [
-    { section: "a", bars: 8, minBars: 0, maxBars: 32, stepBars: 4, priority: 1 },
-    { section: "b", bars: 8, minBars: 0, maxBars: 32, stepBars: 4, priority: 1 },
-    { section: "c", bars: 8, minBars: 0, maxBars: 32, stepBars: 4, priority: 1 },
-    { section: "final", bars: 8, minBars: 2, maxBars: 8, stepBars: 2, priority: 5 },
-  ];
-  const r = fitToLength(long, anchorOffsetInMusic(80, timing), timing);
-  assert.equal(r.totalBars, 80);
-  assert.deepEqual(r.lengths, [24, 24, 24, 8], `even: ${r.lengths}`);
+  const r = fitAllParts(template, anchorOffsetInMusic(56, timing), timing, regions);
+  assert.equal(r.totalBars, 56);
+  assert.deepEqual(r.lengths, [8, 16, 16, 16], `proportional: ${r.lengths}`);
+  const short = fitAllParts(template, anchorOffsetInMusic(14, timing), timing, regions);
+  assert.equal(short.totalBars, 14);
+  assert.deepEqual(short.lengths, [2, 4, 4, 4], `proportional: ${short.lengths}`);
 }
 
 // Every whole-second target from 12 to 90 s: exact whenever the template allows it.
