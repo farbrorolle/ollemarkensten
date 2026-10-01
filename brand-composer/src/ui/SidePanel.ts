@@ -170,10 +170,14 @@ export function mountSidePanel(
   partsBox.innerHTML = `
     <div class="parts-box-head">
       <h2>Customize the arrangement</h2>
-      <p class="hint">Drag a part into the Form lane – between two parts to add it, onto a part to replace it. Melody and swells play on top of a part. Click a part in the timeline for its options.</p>
+      <p class="hint">Drop a part between two parts to add it, or onto a part to replace it. Click a part in the timeline for its options.</p>
+    </div>
+    <div class="parts-cards">
+      <div class="parts-card" data-parts-card><div class="parts-card-title">Parts <span>drag into the Form lane</span></div></div>
+      <div class="parts-card" data-layers-card><div class="parts-card-title">Layers <span>melody &amp; swells on top of a part</span></div></div>
     </div>`;
-  if (partsRow) partsBox.appendChild(partsRow);
-  if (layersRow) partsBox.appendChild(layersRow);
+  if (partsRow) partsBox.querySelector("[data-parts-card]")!.appendChild(partsRow);
+  if (layersRow) partsBox.querySelector("[data-layers-card]")!.appendChild(layersRow);
   timelineRoot.closest(".panel-timeline")?.before(partsBox);
   // The toolbar row the arrange switch lived in may now be empty.
   timelineRoot.querySelectorAll<HTMLElement>(".timeline-toolbar").forEach((bar) => {

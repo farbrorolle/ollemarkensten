@@ -3842,3 +3842,51 @@ body.view-customer [data-mode-toggle] {
 .output-bar .transport-film-audio {
   display: none !important;
 }
+/* Parts and Layers as two cards side by side. */
+.parts-cards {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+.parts-card {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+.parts-card[data-layers-card] {
+  flex: 0 1 auto;
+}
+.parts-card-title {
+  margin-bottom: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.parts-card-title span {
+  margin-left: 6px;
+  font-weight: 400;
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+.parts-card .timeline-palette-row {
+  margin: 0;
+}
+.parts-card .palette-label {
+  display: none;
+}
+@media (max-width: 1100px) {
+  .parts-cards {
+    flex-direction: column;
+  }
+}
+.parts-card[data-parts-card] {
+  flex: 1 1 0;
+}
+.parts-card[data-layers-card] {
+  flex: 0 0 auto;
+}
+.parts-card[data-layers-card] .timeline-palette {
+  flex-wrap: nowrap;
+}
