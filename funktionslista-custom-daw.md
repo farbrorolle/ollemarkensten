@@ -55,7 +55,7 @@ Ingen funktion i listan får försvinna när designen 2a byggs in (2a Workspace 
 |---|---|---|
 | En fader per mapp (projektets mappar, som exporterade) | Mixer | Levels-flik "Folders", alltid synlig – inga egna grupper |
 | Volume cues per instrument (klick på spåret, förval, "only in this part", dra) | Spåret Volume cues | Oförändrat |
-| Music volume-spår (hela musiken) | Ja (ny i dag) | Eget spår under Volume cues |
+| Music volume-spår (hela musiken) | Dolt tills vidare (finns i motorn) | – |
 | Levels per part: Set, Copy, Paste, Apply to all parts, Clear part | Spårlistan | Levels-flik: "Levels for this part" |
 
 ## Export

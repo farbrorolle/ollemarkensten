@@ -1724,17 +1724,11 @@ export function mountTimeline(
   lanesEl.appendChild(cueLane);
   const cuesEl = cueLane.querySelector<HTMLElement>("[data-cues]")!;
   cueLane.addEventListener("click", (e) => e.stopPropagation()); // no seeking from here
-  // "Music volume": the same kind of cues, for the whole music at once (on top of the above).
-  const musicCueLane = document.createElement("div");
-  musicCueLane.className = "timeline-lane timeline-lane-cues timeline-lane-music-cues";
-  musicCueLane.innerHTML = `<span class="timeline-lane-name" title="Music volume: click the lane to turn the whole music up or down from that point (the film audio is not affected)">Music volume</span><div class="timeline-cues" data-cues></div>`;
-  lanesEl.appendChild(musicCueLane);
-  const musicCuesEl = musicCueLane.querySelector<HTMLElement>("[data-cues]")!;
-  musicCueLane.addEventListener("click", (e) => e.stopPropagation());
+  // (A "Music volume" lane for the whole music exists in the engine – MUSIC_CUE_TRACK – but is not
+  // shown for now: only instrument volumes can be changed.)
   interface CueLaneRef { lane: HTMLElement; el: HTMLElement; music: boolean }
   const cueLanes: CueLaneRef[] = [
     { lane: cueLane, el: cuesEl, music: false },
-    { lane: musicCueLane, el: musicCuesEl, music: true },
   ];
   const trackName = (id: string): string => (id === MUSIC_CUE_TRACK ? "Music" : (engine.tracks.get(id)?.name ?? id));
   const dbText = (db: number): string => (db <= VOLUME_CUE_MUTE_DB ? "mute" : db === 0 ? "0 dB" : `${db > 0 ? "+" : ""}${db} dB`);
