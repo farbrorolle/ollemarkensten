@@ -3801,3 +3801,44 @@ body.view-customer [data-mode-toggle] {
   padding-top: 14px;
   border-top: 1px solid var(--panel-border);
 }
+/* Film / music levels on the same row as the transport (wraps under it only when there's no room). */
+.ws-main .panel-transport {
+  flex-wrap: wrap;
+  column-gap: 20px;
+}
+.output-bar {
+  width: auto;
+  flex: 0 1 auto;
+  margin-left: auto;
+  padding-top: 0;
+  border-top: none;
+  gap: 14px;
+}
+.output-faders {
+  grid-template-columns: auto minmax(70px, 110px) auto;
+  column-gap: 8px;
+}
+.output-faders .video-volume > span:first-child,
+.output-faders .video-limiter > span:not([class]) {
+  font-size: 12px;
+  white-space: nowrap;
+}
+.output-bar .video-volume-value {
+  min-width: 46px;
+  font-size: 11px;
+}
+.output-bar .transport-film-audio {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.ws-main .position-value,
+.ws-main .section-value {
+  font-size: 18px;
+}
+#transport-panel {
+  gap: 16px;
+}
+/* Film audio on/off: the fader does it (all the way down = muted). */
+.output-bar .transport-film-audio {
+  display: none !important;
+}

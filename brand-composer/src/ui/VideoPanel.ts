@@ -168,7 +168,11 @@ export function mountVideoPanel(
   // All the way down = muted (not just -40 dB).
   const faderDb = (input: HTMLInputElement): number => (Number(input.value) <= Number(input.min) ? -Infinity : Number(input.value));
   const dbLabel = (db: number): string => (db === -Infinity ? "muted" : `${db > 0 ? "+" : ""}${db.toFixed(1)} dB`);
-  volumeInput.addEventListener("input", () => film.setVolumeDb(faderDb(volumeInput)));
+  volumeInput.addEventListener("input", () => {
+    // The fader is the only control now: moving it also turns the film's sound back on.
+    if (!film.audioOn && faderDb(volumeInput) !== -Infinity) film.setAudioOn(true);
+    film.setVolumeDb(faderDb(volumeInput));
+  });
 
   // Music level + the output limiter over film audio and music together.
   const signed = (v: number): string => `${v > 0 ? "+" : ""}${v.toFixed(1)} dB`;
@@ -224,7 +228,7 @@ export function mountVideoPanel(
 
     noticeEl.hidden = !film.autoplayBlocked;
     noticeEl.textContent = film.autoplayBlocked
-      ? "The browser blocked the film audio from starting automatically. Click “Film audio” to turn it back on."
+      ? "The browser blocked the film audio from starting automatically. Move the Film audio fader to turn it back on."
       : "";
   }
 
