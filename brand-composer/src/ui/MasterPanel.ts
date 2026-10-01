@@ -71,13 +71,13 @@ export function mountMasterPanel(root: HTMLElement, engine: AudioEngine): Master
 
   const gainGrid = document.createElement("div");
   gainGrid.className = "creator-grid";
-  gainGrid.append(slider("Master gain", -24, 6, 0.5, engine.masterGain, dB, (v) => engine.setMasterGain(v)));
+  gainGrid.append(slider("Music level (same as the Music fader)", -24, 6, 0.5, engine.masterGain, dB, (v) => engine.setMasterGain(v)));
   root.append(gainGrid);
 
   // Bus compressor.
   const compHead = document.createElement("div");
   compHead.className = "creator-subhead";
-  compHead.innerHTML = `Bus compressor <label class="checkbox-row"><label><input type="checkbox" data-comp-on /> On</label></label>`;
+  compHead.innerHTML = `Music bus compressor <span class="creator-subhead-note">glues all the music together – the film's sound is not affected</span> <label class="checkbox-row"><label><input type="checkbox" data-comp-on /> On</label></label>`;
   const compOn = compHead.querySelector<HTMLInputElement>("[data-comp-on]")!;
   const comp = engine.compressorState;
   compOn.checked = comp.enabled;
@@ -98,7 +98,7 @@ export function mountMasterPanel(root: HTMLElement, engine: AudioEngine): Master
   // Limiter.
   const limHead = document.createElement("div");
   limHead.className = "creator-subhead";
-  limHead.innerHTML = `Music limiter <label class="checkbox-row"><label><input type="checkbox" data-lim-on /> On</label></label>`;
+  limHead.innerHTML = `Music limiter <span class="creator-subhead-note">catches peaks in the music only, before the film's sound is added (the final limiter for film + music is Loudness boost under the film)</span> <label class="checkbox-row"><label><input type="checkbox" data-lim-on /> On</label></label>`;
   const limOnBox = limHead.querySelector<HTMLInputElement>("[data-lim-on]")!;
   limOnBox.checked = engine.isMusicLimiterOn;
   limOnBox.addEventListener("change", () => engine.setMusicLimiterOn(limOnBox.checked));
@@ -116,7 +116,7 @@ export function mountMasterPanel(root: HTMLElement, engine: AudioEngine): Master
   // Loudness after the limiter.
   const lufsHead = document.createElement("div");
   lufsHead.className = "creator-subhead";
-  lufsHead.innerHTML = `Loudness after the limiter (LUFS) <button type="button" class="btn btn-step" data-lufs-reset title="Reset integrated">↺</button>`;
+  lufsHead.innerHTML = `Loudness of the final output, film + music (LUFS) <button type="button" class="btn btn-step" data-lufs-reset title="Reset integrated">↺</button>`;
   const lufs = document.createElement("div");
   lufs.className = "lufs-meter";
   lufs.innerHTML = `
@@ -141,7 +141,7 @@ export function mountMasterPanel(root: HTMLElement, engine: AudioEngine): Master
   const exportRow = document.createElement("div");
   exportRow.className = "export-row";
   exportRow.innerHTML = `
-    <button data-export class="btn btn-accent">⇩ Export stereo WAV</button>
+    <button data-export class="btn btn-accent">⇩ Export music + film audio (WAV)</button>
     <span data-export-status class="export-status"></span>`;
   root.append(exportRow);
   const exportBtn = exportRow.querySelector<HTMLButtonElement>("[data-export]")!;

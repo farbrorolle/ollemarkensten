@@ -50,6 +50,32 @@
             </div>
             <div id="timeline-view"></div>
           </section>
+
+          <section class="panel panel-composer creator-only" data-composer>
+            <div class="composer-head">
+              <h2>Composer settings</h2>
+              <p>Only in Composer view – the customer never sees these. Everything above is exactly what the customer sees.</p>
+            </div>
+            <div class="composer-grid">
+              <section class="composer-card composer-mixer" data-composer-mixer>
+                <h3>Folders mixer <span class="composer-tag">volume · pan · mute · solo · load file</span></h3>
+              </section>
+            <section class="composer-card panel-master">
+              <h3>Music master <span class="composer-tag">the music only – not the film’s sound</span></h3>
+              <div id="master-panel"></div>
+            </section>
+
+            <section class="composer-card panel-sidechain">
+              <h3>Sidechain <span class="composer-tag">one folder ducks another</span></h3>
+              <div id="sidechain-panel"></div>
+            </section>
+
+            <section class="composer-card panel-logo">
+              <h3>Sonic logo rules</h3>
+              <div id="logo-panel"></div>
+            </section>
+            </div>
+          </section>
         </div>
 
         <aside class="ws-side" data-side>
@@ -62,20 +88,6 @@
               <div id="track-list"></div>
             </section>
 
-            <section class="panel panel-master creator-only">
-              <h2>Master</h2>
-              <div id="master-panel"></div>
-            </section>
-
-            <section class="panel panel-sidechain creator-only">
-              <h2>Sidechain</h2>
-              <div id="sidechain-panel"></div>
-            </section>
-
-            <section class="panel panel-logo creator-only">
-              <h2>Sonic logo</h2>
-              <div id="logo-panel"></div>
-            </section>
           </div>
         </aside>
       </main>

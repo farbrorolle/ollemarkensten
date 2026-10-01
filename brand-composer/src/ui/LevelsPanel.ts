@@ -42,6 +42,21 @@ export function mountLevelsPanel(
   const folders = section("Folders", "One fader per folder of the track. Levels per part sets them for just one part.");
   folders.classList.add("levels-folders");
   folders.appendChild(tracksPanel);
+  // In Composer view the full mixer (pan, solo, load file) sits in the Composer settings below the
+  // timeline, with room to breathe; the customer's Levels tab then points there.
+  const composerMixer = document.querySelector<HTMLElement>("[data-composer-mixer]");
+  const pointer = document.createElement("p");
+  pointer.className = "side-note levels-pointer";
+  pointer.textContent = "Composer view: the folders mixer (with pan, solo and levels per part) is in Composer settings below the timeline.";
+  folders.appendChild(pointer);
+  const placeMixer = (): void => {
+    const creator = document.body.classList.contains("view-creator");
+    const target = creator && composerMixer ? composerMixer : folders;
+    if (tracksPanel.parentElement !== target) target.appendChild(tracksPanel);
+    pointer.hidden = !creator;
+  };
+  placeMixer();
+  new MutationObserver(placeMixer).observe(document.body, { attributes: true, attributeFilter: ["class"] });
 
   // --- Film panel tidy-up ---
   const stage = videoRoot.querySelector<HTMLElement>("[data-stage]");
