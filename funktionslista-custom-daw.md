@@ -5,7 +5,7 @@ Ingen funktion i listan får försvinna när designen 2a byggs in (2a Workspace 
 ## Kundvy – grund (steg 1 Fit the length)
 | Funktion | I dag | I 2a |
 |---|---|---|
-| Lägga in film (dra fil, Choose film…) | Filmpanel | Tomt filmfält under tidslinjen, plus "Try with a sample film" (**ny**) |
+| Lägga in film (dra fil, Choose film…) | Filmpanel | Tomt filmfält under tidslinjen, |
 | Replace / Remove film | Filmpanel | Filmetiketten nere till vänster på filmen |
 | Klippsökning, loggan på slutskylten | Automatisk | Oförändrad; "End card" i filmljudspåret |
 | ◀ Previous cut / Next cut ▶ | Vyraden | Högerpanel "Logo lands on" |
@@ -53,12 +53,10 @@ Ingen funktion i listan får försvinna när designen 2a byggs in (2a Workspace 
 ## Fine-tune: nivåer
 | Funktion | I dag | I 2a |
 |---|---|---|
-| Gruppreglage Rhythm, Bass, Music, Swells, Sonic logo | – (bussar finns) | Levels-flik (**ny** i kundvyn) |
+| En fader per mapp (projektets mappar, som exporterade) | Mixer | Levels-flik "Folders", alltid synlig – inga egna grupper |
 | Volume cues per instrument (klick på spåret, förval, "only in this part", dra) | Spåret Volume cues | Oförändrat |
 | Music volume-spår (hela musiken) | Ja (ny i dag) | Eget spår under Volume cues |
 | Levels per part: Set, Copy, Paste, Apply to all parts, Clear part | Spårlistan | Levels-flik: "Levels for this part" |
-| Show individual tracks: volym, mute, nivåmarkering per del | Knapp | "Show individual tracks (15)" |
-| Gruppgenväg för cues (sätter punkter per instrument) | – | **Ny**, valfri |
 
 ## Export
 | Funktion | I dag | I 2a |
