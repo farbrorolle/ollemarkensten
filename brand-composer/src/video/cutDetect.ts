@@ -163,7 +163,7 @@ export async function findCuts(
     const merged: Event[] = [];
     for (const e of events) {
       const last = merged[merged.length - 1];
-      if (last && e.t - last.t < 0.35) {
+      if (last && e.t - last.t < 0.7) {
         if (e.hardIndex !== undefined && last.hardIndex === undefined) merged[merged.length - 1] = e;
         continue;
       }
@@ -171,8 +171,8 @@ export async function findCuts(
     }
     const cuts: CutResult[] = [];
     for (const e of merged) {
-      // How bright the picture is just after the change.
-      const after = coarse.find((c) => c.t >= e.t + 0.25) ?? coarse[coarse.length - 1]!;
+      // How bright the picture is once the change is done (a fade to black takes a moment).
+      const after = coarse.find((c) => c.t >= e.t + 0.7) ?? coarse[coarse.length - 1]!;
       const dark = brightness(after.frame) < DARK;
       if (e.hardIndex === undefined) {
         cuts.push({ time: e.t, strength: e.strength, dark });

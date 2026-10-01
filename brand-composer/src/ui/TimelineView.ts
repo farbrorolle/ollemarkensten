@@ -212,21 +212,26 @@ export function mountTimeline(
         <button type="button" class="btn btn-icon" data-undo title="Undo (⌘Z / Ctrl+Z)">↶ Undo</button>
         <button type="button" class="btn btn-icon" data-redo title="Redo (⇧⌘Z / Ctrl+Y)">↷ Redo</button>
       </span>
-      <span class="cut-group" data-cut-group hidden title="Put the logo's hit on another cut in the film">
-        <button type="button" class="btn btn-icon" data-cut-prev>◀ Cut</button>
-        <span class="zoom-value">Logo</span>
-        <button type="button" class="btn btn-icon" data-cut-next>Cut ▶</button>
-      </span>
       <button type="button" class="btn" data-mode-toggle>Show sections</button>
-      <span class="zoom-group" title="Zoom the timeline (or ⌘/Ctrl + scroll, or pinch)">
-        <button type="button" class="btn btn-icon" data-zoom-out aria-label="Zoom out">−</button>
-        <span class="zoom-value" data-zoom-value>100%</span>
-        <button type="button" class="btn btn-icon" data-zoom-in aria-label="Zoom in">+</button>
-      </span>
       <span class="timeline-toolbar-status" data-status></span>
     </div>
     <div class="timeline-palette-row"><span class="palette-label">Parts</span><div class="timeline-palette" data-palette></div></div>
     <div class="timeline-palette-row" data-layer-row><span class="palette-label">Layers</span><div class="timeline-palette" data-layer-palette></div></div>
+    <div class="timeline-viewbar">
+      <span class="cut-group" data-cut-group hidden title="Put the logo's hit on another cut in the film">
+        <span class="viewbar-label">Logo on</span>
+        <button type="button" class="btn btn-small" data-cut-prev>◀ Previous cut</button>
+        <button type="button" class="btn btn-small" data-cut-next>Next cut ▶</button>
+      </span>
+      <span class="zoom-group" title="Zoom the timeline (also ⌘/Ctrl + scroll, or pinch on a trackpad)">
+        <span class="viewbar-label">Zoom</span>
+        <button type="button" class="btn btn-small" data-zoom-out aria-label="Zoom out">− Out</button>
+        <input type="range" min="0" max="100" step="1" value="0" data-zoom-slider aria-label="Zoom" />
+        <button type="button" class="btn btn-small" data-zoom-in aria-label="Zoom in">+ In</button>
+        <span class="zoom-value" data-zoom-value>100%</span>
+        <button type="button" class="btn btn-small" data-zoom-fit title="Show the whole timeline">Fit</button>
+      </span>
+    </div>
     <div class="timeline-scroll" data-scroll><div class="timeline-zoom" data-zoom-inner>
     <div class="timeline-timeruler" data-timeruler></div>
     <div class="timeline-ruler" data-ruler></div>
@@ -280,7 +285,7 @@ export function mountTimeline(
   const scrollEl = root.querySelector<HTMLElement>("[data-scroll]")!;
   const zoomInner = root.querySelector<HTMLElement>("[data-zoom-inner]")!;
   const zoomValue = root.querySelector<HTMLElement>("[data-zoom-value]")!;
-  const ZOOMS = [1, 1.5, 2, 3, 4, 6, 8];
+  const ZOOMS = [1, 1.5, 2, 3, 4, 6, 8, 12, 16];
   let zoom = 1;
   function setZoom(next: number, focusClientX?: number): void {
     next = Math.max(ZOOMS[0]!, Math.min(ZOOMS[ZOOMS.length - 1]!, next));
@@ -291,6 +296,7 @@ export function mountTimeline(
     zoom = next;
     zoomInner.style.width = `${zoom * 100}%`;
     zoomValue.textContent = `${Math.round(zoom * 100)}%`;
+    zoomSlider.value = String(zoomToSlider(zoom));
     scrollEl.scrollLeft = contentX * zoom - focusX;
     if (!zoomRedraw) {
       zoomRedraw = true;
@@ -305,6 +311,12 @@ export function mountTimeline(
     const i = ZOOMS.findIndex((z) => z >= zoom - 1e-9);
     setZoom(ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, (ZOOMS[i] === zoom ? i : dir > 0 ? i - 1 : i) + dir))]!, clientX);
   };
+  // The slider runs 1x .. 16x on a log scale.
+  const zoomSlider = root.querySelector<HTMLInputElement>("[data-zoom-slider]")!;
+  const MAX_ZOOM = 16;
+  const zoomToSlider = (z: number): number => Math.round((Math.log(z) / Math.log(MAX_ZOOM)) * 100);
+  zoomSlider.addEventListener("input", () => setZoom(Math.pow(MAX_ZOOM, Number(zoomSlider.value) / 100)));
+  root.querySelector("[data-zoom-fit]")!.addEventListener("click", () => setZoom(1));
   root.querySelector("[data-zoom-in]")!.addEventListener("click", () => stepZoom(1));
   root.querySelector("[data-zoom-out]")!.addEventListener("click", () => stepZoom(-1));
   scrollEl.addEventListener(
@@ -2089,11 +2101,13 @@ export function mountTimeline(
     }
   }
 
+  let uiFrame = 0;
   return {
     refresh() {
       redrawAll();
     },
     update() {
+      if (++uiFrame % 15 === 0) syncCutButtons(); // (the film's cuts arrive in the background)
       const fraction = spanSeconds > 0 ? (Tone.getTransport().seconds / spanSeconds) % 1 : 0;
       playhead.style.left = `${fraction * 100}%`;
       updateFilm(spanSeconds);

@@ -148,6 +148,8 @@ export interface FitBlock {
 
 export interface FitConfig {
   template: FitBlock[];
+  /** Longer music goes round again from this section (e.g. skip a quiet intro). Default: the 2nd. */
+  loopFrom?: string;
 }
 
 /**

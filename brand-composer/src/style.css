@@ -2247,3 +2247,39 @@ body.view-customer .track-row {
   border: 1px solid var(--accent);
   border-radius: 999px;
 }
+
+/* View bar above the timeline: logo on previous/next cut, zoom. */
+.timeline-viewbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 4px 0 6px;
+  flex-wrap: wrap;
+}
+
+.timeline-viewbar .zoom-group {
+  margin-left: auto;
+}
+
+.viewbar-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.btn-small {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.timeline-viewbar input[type="range"] {
+  width: 140px;
+}
+
+.cut-group {
+  border: 1px solid #33d17a;
+  border-radius: 8px;
+  padding: 3px 6px;
+}

@@ -369,7 +369,7 @@ export class AudioEngine {
     const result = fit(
       this.fitConfig.template,
       anchorSeconds,
-      { barSeconds: this.barSeconds, beatSeconds: this.beatSeconds, anchorBeat: this.logoConfig.anchorBeat },
+      { barSeconds: this.barSeconds, beatSeconds: this.beatSeconds, anchorBeat: this.logoConfig.anchorBeat, loopFrom: this.loopFromIndex },
       this.regions,
     );
     this.applyArrangement(result.cues, result.totalBars, result.musicStartSeconds, result);
@@ -620,7 +620,7 @@ export class AudioEngine {
   ): void {
     // A section longer than its material loops (auto arrange) or runs on into the next part
     // (original form) -- as separate, visible parts of the form.
-    if (this.regions) cues = expandLongSections(cues, loopBars, this.regions, this._arrangeMode === "original" ? "continue" : "loop", this.sectionEndings());
+    if (this.regions) cues = expandLongSections(cues, loopBars, this.regions, this._arrangeMode === "original" ? "continue" : "loop", this.sectionEndings(), this.fitConfig?.loopFrom);
     if (!this.restoring && this.currentState) {
       this.undoStack.push(this.currentState);
       if (this.undoStack.length > 100) this.undoStack.shift();
@@ -670,6 +670,13 @@ export class AudioEngine {
     this.applyPlaybackMode(); // schedule() always turns looping on; re-apply film/logo mode on top
     if (wasPlaying && (this.filmMode || playedFrom < this.arrangementSeconds - 0.1)) Tone.getTransport().start(undefined, playedFrom);
     for (const listener of this.arrangementListeners) listener();
+  }
+
+  /** Template index the music goes round again from (config `fit.loopFrom`). */
+  private get loopFromIndex(): number | undefined {
+    const id = this.fitConfig?.loopFrom;
+    const i = id ? (this.fitConfig?.template.findIndex((b) => b.section === id) ?? -1) : -1;
+    return i >= 0 ? i : undefined;
   }
 
   /** Per section: how many bars at its end lead into the next part (the most any track picks up). */

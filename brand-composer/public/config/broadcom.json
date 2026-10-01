@@ -4930,7 +4930,8 @@
         "priority": 5,
         "transition": "crossfade"
       }
-    ]
+    ],
+    "loopFrom": "groove"
   },
   "logo": {
     "track": "logo",

@@ -19,6 +19,8 @@
 import type { CueConfig, FitBlock, TransitionType } from "./types.ts";
 
 export interface FitTiming {
+  /** After the last part, the music goes round again from this part (index in the template). Default 1. */
+  loopFrom?: number;
   barSeconds: number;
   beatSeconds: number;
   /** Beat of the last bar the logo anchor lands on (1-indexed). */
@@ -252,7 +254,7 @@ export function fitOriginal(
     cues.push(cue);
     lengths[i]! += len;
     bar += len;
-    i = i + 1 < template.length ? i + 1 : Math.min(1, template.length - 1); // after the end: repeat from the 2nd section
+    i = i + 1 < template.length ? i + 1 : Math.min(timing.loopFrom ?? 1, template.length - 1); // after the end: round again
   }
   const totalBars = bar - 1;
   const musicStartSeconds = Math.max(0, targetAnchorSeconds - anchorOffsetInMusic(totalBars, timing));
@@ -285,6 +287,8 @@ export function expandLongSections(
   mode: "loop" | "continue",
   /** Per section: bars at its end that lead into the next part (pickups/fills), played only on the last pass. */
   endingBars: Record<string, number> = {},
+  /** "continue": after the last part, go round again from this section (default: the 2nd). */
+  loopFromSection?: string,
 ): CueConfig[] {
   const order = Object.entries(regions)
     .sort((a, b) => a[1][0] - b[1][0])
@@ -331,7 +335,8 @@ export function expandLongSections(
     let index = order.indexOf(cue.section);
     let guard = 0;
     while (left > 0 && guard++ < 1000) {
-      index = index + 1 < order.length ? index + 1 : Math.min(1, order.length - 1);
+      const wrapTo = loopFromSection && order.includes(loopFromSection) ? order.indexOf(loopFromSection) : Math.min(1, order.length - 1);
+      index = index + 1 < order.length ? index + 1 : wrapTo;
       const section = order[index]!;
       const r = regions[section]!;
       const bars = Math.min(left, r[1] - r[0] + 1);
@@ -376,7 +381,7 @@ export function fitAuto(
       if (left >= 2) parts[parts.length - 1]!.len += left; // the part before loops a little further
       break;
     }
-    i = i + 1 < template.length ? i + 1 : Math.min(1, template.length - 1);
+    i = i + 1 < template.length ? i + 1 : Math.min(timing.loopFrom ?? 1, template.length - 1);
   }
   return buildResult(template, parts, targetAnchorSeconds, timing, regions);
 }
