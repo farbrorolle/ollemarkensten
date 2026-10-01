@@ -10,7 +10,8 @@ import { mountTimeline } from "./ui/TimelineView.ts";
 import { mountLogoPanel } from "./ui/LogoPanel.ts";
 import { mountVideoPanel } from "./ui/VideoPanel.ts";
 import { VideoSync } from "./video/VideoSync.ts";
-import { findLastCut } from "./video/cutDetect.ts";
+import { findCuts } from "./video/cutDetect.ts";
+import { mountExportBar } from "./ui/ExportBar.ts";
 
 const engine = new AudioEngine();
 const film = new VideoSync(engine);
@@ -71,9 +72,11 @@ async function bootstrap(): Promise<void> {
         : "/config/broadcom.json";
   const config = await loadProjectFromUrl(engine, configUrl);
   titleEl.textContent = config.title;
+  document.title = `Custom DAW – ${config.title}`;
 
   const videoPanel = mountVideoPanel(videoRoot, engine, film, config.sections ?? [], () => void togglePlay());
   const transportPanel = mountTransportPanel(transportRoot, engine, () => film.primeFromGesture());
+  const exportBar = mountExportBar(transportRoot, engine, film);
   const masterPanel = mountMasterPanel(masterRoot, engine);
   const timeline = mountTimeline(timelineRoot, engine, config.sections ?? [], film);
   const trackList = mountTrackList(trackListRoot, engine, (trackId) => timeline.redrawTrack(trackId));
@@ -92,14 +95,17 @@ async function bootstrap(): Promise<void> {
     }
     fittedFilm = key;
     film.detectedCut = null;
+    film.cuts = [];
     engine.fitToAnchor(engine.defaultAnchorForFilm(info.duration)); // the timeline redraws itself
     // Then look for the film's last hard cut (usually the end card) and put the logo's hit on it.
     const url = film.sourceUrl;
     if (!url) return;
-    void findLastCut(url, info.duration).then((cut) => {
-      if (!cut || fittedFilm !== key) return; // no clear cut, or another film was loaded meanwhile
-      film.detectedCut = cut.time;
-      engine.fitToAnchor(cut.time);
+    void findCuts(url, info.duration).then(({ cuts, best }) => {
+      if (fittedFilm !== key) return; // another film was loaded meanwhile
+      film.cuts = cuts.map((c) => c.time);
+      if (!best) return; // no clear cut
+      film.detectedCut = best.time;
+      engine.fitToAnchor(best.time);
     });
   });
 
@@ -121,6 +127,7 @@ async function bootstrap(): Promise<void> {
     film.tick();
     videoPanel.update();
     transportPanel.update();
+    exportBar.update();
     masterPanel.update();
     sidechainPanel.update();
     trackList.update();
@@ -132,5 +139,5 @@ async function bootstrap(): Promise<void> {
 
 bootstrap().catch((error: unknown) => {
   console.error(error);
-  titleEl.textContent = "Kunde inte ladda projektet – se konsolen.";
+  titleEl.textContent = "Couldn't load the project – see the console.";
 });

@@ -10,6 +10,7 @@ import { GainEnvelope } from "./GainEnvelope.ts";
 import { LoudnessMeter } from "./LoudnessMeter.ts";
 import type { EnvelopePoint } from "./GainEnvelope.ts";
 import { reencodeBlobAsWav } from "./wav.ts";
+import { captureOutput, capturedToWav } from "./captureOutput.ts";
 import type {
   CompressorSettings,
   CueConfig,
@@ -302,6 +303,10 @@ export class AudioEngine {
   /** Where the anchor should go so the logo ends exactly when a film of `filmSeconds` ends. */
   defaultAnchorForFilm(filmSeconds: number): number {
     return this.anchorForEnd(filmSeconds);
+  }
+
+  sectionName(id: string): string {
+    return this.sectionsById.get(id)?.name ?? id;
   }
 
   /** The creator's shorten/extend rules per section (empty if the project has none). */
@@ -615,7 +620,7 @@ export class AudioEngine {
   ): void {
     // A section longer than its material loops (auto arrange) or runs on into the next part
     // (original form) -- as separate, visible parts of the form.
-    if (this.regions) cues = expandLongSections(cues, loopBars, this.regions, this._arrangeMode === "original" ? "continue" : "loop");
+    if (this.regions) cues = expandLongSections(cues, loopBars, this.regions, this._arrangeMode === "original" ? "continue" : "loop", this.sectionEndings());
     if (!this.restoring && this.currentState) {
       this.undoStack.push(this.currentState);
       if (this.undoStack.length > 100) this.undoStack.shift();
@@ -665,6 +670,17 @@ export class AudioEngine {
     this.applyPlaybackMode(); // schedule() always turns looping on; re-apply film/logo mode on top
     if (wasPlaying && (this.filmMode || playedFrom < this.arrangementSeconds - 0.1)) Tone.getTransport().start(undefined, playedFrom);
     for (const listener of this.arrangementListeners) listener();
+  }
+
+  /** Per section: how many bars at its end lead into the next part (the most any track picks up). */
+  private sectionEndings(): Record<string, number> {
+    const out: Record<string, number> = {};
+    for (const [id, region] of Object.entries(this.regions ?? {})) {
+      let bars = 0;
+      for (const t of this.tracks.values()) bars = Math.max(bars, t.pickups[String(region[1] + 1)] ?? 0);
+      out[id] = bars;
+    }
+    return out;
   }
 
   // --- Swells: the automatic ones can be switched off, and extra ones added anywhere -------------
@@ -1018,6 +1034,30 @@ export class AudioEngine {
     recorder.dispose();
 
     return reencodeBlobAsWav(recordedBlob);
+  }
+
+  /**
+   * Renders the output (music, plus the film's sound if it is on) from the very start of the
+   * timeline (0 = the film's first frame) for `seconds`, sample-exact, as a 24-bit WAV. Plays
+   * through once in real time (sidechain ducking needs a live context) -- silently.
+   */
+  async renderOutput(seconds: number, onProgress?: (fraction: number) => void): Promise<Blob> {
+    if (!this.arrangement.totalBars) throw new Error("No arrangement to export.");
+    await this.unlockAudio();
+    const destination = Tone.getDestination();
+    const wasMuted = destination.mute;
+    this.stop();
+    destination.mute = true; // the capture taps before the speakers
+    try {
+      const startAt = Tone.now() + 0.25;
+      const capture = captureOutput(this.outputLimiter, startAt, seconds, onProgress);
+      Tone.getTransport().start(startAt, 0);
+      const result = await capture;
+      return capturedToWav(result);
+    } finally {
+      this.stop();
+      destination.mute = wasMuted;
+    }
   }
 
   dispose(): void {

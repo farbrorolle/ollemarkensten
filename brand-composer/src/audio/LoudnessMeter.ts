@@ -1,3 +1,4 @@
+import { CAPTURE_WORKLET } from "./captureOutput.ts";
 import * as Tone from "tone";
 
 /**
@@ -85,7 +86,7 @@ export class LoudnessMeter {
   private async init(source: Tone.ToneAudioNode): Promise<void> {
     // Go through Tone's context (it wraps the native one), so nodes are compatible.
     const context = Tone.getContext();
-    const url = URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" }));
+    const url = URL.createObjectURL(new Blob([WORKLET, CAPTURE_WORKLET], { type: "application/javascript" }));
     try {
       await context.addAudioWorkletModule(url);
     } catch {

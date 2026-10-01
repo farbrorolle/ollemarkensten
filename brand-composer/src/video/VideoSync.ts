@@ -105,6 +105,8 @@ export class VideoSync {
 
   /** The film's last hard cut (where the logo's hit was synced to), or null if none was found. */
   detectedCut: number | null = null;
+  /** Every clear cut found near the end of the film (film seconds), for "logo on previous/next cut". */
+  cuts: number[] = [];
 
   get info(): FilmInfo | null {
     return this.film;

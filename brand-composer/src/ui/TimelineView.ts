@@ -212,6 +212,11 @@ export function mountTimeline(
         <button type="button" class="btn btn-icon" data-undo title="Undo (⌘Z / Ctrl+Z)">↶ Undo</button>
         <button type="button" class="btn btn-icon" data-redo title="Redo (⇧⌘Z / Ctrl+Y)">↷ Redo</button>
       </span>
+      <span class="cut-group" data-cut-group hidden title="Put the logo's hit on another cut in the film">
+        <button type="button" class="btn btn-icon" data-cut-prev>◀ Cut</button>
+        <span class="zoom-value">Logo</span>
+        <button type="button" class="btn btn-icon" data-cut-next>Cut ▶</button>
+      </span>
       <button type="button" class="btn" data-mode-toggle>Show sections</button>
       <span class="zoom-group" title="Zoom the timeline (or ⌘/Ctrl + scroll, or pinch)">
         <button type="button" class="btn btn-icon" data-zoom-out aria-label="Zoom out">−</button>
@@ -349,6 +354,38 @@ export function mountTimeline(
     fitAllBtn.setAttribute("aria-pressed", String(engine.fitAllParts));
     resetOriginalBtn.hidden = !engine.canFit;
     resetFilmBtn.hidden = !engine.canFit || !film?.info;
+  };
+
+  // Logo on the previous / next cut in the film.
+  const cutGroup = root.querySelector<HTMLElement>("[data-cut-group]")!;
+  const cutPrev = root.querySelector<HTMLButtonElement>("[data-cut-prev]")!;
+  const cutNext = root.querySelector<HTMLButtonElement>("[data-cut-next]")!;
+  const neighbourCut = (dir: -1 | 1): number | null => {
+    const anchor = engine.logoAnchorSeconds;
+    const cuts = film?.cuts ?? [];
+    if (anchor === null || !cuts.length) return null;
+    const candidates = dir < 0 ? cuts.filter((c) => c < anchor - 0.1) : cuts.filter((c) => c > anchor + 0.1);
+    if (!candidates.length) return null;
+    return dir < 0 ? candidates[candidates.length - 1]! : candidates[0]!;
+  };
+  cutPrev.addEventListener("click", () => {
+    const cut = neighbourCut(-1);
+    if (cut !== null) engine.fitToAnchor(cut);
+  });
+  cutNext.addEventListener("click", () => {
+    const cut = neighbourCut(1);
+    if (cut !== null) engine.fitToAnchor(cut);
+  });
+  const syncCutButtons = (): void => {
+    const show = !!film?.cuts.length && engine.hasLogo && engine.canFit;
+    cutGroup.hidden = !show;
+    if (!show) return;
+    const prev = neighbourCut(-1);
+    const next = neighbourCut(1);
+    cutPrev.disabled = prev === null;
+    cutNext.disabled = next === null;
+    cutPrev.title = prev === null ? "No earlier cut found" : `Logo on the cut at ${formatFilmTime(prev)}`;
+    cutNext.title = next === null ? "No later cut found" : `Logo on the cut at ${formatFilmTime(next)}`;
   };
 
   // Auto arrange / original form.
@@ -1480,6 +1517,47 @@ export function mountTimeline(
     engine.addSwell(bar);
   });
 
+  // A "Swell" card next to the layers: drag it onto the Swells lane (or click: at the playhead).
+  const SWELL_MIME = "application/x-brand-swell";
+  const swellBarAt = (clientX: number): number => {
+    const rect = swellsEl.getBoundingClientRect();
+    const seconds = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * spanSeconds;
+    return Math.max(1, Math.min(totalBars, Math.round(1 + (seconds - engine.musicStartSeconds) / engine.barSeconds)));
+  };
+  if (engine.hasSwellTracks) {
+    const layerRow = root.querySelector<HTMLElement>("[data-layer-row]")!;
+    layerRow.hidden = false;
+    const swellCard = document.createElement("button");
+    swellCard.type = "button";
+    swellCard.className = "timeline-palette-chip timeline-palette-swell";
+    swellCard.draggable = true;
+    swellCard.innerHTML = `<span class="chip-name">↗ Swell</span><span class="chip-bars">synth + sfx into a downbeat</span>`;
+    swellCard.title = "Drag onto the Swells lane to add a swell into that bar (or click to add one at the playhead)";
+    swellCard.addEventListener("dragstart", (e) => {
+      e.dataTransfer?.setData(SWELL_MIME, "swell");
+      e.dataTransfer?.setData("text/plain", "Swell");
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = "copy";
+      swellLane.classList.add("timeline-lane-drop-target");
+    });
+    swellCard.addEventListener("dragend", () => swellLane.classList.remove("timeline-lane-drop-target"));
+    swellCard.addEventListener("click", () => {
+      const t = Tone.getTransport().seconds;
+      engine.addSwell(Math.max(1, Math.min(totalBars, Math.round(1 + (t - engine.musicStartSeconds) / engine.barSeconds))));
+    });
+    root.querySelector<HTMLElement>("[data-layer-palette]")!.appendChild(swellCard);
+    swellsEl.addEventListener("dragover", (e) => {
+      if (!e.dataTransfer?.types.includes(SWELL_MIME)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    });
+    swellsEl.addEventListener("drop", (e) => {
+      if (!e.dataTransfer?.types.includes(SWELL_MIME)) return;
+      e.preventDefault();
+      swellLane.classList.remove("timeline-lane-drop-target");
+      engine.addSwell(swellBarAt(e.clientX));
+    });
+  }
+
   function renderSwells(): void {
     swellsEl.innerHTML = "";
     for (const mark of engine.swellMarks) {
@@ -1540,7 +1618,38 @@ export function mountTimeline(
     const cues = [...engine.volumeCues].sort((a, b) => a.bar - b.bar);
     const width = cuesEl.clientWidth || 800;
     const rowEnds: number[] = [];
+    // Three or more cues on the same spot (e.g. "Set levels for this part") show as one group.
+    const byBar = new Map<number, VolumeCue[]>();
+    for (const cue of cues) byBar.set(cue.bar, [...(byBar.get(cue.bar) ?? []), cue]);
+    const grouped = new Set<number>();
+    for (const [barPos, group] of byBar) {
+      if (group.length < 3) continue;
+      grouped.add(barPos);
+      const x = xOfSeconds(engine.secondsAtBar(barPos));
+      const px = x * width;
+      let row = rowEnds.findIndex((end) => end < px);
+      if (row < 0) {
+        row = rowEnds.length;
+        rowEnds.push(0);
+      }
+      const marker = document.createElement("button");
+      marker.type = "button";
+      marker.className = "cue-marker cue-marker-group";
+      marker.style.left = `${x * 100}%`;
+      marker.style.top = `${2 + row * 18}px`;
+      marker.textContent = `🎚 ${group.length} levels`;
+      marker.title = group.map((c) => `${trackName(c.trackId)}: ${dbText(c.db)}`).join("\n") + "\n– click to remove these levels";
+      rowEnds[row] = px + 90;
+      marker.addEventListener("pointerdown", (e) => e.stopPropagation());
+      marker.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const ids = new Set(group.map((c) => c.id));
+        engine.setVolumeCues(engine.volumeCues.filter((c) => !ids.has(c.id)));
+      });
+      cuesEl.appendChild(marker);
+    }
     for (const cue of cues) {
+      if (grouped.has(cue.bar)) continue;
       const x = xOfSeconds(engine.secondsAtBar(cue.bar));
       const px = x * width;
       let row = rowEnds.findIndex((end) => end < px);
@@ -1794,6 +1903,7 @@ export function mountTimeline(
     renderSegmentList();
     syncLogoCard();
     syncArrangeButtons();
+    syncCutButtons();
     renderCues();
     renderLayers();
     renderSwells();
@@ -1904,6 +2014,7 @@ export function mountTimeline(
   engine.onArrangementChange(redrawAll);
   film?.onChange(() => {
     syncFitButtons();
+    syncCutButtons();
     if (Math.abs(computeSpan() - spanSeconds) > 1e-3) redrawAll();
   });
 

@@ -14,7 +14,17 @@ export interface CutResult {
   time: number;
   /** How much stronger than a typical frame change (the higher, the clearer the cut). */
   strength: number;
+  /** The picture after the cut is (nearly) black -- e.g. a fade to black, not the end card. */
+  dark?: boolean;
 }
+
+const brightness = (frame: Float32Array): number => {
+  let sum = 0;
+  for (let i = 0; i < frame.length; i++) sum += frame[i]!;
+  return sum / frame.length;
+};
+/** Mean luminance (0..255) below which a frame counts as black. */
+const DARK = 8;
 
 const W = 64;
 const H = 36;
@@ -86,6 +96,19 @@ const DISSOLVE_GAP = 6;
  * @param windowSeconds how far back from the end to look
  */
 export async function findLastCut(url: string, duration: number, windowSeconds = 15): Promise<CutResult | null> {
+  return (await findCuts(url, duration, windowSeconds)).best;
+}
+
+/**
+ * Every clear cut (hard cuts and quick dissolves) in the last `windowSeconds`, in time order, and
+ * the best one for the logo: the last cut that isn't into black (a fade to black at the very end
+ * is not the end card).
+ */
+export async function findCuts(
+  url: string,
+  duration: number,
+  windowSeconds = 15,
+): Promise<{ cuts: CutResult[]; best: CutResult | null }> {
   const video = document.createElement("video");
   video.muted = true;
   video.preload = "auto";
@@ -102,7 +125,7 @@ export async function findLastCut(url: string, duration: number, windowSeconds =
     const end = Math.max(0, duration - 0.05);
     const start = Math.max(0, end - windowSeconds);
     const coarse = await scan(video, ctx, start, end, 0.1);
-    if (coarse.length < DISSOLVE_GAP + 5) return null;
+    if (coarse.length < DISSOLVE_GAP + 5) return { cuts: [], best: null };
 
     // Hard cuts: one frame change far above the typical one.
     const steps = coarse.slice(1).map((c) => c.diff);
@@ -134,17 +157,37 @@ export async function findLastCut(url: string, duration: number, windowSeconds =
       }
       i = j;
     }
-    if (!events.length) return null;
-    // End cards come last: the latest clear change.
-    const best = events.reduce((a, b) => (b.t > a.t ? b : a));
-    if (best.hardIndex === undefined) return { time: best.t, strength: best.strength };
-
-    // Fine pass around a hard cut: 1/50 s steps over the 0.1 s interval that contained it.
-    const fine = await scan(video, ctx, Math.max(0, best.t - 0.12), Math.min(end, best.t + 0.02), 0.02);
-    const peak = fine.slice(1).reduce((a, b) => (b.diff > a.diff ? b : a), fine[1] ?? fine[0]!);
-    return { time: peak.t, strength: best.strength };
+    if (!events.length) return { cuts: [], best: null };
+    events.sort((a, b) => a.t - b.t);
+    // (A hard cut and a dissolve found at the same change: keep one.)
+    const merged: Event[] = [];
+    for (const e of events) {
+      const last = merged[merged.length - 1];
+      if (last && e.t - last.t < 0.35) {
+        if (e.hardIndex !== undefined && last.hardIndex === undefined) merged[merged.length - 1] = e;
+        continue;
+      }
+      merged.push(e);
+    }
+    const cuts: CutResult[] = [];
+    for (const e of merged) {
+      // How bright the picture is just after the change.
+      const after = coarse.find((c) => c.t >= e.t + 0.25) ?? coarse[coarse.length - 1]!;
+      const dark = brightness(after.frame) < DARK;
+      if (e.hardIndex === undefined) {
+        cuts.push({ time: e.t, strength: e.strength, dark });
+        continue;
+      }
+      // Fine pass around a hard cut: 1/50 s steps over the 0.1 s interval that contained it.
+      const fine = await scan(video, ctx, Math.max(0, e.t - 0.12), Math.min(end, e.t + 0.02), 0.02);
+      const peak = fine.slice(1).reduce((a, b) => (b.diff > a.diff ? b : a), fine[1] ?? fine[0]!);
+      cuts.push({ time: peak.t, strength: e.strength, dark });
+    }
+    const light = cuts.filter((c) => !c.dark);
+    const best = light.length ? light[light.length - 1]! : cuts[cuts.length - 1] ?? null;
+    return { cuts, best };
   } catch {
-    return null;
+    return { cuts: [], best: null };
   } finally {
     video.removeAttribute("src");
     video.load();

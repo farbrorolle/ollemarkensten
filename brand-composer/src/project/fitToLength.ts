@@ -283,6 +283,8 @@ export function expandLongSections(
   totalBars: number,
   regions: Record<string, [number, number]>,
   mode: "loop" | "continue",
+  /** Per section: bars at its end that lead into the next part (pickups/fills), played only on the last pass. */
+  endingBars: Record<string, number> = {},
 ): CueConfig[] {
   const order = Object.entries(regions)
     .sort((a, b) => a[1][0] - b[1][0])
@@ -311,7 +313,7 @@ export function expandLongSections(
       // at the very end: first the part without its ending, then loops of its body, and the last
       // loop runs out through the ending -- so it still leads nicely into what follows.
       const regionBars = region[1] - region[0] + 1;
-      const ending = regionBars >= 16 ? ENDING_BARS : 0;
+      const ending = Math.min(regionBars - 2, Math.max(regionBars >= 16 ? ENDING_BARS : 0, endingBars[cue.section] ?? 0));
       const bodyEnd = region[1] - ending; // last bar of the body
       const first = Math.max(1, bodyEnd - src + 1);
       push(cue, first);
