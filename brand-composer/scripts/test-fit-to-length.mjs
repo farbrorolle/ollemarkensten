@@ -37,11 +37,11 @@ const regions = { intro: [1, 4], a: [5, 12], b: [13, 20], final: [49, 56] };
   assert.ok(r.musicStartSeconds < timing.barSeconds);
 }
 
-// Shorter, but not room for half the next part: the parts that fit are extended instead.
+// Shorter, but not room for half the next part: the last part loops on (the intro stays whole).
 {
   const r = fitToLength(template, anchorOffsetInMusic(15, timing), timing, regions);
   assert.equal(r.totalBars, 15);
-  assert.deepEqual(r.lengths, [3, 12, 0, 0], `extended: ${r.lengths}`);
+  assert.deepEqual(r.lengths, [4, 11, 0, 0], `extended: ${r.lengths}`);
 }
 
 // Longer than the template: the extra length is spread over the loopable sections.

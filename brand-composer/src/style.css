@@ -1721,3 +1721,150 @@ body.view-customer .track-row {
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
+
+/* Time ruler: minutes and seconds. */
+.timeline-timeruler {
+  position: relative;
+  height: 20px;
+  margin-left: calc(var(--lane-gutter) + 1px);
+  margin-right: 5px;
+  border-bottom: 1px solid var(--panel-border);
+  margin-bottom: 2px;
+}
+
+.time-tick {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  height: 5px;
+  background: var(--text-dim);
+  opacity: 0.6;
+}
+
+.time-tick-major {
+  height: 10px;
+  opacity: 1;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.time-tick-major {
+  text-indent: 4px;
+  white-space: nowrap;
+  overflow: visible;
+}
+
+.timeline-timeruler {
+  cursor: pointer;
+}
+
+/* Volume cue points lane (under the music). */
+.timeline-lane-cues {
+  height: 34px;
+  cursor: default;
+  align-items: stretch;
+}
+
+.timeline-cues {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  cursor: copy;
+  background: repeating-linear-gradient(90deg, transparent 0 39px, rgba(255, 255, 255, 0.025) 39px 40px);
+}
+
+.cue-marker {
+  position: absolute;
+  height: 16px;
+  padding: 0 6px 0 5px;
+  border: none;
+  border-left: 2px solid currentColor;
+  border-radius: 0 4px 4px 0;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+  cursor: grab;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  touch-action: none;
+  color: #ffd166;
+  background: rgba(255, 209, 102, 0.14);
+}
+
+.cue-marker-down {
+  color: #ff9f6b;
+  background: rgba(255, 159, 107, 0.14);
+}
+
+.cue-marker-mute {
+  color: #ff6b81;
+  background: rgba(255, 107, 129, 0.14);
+}
+
+.cue-marker-up {
+  color: #7ee787;
+  background: rgba(126, 231, 135, 0.14);
+}
+
+.cue-marker-back {
+  color: #9aa4b8;
+  background: rgba(154, 164, 184, 0.14);
+}
+
+.cue-menu {
+  min-width: 300px;
+}
+
+.cue-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cue-menu-row > span:first-child {
+  width: 70px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.cue-menu-row select,
+.cue-menu-row input[type="range"] {
+  flex: 1;
+}
+
+.cue-menu-value {
+  min-width: 46px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.cue-menu-presets {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin: 0 0 8px 78px;
+}
+
+.cue-menu-check {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.cue-menu-check[hidden] {
+  display: none;
+}
+
+.cue-delete {
+  margin-right: auto;
+  color: #ff6b81;
+}

@@ -595,6 +595,7 @@ export class AudioEngine {
       this.redoStack.length = 0;
     }
     this.currentState = {
+      volumeCues: this._volumeCues.map((c) => ({ ...c })),
       cues: cues.map((c) => ({ ...c })),
       loopBars,
       musicStartSeconds,
@@ -626,10 +627,83 @@ export class AudioEngine {
       this.regions,
     );
     this.scheduleLogo();
+    this.cueEnvelopes = this.buildCueEnvelopes();
+    this.envelopes.push(...this.cueEnvelopes);
     this.envelopes.forEach((e) => e.reset(Tone.now()));
     this.applyPlaybackMode(); // schedule() always turns looping on; re-apply film/logo mode on top
     if (wasPlaying && (this.filmMode || playedFrom < this.arrangementSeconds - 0.1)) Tone.getTransport().start(undefined, playedFrom);
     for (const listener of this.arrangementListeners) listener();
+  }
+
+  // --- Volume cue points: per-instrument level changes along the timeline ---------------------
+
+  private _volumeCues: VolumeCue[] = [];
+  private cueEnvelopes: GainEnvelope[] = [];
+
+  get volumeCues(): readonly VolumeCue[] {
+    return this._volumeCues;
+  }
+
+  /** Replaces all volume cues (undoable) and applies them right away, also while playing. */
+  setVolumeCues(cues: VolumeCue[]): void {
+    if (this.currentState) {
+      this.undoStack.push(this.currentState);
+      this.redoStack.length = 0;
+    }
+    this._volumeCues = cues.map((c) => ({ ...c })).sort((a, b) => a.bar - b.bar);
+    if (this.currentState) this.currentState = { ...this.currentState, volumeCues: this._volumeCues.map((c) => ({ ...c })) };
+    this.refreshCueEnvelopes();
+    for (const listener of this.arrangementListeners) listener();
+  }
+
+  /** The level (dB) an instrument has just before `bar` (0 = as mixed). */
+  volumeAt(trackId: string, bar: number): number {
+    let db = 0;
+    for (const cue of this._volumeCues) if (cue.trackId === trackId && cue.bar < bar - 1e-9) db = cue.db;
+    return db;
+  }
+
+  /** Transport seconds of a (fractional, 1-indexed) arrangement bar position. */
+  secondsAtBar(bar: number): number {
+    const whole = Math.floor(bar);
+    return this.arrangement.barStartSeconds(whole) + (bar - whole) * this.barSeconds;
+  }
+
+  private buildCueEnvelopes(): GainEnvelope[] {
+    const byTrack = new Map<string, VolumeCue[]>();
+    for (const cue of this._volumeCues) {
+      if (!this.tracks.has(cue.trackId)) continue;
+      byTrack.set(cue.trackId, [...(byTrack.get(cue.trackId) ?? []), cue]);
+    }
+    const envelopes: GainEnvelope[] = [];
+    for (const track of this.tracks.values()) {
+      const cues = byTrack.get(track.id);
+      if (!cues) {
+        track.cueGain.gain.cancelScheduledValues(0);
+        track.cueGain.gain.value = 1;
+        continue;
+      }
+      const points: { t: number; v: number }[] = [];
+      let level = 1;
+      for (const cue of cues) {
+        const t = this.secondsAtBar(cue.bar);
+        const v = cue.db <= VOLUME_CUE_MUTE_DB ? 0 : Tone.dbToGain(cue.db);
+        points.push({ t: Math.max(0, t - VOLUME_CUE_RAMP), v: level }, { t, v });
+        level = v;
+      }
+      envelopes.push(new GainEnvelope(track.cueGain.gain, 1, points));
+    }
+    return envelopes;
+  }
+
+  private refreshCueEnvelopes(): void {
+    this.envelopes = this.envelopes.filter((e) => !this.cueEnvelopes.includes(e));
+    this.cueEnvelopes = this.buildCueEnvelopes();
+    this.envelopes.push(...this.cueEnvelopes);
+    const transport = Tone.getTransport();
+    const now = Tone.now();
+    if (transport.state === "started") this.cueEnvelopes.forEach((e) => e.applyFrom(now, transport.seconds));
+    else this.cueEnvelopes.forEach((e) => e.reset(now));
   }
 
   // --- Undo / redo of the arrangement (form, length, logo on/off, arrange mode) ---------------
@@ -662,6 +736,7 @@ export class AudioEngine {
   }
 
   private restoreState(state: ArrangementState): void {
+    this._volumeCues = state.volumeCues.map((c) => ({ ...c }));
     this.logoEnabled = state.logoEnabled;
     this._arrangeMode = state.arrangeMode;
     this.restoring = true;
@@ -794,6 +869,7 @@ export class AudioEngine {
 
 /** Everything needed to put an arrangement back (undo/redo). */
 interface ArrangementState {
+  volumeCues: VolumeCue[];
   cues: CueConfig[];
   loopBars: number;
   musicStartSeconds: number;
@@ -801,3 +877,17 @@ interface ArrangementState {
   logoEnabled: boolean;
   arrangeMode: "auto" | "original";
 }
+
+/** A volume cue point: from `bar` on, the instrument plays at `db` (until its next cue). */
+export interface VolumeCue {
+  id: string;
+  trackId: string;
+  /** 1-indexed arrangement bar, with beats as fractions (bar 3, beat 2 = 3.25). */
+  bar: number;
+  /** Level relative to the mix (0 = as mixed); at or below VOLUME_CUE_MUTE_DB = silent. */
+  db: number;
+}
+
+export const VOLUME_CUE_MUTE_DB = -40;
+/** Seconds the level glides into a cue's new value (ending on the cue). */
+const VOLUME_CUE_RAMP = 0.12;

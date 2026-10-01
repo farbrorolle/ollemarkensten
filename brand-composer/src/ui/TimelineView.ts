@@ -1,5 +1,6 @@
 import * as Tone from "tone";
-import type { AudioEngine } from "../audio/AudioEngine.ts";
+import { VOLUME_CUE_MUTE_DB } from "../audio/AudioEngine.ts";
+import type { AudioEngine, VolumeCue } from "../audio/AudioEngine.ts";
 import type { Track } from "../audio/Track.ts";
 import type { CueConfig, SectionConfig, TransitionType } from "../project/types.ts";
 import type { FilmInfo, VideoSync } from "../video/VideoSync.ts";
@@ -175,7 +176,10 @@ export function mountTimeline(
    * ring-out) or the film, whichever is longer. Without a film, logo projects get some headroom so
    * the logo line can be dragged later.
    */
+  /** While the music's end is dragged, the visible span grows on its own (no need to let go). */
+  let spanOverride: number | null = null;
   const computeSpan = (): number => {
+    if (spanOverride !== null) return spanOverride;
     const music = engine.arrangementSeconds;
     const filmSeconds = film?.info?.duration;
     const content = Math.max(music, filmSeconds ?? 0);
@@ -209,6 +213,7 @@ export function mountTimeline(
     </div>
     <div class="timeline-palette" data-palette></div>
     <div class="timeline-scroll" data-scroll><div class="timeline-zoom" data-zoom-inner>
+    <div class="timeline-timeruler" data-timeruler></div>
     <div class="timeline-ruler" data-ruler></div>
     <div class="timeline-body" data-body>
       <div class="timeline-lanes" data-lanes></div>
@@ -670,7 +675,37 @@ export function mountTimeline(
     openLengthMenu(insertIndexAt(e.clientX), sectionId, e.clientX);
   });
 
+  /** The time ruler: minutes and seconds, ticks as dense as the zoom allows. */
+  const timeRuler = root.querySelector<HTMLElement>("[data-timeruler]")!;
+  function renderTimeRuler(): void {
+    timeRuler.innerHTML = "";
+    const width = timeRuler.clientWidth || 800;
+    const pxPerSecond = width / spanSeconds;
+    const steps = [0.5, 1, 2, 5, 10, 15, 30, 60, 120];
+    const labelStep = steps.find((s) => s * pxPerSecond >= 56) ?? 120;
+    const minorStep = steps.slice().reverse().find((s) => s < labelStep && s * pxPerSecond >= 10) ?? labelStep;
+    const fmt = (t: number): string => {
+      const m = Math.floor(t / 60);
+      const sec = t - m * 60;
+      return `${m}:${(labelStep < 1 ? sec.toFixed(1) : String(Math.round(sec))).padStart(labelStep < 1 ? 4 : 2, "0")}`;
+    };
+    for (let t = 0; t <= spanSeconds + 1e-6; t += minorStep) {
+      const major = Math.abs(t / labelStep - Math.round(t / labelStep)) < 1e-6;
+      const tick = document.createElement("span");
+      tick.className = major ? "time-tick time-tick-major" : "time-tick";
+      tick.style.left = `${xOfSeconds(t) * 100}%`;
+      if (major) tick.textContent = fmt(t);
+      timeRuler.appendChild(tick);
+    }
+  }
+
+  timeRuler.addEventListener("click", (e) => {
+    const rect = timeRuler.getBoundingClientRect();
+    Tone.getTransport().seconds = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * spanSeconds;
+  });
+
   function renderRuler(): void {
+    renderTimeRuler();
     ruler.innerHTML = "";
     const barStep = totalBars > 32 ? Math.ceil(totalBars / 32) : 1;
     for (let bar = 1; bar <= totalBars; bar += barStep) {
@@ -1136,6 +1171,211 @@ export function mountTimeline(
   lanesEl.appendChild(mixLane);
   const mixCanvas = mixLane.querySelector("canvas")!;
 
+  // --- Volume cue points: an instrument's level changes from a point in the timeline onward.
+  // Click the lane to add one (by default only for that part: it comes back after it), click a
+  // cue to change or delete it, drag it sideways to move it (snaps to beats).
+  const cueTracks = tracks.filter((t) => !t.isLogo);
+  const cueLane = document.createElement("div");
+  cueLane.className = "timeline-lane timeline-lane-cues";
+  cueLane.innerHTML = `<span class="timeline-lane-name" title="Volume cue points: click the lane to turn an instrument up or down from that point">Volume cues</span><div class="timeline-cues" data-cues></div>`;
+  lanesEl.appendChild(cueLane);
+  const cuesEl = cueLane.querySelector<HTMLElement>("[data-cues]")!;
+  cueLane.addEventListener("click", (e) => e.stopPropagation()); // no seeking from here
+  const trackName = (id: string): string => engine.tracks.get(id)?.name ?? id;
+  const dbText = (db: number): string => (db <= VOLUME_CUE_MUTE_DB ? "mute" : db === 0 ? "0 dB" : `${db > 0 ? "+" : ""}${db} dB`);
+  const barAtClientX = (clientX: number): number => {
+    const rect = cuesEl.getBoundingClientRect();
+    const seconds = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * spanSeconds;
+    const bar = 1 + (seconds - engine.musicStartSeconds) / engine.barSeconds;
+    const snapped = Math.round((bar - 1) * 4) / 4 + 1; // whole beats
+    return Math.max(1, Math.min(totalBars + 0.75, snapped));
+  };
+  const barLabel = (bar: number): string => {
+    const whole = Math.floor(bar);
+    const beat = Math.round((bar - whole) * 4) + 1;
+    return `bar ${whole}${beat > 1 ? `, beat ${beat}` : ""}`;
+  };
+  let cueIdCounter = 0;
+  const newCueId = (): string => `cue-${Date.now().toString(36)}-${cueIdCounter++}`;
+
+  function renderCues(): void {
+    cuesEl.innerHTML = "";
+    const cues = [...engine.volumeCues].sort((a, b) => a.bar - b.bar);
+    const width = cuesEl.clientWidth || 800;
+    const rowEnds: number[] = [];
+    for (const cue of cues) {
+      const x = xOfSeconds(engine.secondsAtBar(cue.bar));
+      const px = x * width;
+      let row = rowEnds.findIndex((end) => end < px);
+      if (row < 0) {
+        row = rowEnds.length;
+        rowEnds.push(0);
+      }
+      const marker = document.createElement("button");
+      marker.type = "button";
+      marker.className = `cue-marker${cue.db <= VOLUME_CUE_MUTE_DB ? " cue-marker-mute" : cue.db < 0 ? " cue-marker-down" : cue.db > 0 ? " cue-marker-up" : " cue-marker-back"}`;
+      marker.style.left = `${x * 100}%`;
+      marker.style.top = `${2 + row * 18}px`;
+      marker.textContent = `${trackName(cue.trackId)} ${dbText(cue.db)}`;
+      marker.title = `${trackName(cue.trackId)}: ${dbText(cue.db)} from ${barLabel(cue.bar)} – click to change, drag to move`;
+      rowEnds[row] = px + Math.min(180, marker.textContent.length * 6.2 + 16);
+      attachCueDrag(marker, cue);
+      cuesEl.appendChild(marker);
+    }
+    cueLane.style.height = `${Math.max(34, 6 + rowEnds.length * 18)}px`;
+  }
+
+  function attachCueDrag(marker: HTMLElement, cue: VolumeCue): void {
+    marker.addEventListener("pointerdown", (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      marker.setPointerCapture(e.pointerId);
+      const startX = e.clientX;
+      let moved = false;
+      let bar = cue.bar;
+      const onMove = (ev: PointerEvent): void => {
+        if (Math.abs(ev.clientX - startX) > 3) moved = true;
+        if (!moved) return;
+        bar = barAtClientX(ev.clientX);
+        marker.style.left = `${xOfSeconds(engine.secondsAtBar(bar)) * 100}%`;
+      };
+      const onUp = (ev: PointerEvent): void => {
+        marker.removeEventListener("pointermove", onMove);
+        marker.removeEventListener("pointerup", onUp);
+        if (moved) {
+          engine.setVolumeCues(engine.volumeCues.map((c) => (c.id === cue.id ? { ...c, bar } : c)));
+        } else {
+          openCueMenu(cue.bar, ev.clientX, cue);
+        }
+      };
+      marker.addEventListener("pointermove", onMove);
+      marker.addEventListener("pointerup", onUp);
+    });
+  }
+
+  cuesEl.addEventListener("click", (e) => {
+    if (e.target !== cuesEl) return;
+    openCueMenu(barAtClientX(e.clientX), e.clientX);
+  });
+
+  let cueMenu: HTMLElement | null = null;
+  let cueMenuCleanup: (() => void) | null = null;
+  function closeCueMenu(): void {
+    cueMenuCleanup?.();
+    cueMenuCleanup = null;
+    cueMenu?.remove();
+    cueMenu = null;
+  }
+
+  /** The part (segment) that plays at a bar position. */
+  const segmentAt = (bar: number) => segments.find((s) => bar >= s.startBar && bar < s.endBar);
+
+  function openCueMenu(bar: number, clientX: number, editing?: VolumeCue): void {
+    closeCueMenu();
+    const menu = document.createElement("div");
+    menu.className = "length-menu cue-menu";
+    menu.setAttribute("role", "dialog");
+    const part = segmentAt(bar);
+    const partName = part ? (sectionNameById.get(part.sectionId) ?? part.sectionId) : "";
+    menu.innerHTML = `
+      <div class="length-menu-title"></div>
+      <label class="cue-menu-row"><span>Instrument</span><select data-cue-track></select></label>
+      <label class="cue-menu-row"><span>Level</span><input type="range" min="${VOLUME_CUE_MUTE_DB}" max="6" step="1" data-cue-db /><span class="cue-menu-value" data-cue-value></span></label>
+      <div class="cue-menu-presets">
+        <button type="button" class="length-menu-option" data-db="${VOLUME_CUE_MUTE_DB}">Mute</button>
+        <button type="button" class="length-menu-option" data-db="-12">−12 dB</button>
+        <button type="button" class="length-menu-option" data-db="-6">−6 dB</button>
+        <button type="button" class="length-menu-option" data-db="0">As mixed</button>
+        <button type="button" class="length-menu-option" data-db="3">+3 dB</button>
+      </div>
+      <label class="cue-menu-check" data-cue-only-wrap><input type="checkbox" data-cue-only checked /> <span data-cue-only-label></span></label>
+      <div class="length-menu-actions">
+        ${editing ? `<button type="button" class="btn cue-delete" data-cue-delete>Delete</button>` : ""}
+        <button type="button" class="btn" data-cancel>Cancel</button>
+        <button type="button" class="btn btn-primary" data-cue-save>${editing ? "Save" : "Add"}</button>
+      </div>`;
+    menu.querySelector(".length-menu-title")!.textContent = `${editing ? "Volume cue" : "New volume cue"} · ${formatFilmTime(engine.secondsAtBar(bar))} (${barLabel(bar)}${partName ? `, ${partName}` : ""})`;
+    const select = menu.querySelector<HTMLSelectElement>("[data-cue-track]")!;
+    for (const t of cueTracks) {
+      const option = document.createElement("option");
+      option.value = t.id;
+      option.textContent = t.name;
+      select.appendChild(option);
+    }
+    select.value = editing?.trackId ?? lastCueTrack ?? cueTracks[0]?.id ?? "";
+    const dbInput = menu.querySelector<HTMLInputElement>("[data-cue-db]")!;
+    const dbValue = menu.querySelector<HTMLElement>("[data-cue-value]")!;
+    const setDb = (db: number): void => {
+      dbInput.value = String(db);
+      dbValue.textContent = dbText(db);
+    };
+    setDb(editing?.db ?? (engine.volumeAt(select.value, bar) === 0 ? -12 : 0));
+    dbInput.addEventListener("input", () => setDb(Number(dbInput.value)));
+    menu.querySelectorAll<HTMLButtonElement>("[data-db]").forEach((b) => b.addEventListener("click", () => setDb(Number(b.dataset.db))));
+    const onlyWrap = menu.querySelector<HTMLElement>("[data-cue-only-wrap]")!;
+    const onlyBox = menu.querySelector<HTMLInputElement>("[data-cue-only]")!;
+    const onlyLabel = menu.querySelector<HTMLElement>("[data-cue-only-label]")!;
+    const syncOnly = (): void => {
+      const back = engine.volumeAt(select.value, bar);
+      onlyLabel.textContent = part ? `Only in this part – back to ${dbText(back)} after ${partName}` : "";
+    };
+    onlyWrap.hidden = !!editing || !part;
+    syncOnly();
+    select.addEventListener("change", syncOnly);
+
+    const save = (): void => {
+      const trackId = select.value;
+      const db = Number(dbInput.value);
+      lastCueTrack = trackId;
+      let cues = engine.volumeCues.map((c) => ({ ...c }));
+      if (editing) {
+        cues = cues.map((c) => (c.id === editing.id ? { ...c, trackId, db } : c));
+      } else {
+        const back = engine.volumeAt(trackId, bar);
+        // A cue for the same instrument at the same spot is replaced.
+        cues = cues.filter((c) => !(c.trackId === trackId && Math.abs(c.bar - bar) < 1e-6));
+        cues.push({ id: newCueId(), trackId, bar, db });
+        if (onlyBox.checked && part && !onlyWrap.hidden) {
+          const endBar = part.endBar;
+          const hasLater = cues.some((c) => c.trackId === trackId && c.bar > bar + 1e-6 && c.bar <= endBar + 1e-6);
+          if (!hasLater && endBar <= totalBars) cues.push({ id: newCueId(), trackId, bar: endBar, db: back });
+        }
+      }
+      closeCueMenu();
+      engine.setVolumeCues(cues);
+    };
+    menu.querySelector("[data-cue-save]")!.addEventListener("click", save);
+    menu.querySelector("[data-cancel]")!.addEventListener("click", closeCueMenu);
+    menu.querySelector("[data-cue-delete]")?.addEventListener("click", () => {
+      closeCueMenu();
+      engine.setVolumeCues(engine.volumeCues.filter((c) => c.id !== editing!.id));
+    });
+
+    document.body.appendChild(menu);
+    cueMenu = menu;
+    const laneRect = cueLane.getBoundingClientRect();
+    const w = menu.offsetWidth;
+    menu.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, clientX - w / 2))}px`;
+    menu.style.top = `${laneRect.bottom + window.scrollY + 6}px`;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") closeCueMenu();
+      else if (e.key === "Enter" && !(e.target instanceof HTMLSelectElement)) {
+        e.preventDefault();
+        save();
+      }
+    };
+    const onDown = (e: PointerEvent): void => {
+      if (!(e.target instanceof Node && menu.contains(e.target))) closeCueMenu();
+    };
+    window.addEventListener("keydown", onKey);
+    window.setTimeout(() => window.addEventListener("pointerdown", onDown), 0);
+    cueMenuCleanup = () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("pointerdown", onDown);
+    };
+  }
+  let lastCueTrack: string | null = null;
+
   function drawMixLane(): void {
     const width = mixCanvas.clientWidth || 800;
     mixCanvas.width = width;
@@ -1211,6 +1451,7 @@ export function mountTimeline(
     renderSegmentList();
     syncLogoCard();
     syncArrangeButtons();
+    renderCues();
     if (showSections) {
       for (const track of tracks) {
         const entry = lanesByTrack.get(track.id);
@@ -1229,20 +1470,46 @@ export function mountTimeline(
     e.preventDefault();
     e.stopPropagation();
     musicBlockHandle.setPointerCapture(e.pointerId);
-    const rect = overlay.getBoundingClientRect();
     const minEnd = engine.musicStartSeconds + 2 * engine.barSeconds;
-    const toSeconds = (clientX: number): number =>
-      Math.max(minEnd, Math.min(1, (clientX - rect.left) / rect.width) * spanSeconds);
+    const fractionAt = (clientX: number): number => {
+      const rect = overlay.getBoundingClientRect();
+      return (clientX - rect.left) / rect.width;
+    };
+    const toSeconds = (clientX: number): number => Math.max(minEnd, Math.min(1, fractionAt(clientX)) * spanSeconds);
+    let lastX = e.clientX;
+    spanOverride = spanSeconds;
     draggingEnd = toSeconds(e.clientX);
     const onMove = (ev: PointerEvent): void => {
+      lastX = ev.clientX;
       draggingEnd = toSeconds(ev.clientX);
     };
+    // Near (or past) the right edge the timeline keeps zooming out, so one drag can go from
+    // a minute to several; the ruler, form and waveforms follow live.
+    let lastDrawnSpan = spanSeconds;
+    const tick = (): void => {
+      if (draggingEnd === null || spanOverride === null) return;
+      const fraction = fractionAt(lastX);
+      if (fraction > 0.9 && spanOverride < 20 * 60) {
+        spanOverride *= 1 + 0.035 * Math.min(1.5, (fraction - 0.9) / 0.1);
+        spanSeconds = spanOverride;
+        draggingEnd = toSeconds(lastX);
+      }
+      if (Math.abs(spanSeconds / lastDrawnSpan - 1) > 0.004) {
+        lastDrawnSpan = spanSeconds;
+        renderRuler();
+        renderSections();
+        if (!showSections) drawMixLane();
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
     const onUp = (): void => {
       musicBlockHandle.removeEventListener("pointermove", onMove);
       musicBlockHandle.removeEventListener("pointerup", onUp);
       musicBlockHandle.removeEventListener("pointercancel", onUp);
       const end = draggingEnd;
       draggingEnd = null;
+      spanOverride = null;
       lockMessage = "";
       suppressClick = true;
       window.setTimeout(() => (suppressClick = false), 0);
@@ -1286,6 +1553,7 @@ export function mountTimeline(
   renderRuler();
   renderSections();
   renderSegmentList();
+  renderCues();
   engine.onArrangementChange(redrawAll);
   film?.onChange(() => {
     if (Math.abs(computeSpan() - spanSeconds) > 1e-3) redrawAll();

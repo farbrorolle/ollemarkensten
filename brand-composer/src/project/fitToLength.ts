@@ -173,57 +173,7 @@ export function fitToLength(
   timing: FitTiming,
   regions?: Record<string, [number, number]>,
 ): FitResult {
-  const warnings: string[] = [];
-  const beforeFirstBar = (timing.anchorBeat - 1) * timing.beatSeconds;
-  // Ideal bar count: the most bars whose anchor still fits at or before the target.
-  const idealBars = Math.floor((targetAnchorSeconds - beforeFirstBar) / timing.barSeconds + 1e-9) + 1;
-
-  // Up to the original length, auto arrange behaves exactly like the original form: the track as
-  // composed, cut at the end. Longer: every section is extended in proportion to its original
-  // length (never shortened), looping on in its own material.
-  const originalBars = template.reduce((sum, b) => sum + b.bars, 0);
-  if (idealBars <= originalBars) return fitShorter(template, targetAnchorSeconds, timing, regions);
-  // (The first section may still be trimmed at its end, to land on the exact bar count.)
-  const extendOnly = template.map((b, i) => ({
-    ...b,
-    minBars: i === 0 ? Math.min(b.bars, b.minBars ?? b.bars) : b.bars,
-    maxBars: Math.max(b.bars, b.maxBars ?? b.bars),
-  }));
-  const { total, choices } = chooseArrangement(extendOnly, Math.max(0, idealBars), regions);
-  const lengths = choices.map((c) => c.len);
-
-  const anchorInMusic = anchorOffsetInMusic(total, timing);
-  let musicStartSeconds = targetAnchorSeconds - anchorInMusic;
-  if (musicStartSeconds < -1e-9) {
-    warnings.push("The music can't get this short with these rules – the logo lands later than requested.");
-    musicStartSeconds = 0;
-  } else if (musicStartSeconds >= timing.barSeconds + 1e-9) {
-    warnings.push("The rules can't give exactly the right number of bars – the music starts a little later in the film.");
-  }
-  musicStartSeconds = Math.max(0, musicStartSeconds);
-  const anchorSeconds = musicStartSeconds + anchorInMusic;
-
-  const cues: CueConfig[] = [];
-  let bar = 1;
-  template.forEach((block, i) => {
-    const len = lengths[i]!;
-    if (len <= 0) return;
-    const cue: CueConfig = { bar, section: block.section, transition: (block.transition ?? "cut") as TransitionType };
-    const sourceBar = choices[i]!.sourceBar;
-    if (sourceBar !== undefined) cue.sourceBar = sourceBar;
-    cues.push(cue);
-    bar += len;
-  });
-
-  return {
-    cues,
-    totalBars: total,
-    musicStartSeconds,
-    anchorSeconds,
-    errorSeconds: anchorSeconds - targetAnchorSeconds,
-    lengths,
-    warnings,
-  };
+  return fitAuto(template, targetAnchorSeconds, timing, regions);
 }
 
 /** One contiguous piece of source audio to play for a (part of a) section. */
@@ -392,13 +342,14 @@ export function expandLongSections(
 
 
 /**
- * Auto arrange up to the original length: the parts that fit whole, in their original order, and
- * those parts *extended* (whole 4-bar phrases, spread in proportion to their length, the most
- * important first) to fill the rest -- instead of cutting the next part off after a bar or two.
- * The next part is only brought in (from its beginning, whole phrases) once at least half of it
- * fits. Odd bars: the first part is trimmed a little, or the music starts up to a bar later.
+ * Auto arrange, built on the original form: the parts come in their original order and are
+ * never cut short at the start (the intro stays whole). Parts that fit whole are played whole;
+ * the next part is brought in (from its beginning, whole phrases) once at least half of it fits;
+ * otherwise the music gets longer by *looping* -- the last part loops on (whole 4-bar phrases),
+ * and once the whole track fits, the extra length is spread over all parts (the least extended,
+ * most important first). Left-over single bars: the music starts up to a bar later.
  */
-export function fitShorter(
+export function fitAuto(
   template: FitBlock[],
   targetAnchorSeconds: number,
   timing: FitTiming,
@@ -407,7 +358,6 @@ export function fitShorter(
   const beforeFirstBar = (timing.anchorBeat - 1) * timing.beatSeconds;
   const idealBars = Math.max(1, Math.floor((targetAnchorSeconds - beforeFirstBar) / timing.barSeconds + 1e-9) + 1);
   const lengths = template.map(() => 0);
-  const trimmedStart = new Set<number>(); // parts played from their beginning (not keeping the end)
   let used = 0;
   let k = 0;
   while (k < template.length && used + template[k]!.bars <= idealBars) {
@@ -419,43 +369,43 @@ export function fitShorter(
   let left = idealBars - used;
   const next = template[k];
   if (next && left >= Math.max(4, next.bars / 2)) {
-    const len = Math.min(next.bars, left - (left % 4));
+    let len = Math.min(next.bars, left - (left % 4));
+    if (left - len < 4) len = Math.min(next.bars, left); // the odd bars too, if they fit
     lengths[k] = len;
-    trimmedStart.add(k);
     left -= len;
+    k++;
   }
-  let phrases = Math.floor(left / 4);
-  const odd = left % 4;
-  const firstMin = Math.max(2, template[0]!.minBars ?? template[0]!.bars);
-  if (odd && trimmedStart.has(k) && lengths[k]! + odd <= next!.bars) {
-    // The part cut off at the end simply plays a bar or two further.
-    lengths[k]! += odd;
-  } else if (odd >= 2 && lengths[0]! - (4 - odd) >= firstMin) {
-    lengths[0]! -= 4 - odd;
-    phrases += 1;
-  }
-  // Spread the phrases: always to the part extended least (relative to its length), the most
-  // important one first; never the first part, and not past the part's maximum.
-  const candidates = template.map((_, i) => i).filter((i) => i > 0 && lengths[i]! > 0 && !trimmedStart.has(i));
+  const maxOf = (i: number): number => Math.max(template[i]!.bars, template[i]!.maxBars ?? template[i]!.bars);
   const extension = template.map(() => 0);
-  for (let p = 0; p < phrases; p++) {
+  const grow = (i: number, bars: number): void => {
+    lengths[i]! += bars;
+    extension[i]! += bars;
+    left -= bars;
+  };
+  const last = k - 1;
+  const allIn = k >= template.length;
+  // Whole phrases.
+  while (left >= 4) {
     let best = -1;
-    for (const i of candidates) {
-      const block = template[i]!;
-      const max = Math.max(block.bars * 2, block.maxBars ?? 0);
-      if (lengths[i]! + 4 > max) continue;
-      if (best < 0) {
-        best = i;
-        continue;
+    if (!allIn && lengths[last]! + 4 <= maxOf(last)) best = last; // the last part simply loops on
+    else {
+      for (let i = 0; i < k; i++) {
+        if (lengths[i]! + 4 > maxOf(i)) continue;
+        if (best < 0) {
+          best = i;
+          continue;
+        }
+        const a = extension[i]! / template[i]!.bars;
+        const b = extension[best]! / template[best]!.bars;
+        if (a < b - 1e-9 || (Math.abs(a - b) < 1e-9 && (template[i]!.priority ?? 1) > (template[best]!.priority ?? 1))) best = i;
       }
-      const a = extension[i]! / template[i]!.bars;
-      const b = extension[best]! / template[best]!.bars;
-      if (a < b - 1e-9 || (Math.abs(a - b) < 1e-9 && (template[i]!.priority ?? 1) > (template[best]!.priority ?? 1))) best = i;
     }
-    if (best < 0) break; // nothing can take more: the music starts a little later instead
-    lengths[best]! += 4;
-    extension[best]! += 4;
+    if (best < 0 && lengths[last]! + 4 <= maxOf(last) * 2) best = last;
+    if (best < 0) break;
+    grow(best, 4);
   }
+  // Two or three bars over: the last part loops a little further; a single bar: start later.
+  if (left >= 2) grow(last, left);
 
   const cues: CueConfig[] = [];
   let bar = 1;

@@ -69,6 +69,8 @@ export class Track {
   readonly sectionGain: Tone.Gain;
   /** Arrangement automation (melody mute / fade into the logo), driven by AudioEngine. */
   readonly autoGain: Tone.Gain;
+  /** Volume cue points (the customer's level changes along the timeline). */
+  readonly cueGain: Tone.Gain;
   readonly channel: Tone.Channel;
 
   private _mute: boolean;
@@ -94,13 +96,15 @@ export class Track {
     this.sidechainGain = new Tone.Gain(1);
     this.sectionGain = new Tone.Gain(1);
     this.autoGain = new Tone.Gain(1);
+    this.cueGain = new Tone.Gain(1);
     this.channel = new Tone.Channel({
       volume: config.volume ?? 0,
       pan: config.pan ?? 0,
     });
     this.sidechainGain.connect(this.sectionGain);
     this.sectionGain.connect(this.autoGain);
-    this.autoGain.connect(this.channel);
+    this.autoGain.connect(this.cueGain);
+    this.cueGain.connect(this.channel);
 
     if (config.sections) {
       for (const [sectionId, file] of Object.entries(config.sections)) {
@@ -282,6 +286,7 @@ export class Track {
     this.sidechainGain.dispose();
     this.sectionGain.dispose();
     this.autoGain.dispose();
+    this.cueGain.dispose();
     this.channel.dispose();
     if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
   }
