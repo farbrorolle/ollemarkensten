@@ -31,7 +31,6 @@ export function mountVideoPanel(
       <p class="video-drop-title">Add your film</p>
       <p class="video-drop-text">Drag a video file here, or</p>
       <button type="button" class="btn btn-primary" data-pick>Choose film…</button>
-      <button type="button" class="btn video-sample-btn" data-sample hidden>Try with a sample film</button>
       <p class="video-drop-note">
         The film is never uploaded anywhere – it only plays here, in your browser.<br />
         Best supported: <strong>MP4 (H.264 + AAC)</strong>
@@ -134,25 +133,6 @@ export function mountVideoPanel(
   };
 
   q("[data-pick]").addEventListener("click", () => input.click());
-  // "Try with a sample film": shown only when the site has one (public/sample/sample-film.mp4).
-  const SAMPLE_URL = "/sample/sample-film.mp4";
-  const sampleBtn = q<HTMLButtonElement>("[data-sample]");
-  void fetch(SAMPLE_URL, { method: "HEAD" })
-    .then((r) => {
-      sampleBtn.hidden = !(r.ok && (r.headers.get("content-type") ?? "").startsWith("video/"));
-    })
-    .catch(() => undefined);
-  sampleBtn.addEventListener("click", async () => {
-    sampleBtn.disabled = true;
-    try {
-      const blob = await (await fetch(SAMPLE_URL)).blob();
-      await loadFile(new File([blob], "Sample film.mp4", { type: blob.type || "video/mp4" }));
-    } catch (error) {
-      showError(error instanceof Error ? error.message : String(error));
-    } finally {
-      sampleBtn.disabled = false;
-    }
-  });
   q("[data-replace]").addEventListener("click", () => input.click());
   q("[data-remove]").addEventListener("click", () => {
     showError(null);
