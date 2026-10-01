@@ -12,7 +12,7 @@ export interface SidePanelHandle {
 /**
  * The right-hand side panel and the stepper in the top bar (design 2a):
  *   1 Fit the length – length presets, where the logo lands, how the music is arranged.
- *   2 Fine-tune      – parts and layers to drag into the timeline, and levels.
+ *   2 Customize the arrangement – parts, melody and swells to drag into the timeline.
  *
  * The controls themselves are the timeline's own (moved here with their listeners), so every
  * function works exactly as before; this module only arranges, explains and adds the presets.
@@ -38,7 +38,7 @@ export function mountSidePanel(
       <span class="step-sep" aria-hidden="true"></span>
       <button type="button" class="step" data-step="tune">
         <span class="step-num">2</span>
-        <span class="step-text"><span class="step-title">Fine-tune</span><span class="step-sub">optional</span></span>
+        <span class="step-text"><span class="step-title">Customize the arrangement</span><span class="step-sub">optional</span></span>
       </button>
     </nav>`;
 
@@ -78,7 +78,7 @@ export function mountSidePanel(
     </div>
     <div class="side-group side-switches" data-switches></div>
     <div class="side-links" data-links></div>
-    <button type="button" class="btn side-next" data-goto-tune>Fine-tune: parts, layers &amp; levels →</button>`;
+    <button type="button" class="btn side-next" data-goto-tune>Customize the arrangement: parts, melody &amp; swells →</button>`;
 
   // --- Step 2: Fine-tune ---------------------------------------------------------------------
   const tune = document.createElement("section");
@@ -165,8 +165,8 @@ export function mountSidePanel(
   partsBox.className = "panel panel-parts";
   partsBox.innerHTML = `
     <div class="parts-box-head">
-      <h2>Parts &amp; layers</h2>
-      <p class="hint">Drag a part into the Form lane – between two parts to add it, onto a part to replace it. Layers play on top of a part. Click a part in the timeline for its options.</p>
+      <h2>Customize the arrangement</h2>
+      <p class="hint">Drag a part into the Form lane – between two parts to add it, onto a part to replace it. Melody and swells play on top of a part. Click a part in the timeline for its options.</p>
     </div>`;
   if (partsRow) partsBox.appendChild(partsRow);
   if (layersRow) partsBox.appendChild(layersRow);

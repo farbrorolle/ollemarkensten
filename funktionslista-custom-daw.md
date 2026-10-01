@@ -35,7 +35,7 @@ Ingen funktion i listan får försvinna när designen 2a byggs in (2a Workspace 
 | Master-strip: peak L/R med 0 dB, GR, LUFS M/S/I | Filmpanel | Levels, under Loudness boost (saknas i designen) |
 | Limiter On och Ceiling (bara skaparvyn) | Filmpanel | Skaparvyn |
 
-## Fine-tune: delar och form
+## Customize the arrangement: delar och form
 | Funktion | I dag | I 2a |
 |---|---|---|
 | Delkort (7 delar, färger) – dra in, klick lägger sist | Palett | Högerpanel "Parts of the track", med status (4 of 8 / not used) |
@@ -50,7 +50,7 @@ Ingen funktion i listan får försvinna när designen 2a byggs in (2a Workspace 
 | Swells-spår: auto, lägg till, ta bort, startswell | Swells-spår | Oförändrat (krysset får plats) |
 | Zoom (−, reglage, +, Fit) och taktlinjer | Vyraden | Zoomreglage plus Fit vid tidslinjen |
 
-## Fine-tune: nivåer
+## Customize the arrangement: nivåer
 | Funktion | I dag | I 2a |
 |---|---|---|
 | En fader per mapp (projektets mappar, som exporterade) | Mixer | Levels-flik "Folders", alltid synlig – inga egna grupper |
