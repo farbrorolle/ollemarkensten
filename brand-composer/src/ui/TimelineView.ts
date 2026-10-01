@@ -1,5 +1,5 @@
 import * as Tone from "tone";
-import { VOLUME_CUE_MUTE_DB } from "../audio/AudioEngine.ts";
+import { MUSIC_CUE_TRACK, VOLUME_CUE_MUTE_DB } from "../audio/AudioEngine.ts";
 import type { AudioEngine, LayerBlock, VolumeCue } from "../audio/AudioEngine.ts";
 import type { Track } from "../audio/Track.ts";
 import type { CueConfig, SectionConfig, TransitionType } from "../project/types.ts";
@@ -1671,7 +1671,19 @@ export function mountTimeline(
   lanesEl.appendChild(cueLane);
   const cuesEl = cueLane.querySelector<HTMLElement>("[data-cues]")!;
   cueLane.addEventListener("click", (e) => e.stopPropagation()); // no seeking from here
-  const trackName = (id: string): string => engine.tracks.get(id)?.name ?? id;
+  // "Music volume": the same kind of cues, for the whole music at once (on top of the above).
+  const musicCueLane = document.createElement("div");
+  musicCueLane.className = "timeline-lane timeline-lane-cues timeline-lane-music-cues";
+  musicCueLane.innerHTML = `<span class="timeline-lane-name" title="Music volume: click the lane to turn the whole music up or down from that point (the film audio is not affected)">Music volume</span><div class="timeline-cues" data-cues></div>`;
+  lanesEl.appendChild(musicCueLane);
+  const musicCuesEl = musicCueLane.querySelector<HTMLElement>("[data-cues]")!;
+  musicCueLane.addEventListener("click", (e) => e.stopPropagation());
+  interface CueLaneRef { lane: HTMLElement; el: HTMLElement; music: boolean }
+  const cueLanes: CueLaneRef[] = [
+    { lane: cueLane, el: cuesEl, music: false },
+    { lane: musicCueLane, el: musicCuesEl, music: true },
+  ];
+  const trackName = (id: string): string => (id === MUSIC_CUE_TRACK ? "Music" : (engine.tracks.get(id)?.name ?? id));
   const dbText = (db: number): string => (db <= VOLUME_CUE_MUTE_DB ? "mute" : db === 0 ? "0 dB" : `${db > 0 ? "+" : ""}${db} dB`);
   const barAtClientX = (clientX: number): number => {
     const rect = cuesEl.getBoundingClientRect();
@@ -1689,8 +1701,12 @@ export function mountTimeline(
   const newCueId = (): string => `cue-${Date.now().toString(36)}-${cueIdCounter++}`;
 
   function renderCues(): void {
+    for (const ref of cueLanes) renderCueLane(ref);
+  }
+  function renderCueLane(ref: CueLaneRef): void {
+    const { el: cuesEl, lane: cueLane } = ref;
     cuesEl.innerHTML = "";
-    const cues = [...engine.volumeCues].sort((a, b) => a.bar - b.bar);
+    const cues = [...engine.volumeCues].filter((c) => (c.trackId === MUSIC_CUE_TRACK) === ref.music).sort((a, b) => a.bar - b.bar);
     const width = cuesEl.clientWidth || 800;
     const rowEnds: number[] = [];
     // Three or more cues on the same spot (e.g. "Set levels for this part") show as one group.
@@ -1737,16 +1753,16 @@ export function mountTimeline(
       marker.className = `cue-marker${cue.db <= VOLUME_CUE_MUTE_DB ? " cue-marker-mute" : cue.db < 0 ? " cue-marker-down" : cue.db > 0 ? " cue-marker-up" : " cue-marker-back"}`;
       marker.style.left = `${x * 100}%`;
       marker.style.top = `${2 + row * 18}px`;
-      marker.textContent = `${trackName(cue.trackId)} ${dbText(cue.db)}`;
+      marker.textContent = ref.music ? dbText(cue.db) : `${trackName(cue.trackId)} ${dbText(cue.db)}`;
       marker.title = `${trackName(cue.trackId)}: ${dbText(cue.db)} from ${barLabel(cue.bar)} – click to change, drag to move`;
       rowEnds[row] = px + Math.min(180, marker.textContent.length * 6.2 + 16);
-      attachCueDrag(marker, cue);
+      attachCueDrag(marker, cue, ref);
       cuesEl.appendChild(marker);
     }
     cueLane.style.height = `${Math.max(34, 6 + rowEnds.length * 18)}px`;
   }
 
-  function attachCueDrag(marker: HTMLElement, cue: VolumeCue): void {
+  function attachCueDrag(marker: HTMLElement, cue: VolumeCue, ref: CueLaneRef): void {
     marker.addEventListener("pointerdown", (e) => {
       e.stopPropagation();
       e.preventDefault();
@@ -1766,7 +1782,7 @@ export function mountTimeline(
         if (moved) {
           engine.setVolumeCues(engine.volumeCues.map((c) => (c.id === cue.id ? { ...c, bar } : c)));
         } else {
-          openCueMenu(cue.bar, ev.clientX, cue);
+          openCueMenu(cue.bar, ev.clientX, cue, ref);
         }
       };
       marker.addEventListener("pointermove", onMove);
@@ -1774,10 +1790,12 @@ export function mountTimeline(
     });
   }
 
-  cuesEl.addEventListener("click", (e) => {
-    if (e.target !== cuesEl) return;
-    openCueMenu(barAtClientX(e.clientX), e.clientX);
-  });
+  for (const ref of cueLanes) {
+    ref.el.addEventListener("click", (e) => {
+      if (e.target !== ref.el) return;
+      openCueMenu(barAtClientX(e.clientX), e.clientX, undefined, ref);
+    });
+  }
 
   let cueMenu: HTMLElement | null = null;
   let cueMenuCleanup: (() => void) | null = null;
@@ -1791,7 +1809,8 @@ export function mountTimeline(
   /** The part (segment) that plays at a bar position. */
   const segmentAt = (bar: number) => segments.find((s) => bar >= s.startBar && bar < s.endBar);
 
-  function openCueMenu(bar: number, clientX: number, editing?: VolumeCue): void {
+  function openCueMenu(bar: number, clientX: number, editing: VolumeCue | undefined, ref: CueLaneRef): void {
+    const cueLane = ref.lane;
     closeCueMenu();
     const menu = document.createElement("div");
     menu.className = "length-menu cue-menu";
@@ -1815,15 +1834,16 @@ export function mountTimeline(
         <button type="button" class="btn" data-cancel>Cancel</button>
         <button type="button" class="btn btn-primary" data-cue-save>${editing ? "Save" : "Add"}</button>
       </div>`;
-    menu.querySelector(".length-menu-title")!.textContent = `${editing ? "Volume cue" : "New volume cue"} · ${formatFilmTime(engine.secondsAtBar(bar))} (${barLabel(bar)}${partName ? `, ${partName}` : ""})`;
+    menu.querySelector(".length-menu-title")!.textContent = `${ref.music ? "Music volume" : editing ? "Volume cue" : "New volume cue"} · ${formatFilmTime(engine.secondsAtBar(bar))} (${barLabel(bar)}${partName ? `, ${partName}` : ""})`;
     const select = menu.querySelector<HTMLSelectElement>("[data-cue-track]")!;
-    for (const t of cueTracks) {
+    for (const t of ref.music ? [{ id: MUSIC_CUE_TRACK, name: "All music" }] : cueTracks) {
       const option = document.createElement("option");
       option.value = t.id;
       option.textContent = t.name;
       select.appendChild(option);
     }
-    select.value = editing?.trackId ?? lastCueTrack ?? cueTracks[0]?.id ?? "";
+    select.value = ref.music ? MUSIC_CUE_TRACK : (editing?.trackId ?? lastCueTrack ?? cueTracks[0]?.id ?? "");
+    if (ref.music) (select.closest(".cue-menu-row") as HTMLElement).style.display = "none";
     const dbInput = menu.querySelector<HTMLInputElement>("[data-cue-db]")!;
     const dbValue = menu.querySelector<HTMLElement>("[data-cue-value]")!;
     const setDb = (db: number): void => {
@@ -1847,7 +1867,7 @@ export function mountTimeline(
     const save = (): void => {
       const trackId = select.value;
       const db = Number(dbInput.value);
-      lastCueTrack = trackId;
+      if (!ref.music) lastCueTrack = trackId;
       let cues = engine.volumeCues.map((c) => ({ ...c }));
       if (editing) {
         cues = cues.map((c) => (c.id === editing.id ? { ...c, trackId, db } : c));

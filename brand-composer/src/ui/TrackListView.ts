@@ -1,5 +1,5 @@
 import * as Tone from "tone";
-import { VOLUME_CUE_MUTE_DB } from "../audio/AudioEngine.ts";
+import { MUSIC_CUE_TRACK, VOLUME_CUE_MUTE_DB } from "../audio/AudioEngine.ts";
 import type { AudioEngine } from "../audio/AudioEngine.ts";
 import type { Track } from "../audio/Track.ts";
 
@@ -144,7 +144,7 @@ function mountPartLevels(panel: HTMLElement, engine: AudioEngine, base: Map<stri
     const after = new Map(tracks().map((t) => [t.id, engine.volumeAt(t.id, part.endBar + 0.001)]));
     const before = new Map(tracks().map((t) => [t.id, engine.volumeAt(t.id, part.startBar)]));
     // This part's own cues are replaced.
-    cues = cues.filter((c) => !(c.bar >= part.startBar - 1e-6 && c.bar < part.endBar - 1e-6));
+    cues = cues.filter((c) => c.trackId === MUSIC_CUE_TRACK || !(c.bar >= part.startBar - 1e-6 && c.bar < part.endBar - 1e-6));
     let n = 0;
     for (const t of tracks()) {
       const db = clampDb(levels.get(t.id) ?? 0);
@@ -185,9 +185,12 @@ function mountPartLevels(panel: HTMLElement, engine: AudioEngine, base: Map<stri
   bar.querySelector("[data-all]")!.addEventListener("click", () => {
     const part = currentPart();
     const levels = clipboard ?? (part ? heardLevels(part) : new Map<string, number>());
-    const cues = tracks()
-      .filter((t) => Math.abs(levels.get(t.id) ?? 0) > 0.01)
-      .map((t, i) => ({ id: `lv-all-${t.id}-${i}`, trackId: t.id, bar: 1, db: clampDb(levels.get(t.id) ?? 0) }));
+    const cues = [
+      ...engine.volumeCues.filter((c) => c.trackId === MUSIC_CUE_TRACK),
+      ...tracks()
+        .filter((t) => Math.abs(levels.get(t.id) ?? 0) > 0.01)
+        .map((t, i) => ({ id: `lv-all-${t.id}-${i}`, trackId: t.id, bar: 1, db: clampDb(levels.get(t.id) ?? 0) })),
+    ];
     engine.setVolumeCues(cues);
     resetFaders();
     status.textContent = "These levels now apply to the whole music ✓";
@@ -195,7 +198,7 @@ function mountPartLevels(panel: HTMLElement, engine: AudioEngine, base: Map<stri
   bar.querySelector("[data-clear]")!.addEventListener("click", () => {
     const part = currentPart();
     if (!part) return;
-    engine.setVolumeCues(engine.volumeCues.filter((c) => !(c.bar >= part.startBar - 1e-6 && c.bar <= part.endBar + 1e-6)));
+    engine.setVolumeCues(engine.volumeCues.filter((c) => c.trackId === MUSIC_CUE_TRACK || !(c.bar >= part.startBar - 1e-6 && c.bar <= part.endBar + 1e-6)));
     status.textContent = `${nameOf(part.sectionId)} is back to the normal mix`;
   });
 

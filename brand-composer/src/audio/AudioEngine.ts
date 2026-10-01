@@ -47,6 +47,8 @@ export const DEFAULT_COMPRESSOR: CompressorSettings = {
  */
 export class AudioEngine {
   readonly masterBus: Bus;
+  /** Volume cues on the whole music ("Music volume" lane): after the master bus, before the compressor. */
+  readonly musicCueGain: Tone.Gain;
   readonly compressor: Tone.Compressor;
   /** Gain into the limiter ("drive"): push the mix harder into the limiter. */
   readonly limiterDrive: Tone.Gain;
@@ -95,7 +97,9 @@ export class AudioEngine {
     this.applyCompressor();
 
     this.limiterDrive = new Tone.Gain(1);
-    this.masterBus.connect(this.compressor);
+    this.musicCueGain = new Tone.Gain(1);
+    this.masterBus.connect(this.musicCueGain);
+    this.musicCueGain.connect(this.compressor);
     this.compressor.connect(this.limiterDrive);
     this.limiterDrive.connect(this.limiter);
     this.outputBus = new Tone.Gain(1);
@@ -894,15 +898,19 @@ export class AudioEngine {
   private buildCueEnvelopes(): GainEnvelope[] {
     const byTrack = new Map<string, VolumeCue[]>();
     for (const cue of this._volumeCues) {
-      if (!this.tracks.has(cue.trackId)) continue;
+      if (!this.tracks.has(cue.trackId) && cue.trackId !== MUSIC_CUE_TRACK) continue;
       byTrack.set(cue.trackId, [...(byTrack.get(cue.trackId) ?? []), cue]);
     }
     const envelopes: GainEnvelope[] = [];
-    for (const track of this.tracks.values()) {
-      const cues = byTrack.get(track.id);
+    const targets: { id: string; gain: Tone.Param<"gain"> }[] = [
+      ...[...this.tracks.values()].map((t) => ({ id: t.id, gain: t.cueGain.gain })),
+      { id: MUSIC_CUE_TRACK, gain: this.musicCueGain.gain },
+    ];
+    for (const target of targets) {
+      const cues = byTrack.get(target.id);
       if (!cues) {
-        track.cueGain.gain.cancelScheduledValues(0);
-        track.cueGain.gain.value = 1;
+        target.gain.cancelScheduledValues(0);
+        target.gain.value = 1;
         continue;
       }
       const points: { t: number; v: number }[] = [];
@@ -913,7 +921,7 @@ export class AudioEngine {
         points.push({ t: Math.max(0, t - VOLUME_CUE_RAMP), v: level }, { t, v });
         level = v;
       }
-      envelopes.push(new GainEnvelope(track.cueGain.gain, 1, points));
+      envelopes.push(new GainEnvelope(target.gain, 1, points));
     }
     return envelopes;
   }
@@ -1106,6 +1114,7 @@ export class AudioEngine {
   dispose(): void {
     this.clearProject();
     this.masterBus.dispose();
+    this.musicCueGain.dispose();
     this.limiter.dispose();
     this.compressor.dispose();
     this.limiterDrive.dispose();
@@ -1143,6 +1152,8 @@ export interface VolumeCue {
 }
 
 export const VOLUME_CUE_MUTE_DB = -40;
+/** The trackId of volume cues that set the level of the whole music. */
+export const MUSIC_CUE_TRACK = "__music";
 /** Seconds the level glides into a cue's new value (ending on the cue). */
 const VOLUME_CUE_RAMP = 0.12;
 
