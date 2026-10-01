@@ -212,7 +212,7 @@ export function mountTimeline(
         <button type="button" class="btn btn-icon" data-undo title="Undo (⌘Z / Ctrl+Z)">↶ Undo</button>
         <button type="button" class="btn btn-icon" data-redo title="Redo (⇧⌘Z / Ctrl+Y)">↷ Redo</button>
       </span>
-      <button type="button" class="btn" data-mode-toggle>Show sections</button>
+      <button type="button" class="btn" data-mode-toggle>Show individual tracks</button>
       <span class="timeline-toolbar-status" data-status></span>
     </div>
     <div class="timeline-palette-row"><span class="palette-label">Parts</span><div class="timeline-palette" data-palette></div></div>
@@ -422,7 +422,7 @@ export function mountTimeline(
     showSections = !showSections;
     root.classList.toggle("timeline-mode-block", !showSections);
     root.classList.toggle("timeline-mode-sections", showSections);
-    modeToggle.textContent = showSections ? "Hide sections" : "Show sections";
+    modeToggle.textContent = showSections ? "Hide individual tracks" : "Show individual tracks";
     redrawAll(); // canvases that were hidden have no width until shown
   });
   const segmentList = root.querySelector<HTMLElement>("[data-segment-list]")!;

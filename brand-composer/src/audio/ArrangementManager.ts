@@ -14,6 +14,10 @@ const MAX_RING_OUT_SECONDS = 2;
 const CROSSFADE_RING_OUT_SECONDS = 0.35;
 /** Where the bounce itself moves on into another part, the outgoing part only gets this release. */
 const BOUNDARY_RING_OUT_SECONDS = 0.08;
+/** Equal-power crossfade before a downbeat: into a different part (short) / into a loop of the same part. */
+const PART_XF_SECONDS = 0.1;
+const LOOP_XF_SECONDS = 0.25;
+const XF_STEPS = 8;
 /** "Cut": the outgoing part stops right at the boundary (just enough to avoid a click). */
 const CUT_RING_OUT_SECONDS = 0.03;
 /** A late music start this long (or longer) gets a swell into bar 1. */
@@ -341,11 +345,22 @@ export class ArrangementManager {
       const firstSource = chunks[0]!.sourceBar;
       const ownPickup = !track.isSwell && index > 0 && !continuesFromPrev ? (track.pickups[String(firstSource)] ?? 0) : 0;
       // This section's end holds a pickup into a section that doesn't come next: silence it.
-      const strayPickup = !track.isSwell && !continuesIntoNext ? (track.pickups[String(sourceEnd + 1)] ?? 0) : 0;
+      // (Not when the part simply repeats: then it is part of the build, e.g. the arp in a looped Uplifter.)
+      const repeatsNext = !!next && next.sectionId === segment.sectionId;
+      const strayPickup = !track.isSwell && !continuesIntoNext && !repeatsNext ? (track.pickups[String(sourceEnd + 1)] ?? 0) : 0;
 
-      // The new part always comes in at full level right on its downbeat (a fade-in would swallow
-      // the kick on the 1); a "crossfade" is the outgoing part ringing over it, not a fade-in.
-      const fadeIn = CUT_FADE_SECONDS;
+      // Crossfades are equal-power and lie *before* the downbeat: the outgoing part fades out and the
+      // incoming one fades in (playing the bounce's lead-up to it) so the new part is at full level
+      // exactly on its 1 -- one kick, at the right level, and no taste of what came after the old
+      // part in the bounce. Short where a different part comes in, longer for a loop of the same part.
+      const xfInto = (i: number): number => {
+        const seg = segments[i];
+        if (!seg || i === 0 || seg.transition === "cut") return 0;
+        const prevSeg = segments[i - 1]!;
+        return prevSeg.sectionId === seg.sectionId ? LOOP_XF_SECONDS : PART_XF_SECONDS;
+      };
+      const xfIn = continuesFromPrev || ownPickup ? 0 : xfInto(index);
+      const xfOut = next && !continuesIntoNext ? xfInto(index + 1) : 0;
       // Ring-out: let the track sound on after the section, until its next attack or silence (analysed
       // per source bar), then fade. Capped so sustained pads don't hang on.
       const tail = Math.min(MAX_RING_OUT_SECONDS, track.tails[sourceEnd - 1] ?? 0);
@@ -394,6 +409,18 @@ export class ArrangementManager {
         playPastEnd = Math.max(0, hit + ringOut - this.barStartSeconds(segment.endBar));
       }
 
+      // Into the next part: an equal-power crossfade before its downbeat (unless this track is cut
+      // there, the part ends at a stray pickup, or the music meets the logo).
+      const equalPowerOut = !!next && !continuesIntoNext && !strayPickup && hit === null && !cutsHere && xfOut > 0;
+      if (equalPowerOut) {
+        ringOut = 0;
+        playPastEnd = 0;
+      } else if (next && cutsHere && !strayPickup) {
+        ringOut = CUT_RING_OUT_SECONDS;
+        hold = 0;
+        playPastEnd = Math.max(0, end + ringOut - this.barStartSeconds(segment.endBar));
+      }
+
       // (Scheduled before the section's own chunks: a player's starts must come in time order.)
       let pickedUp = false;
       if (ownPickup) {
@@ -404,7 +431,19 @@ export class ArrangementManager {
           pickedUp = true;
         }
       }
-      if (!pickedUp) pts.push({ t: start, v: 0 });
+      // The first chunk starts early by the crossfade (when the file has audio there).
+      const firstOffset = (Math.max(chunks[0]!.sourceBar, track.fileStartBar) - track.fileStartBar) * barSec;
+      const preRoll = !pickedUp && xfIn > 0 && chunks[0]!.sourceBar >= track.fileStartBar && firstOffset >= xfIn ? xfIn : 0;
+      if (!pickedUp) {
+        if (preRoll > 0) {
+          for (let k = 0; k <= XF_STEPS; k++) {
+            const x = k / XF_STEPS;
+            pts.push({ t: start - preRoll + x * preRoll, v: Math.sin((x * Math.PI) / 2) });
+          }
+        } else {
+          pts.push({ t: start, v: 0 }, { t: start + CUT_FADE_SECONDS, v: 1 });
+        }
+      }
 
       chunks.forEach((chunk, chunkIndex) => {
         // The file may be silence-trimmed: it starts at `fileStartBar` of the bounce.
@@ -422,15 +461,20 @@ export class ArrangementManager {
         if (offset >= bufferSeconds) return;
         // The section's last chunk rings on (the bounce's own continuation after that bar).
         const ringOn = chunkIndex === chunks.length - 1 ? playPastEnd : 0;
-        const duration = Math.min(bars * barSec + ringOn, bufferSeconds - offset);
-        if (duration > 0) startIn(index % 2, this.barStartSeconds(startBar), offset, duration);
+        const early = chunkIndex === 0 && startBar === chunk.startBar ? preRoll : 0;
+        const duration = Math.min(bars * barSec + ringOn + early, bufferSeconds - offset + early);
+        if (duration > 0) startIn(index % 2, this.barStartSeconds(startBar) - early, offset - early, duration);
       });
 
-      pts.push(
-        { t: start + fadeIn, v: 1 },
-        { t: end + ringOut * hold, v: 1 },
-        { t: end + ringOut, v: 0 },
-      );
+      if (equalPowerOut) {
+        // Equal-power fade out, ending exactly on the next part's downbeat.
+        for (let k = 0; k <= XF_STEPS; k++) {
+          const x = k / XF_STEPS;
+          pts.push({ t: end - xfOut + x * xfOut, v: Math.cos((x * Math.PI) / 2) });
+        }
+      } else {
+        pts.push({ t: end + ringOut * hold, v: 1 }, { t: end + ringOut, v: 0 });
+      }
     });
 
     return voices.map((voice, i) => new GainEnvelope(voice!.gain.gain, 0, points[i]!));
