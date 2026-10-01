@@ -29,7 +29,18 @@ export function mountSidePanel(
   const loopName = engine.loopFromSectionId ? engine.sectionName(engine.loopFromSectionId) : "the start";
 
   // --- Stepper -------------------------------------------------------------------------------
-  stepperRoot.innerHTML = ""; // no separate pages: customizing opens up above the timeline
+  stepperRoot.innerHTML = `
+    <nav class="stepper" aria-label="Steps">
+      <button type="button" class="step" data-step="fit">
+        <span class="step-num" data-step-num="fit">1</span>
+        <span class="step-text"><span class="step-title">Fit the length</span><span class="step-sub">to a film or a duration</span></span>
+      </button>
+      <span class="step-sep" aria-hidden="true"></span>
+      <button type="button" class="step" data-step="tune">
+        <span class="step-num">2</span>
+        <span class="step-text"><span class="step-title">Customize the arrangement</span><span class="step-sub">optional</span></span>
+      </button>
+    </nav>`;
 
   // --- Step 1: Fit the length ----------------------------------------------------------------
   const fit = document.createElement("section");
@@ -67,7 +78,7 @@ export function mountSidePanel(
     </div>
     <div class="side-group side-switches" data-switches></div>
     <div class="side-links" data-links></div>
-    <button type="button" class="btn side-next" data-goto-tune>✎ Customize the arrangement (parts, melody, swells) ↓</button>`;
+    <button type="button" class="btn side-next" data-goto-tune>Customize the arrangement: parts, melody &amp; swells →</button>`;
 
   // --- Step 2: Fine-tune ---------------------------------------------------------------------
   const tune = document.createElement("section");
@@ -94,7 +105,6 @@ export function mountSidePanel(
   sideTabs.querySelectorAll<HTMLButtonElement>("[data-side-tab]").forEach((b) =>
     b.addEventListener("click", () => setSideTab(b.dataset.sideTab === "levels" ? "levels" : "fit")),
   );
-  setSideTab("fit");
   const q = <T extends HTMLElement>(el: HTMLElement, sel: string): T | null => el.querySelector<T>(sel);
 
   // Move the timeline's own controls in (they keep their listeners and state handling).
@@ -172,18 +182,12 @@ export function mountSidePanel(
   const partsBox = document.createElement("section");
   partsBox.className = "panel panel-parts";
   partsBox.innerHTML = `
-    <button type="button" class="customize-toggle" data-customize-toggle aria-expanded="false">
-      <span class="customize-icon" aria-hidden="true">✎</span>
-      <span class="customize-text"><span class="customize-title">Customize the arrangement</span><span class="customize-sub">optional – add, replace or stretch parts, put the melody over a part, add swells</span></span>
-      <span class="customize-chevron" aria-hidden="true">▾</span>
-    </button>
-    <div class="parts-body" data-parts-body>
+    <div class="parts-box-head">
+      <h2>Customize the arrangement</h2>
       <p class="hint">Drag a part into the Form lane – between two parts to add it, onto a part to replace it. Melody and swells play on top of a part. Click a part in the timeline for its options.</p>
     </div>`;
-  const partsBody = partsBox.querySelector<HTMLElement>("[data-parts-body]")!;
-  if (partsRow) partsBody.appendChild(partsRow);
-  if (layersRow) partsBody.appendChild(layersRow);
-  const customizeToggle = partsBox.querySelector<HTMLButtonElement>("[data-customize-toggle]")!;
+  if (partsRow) partsBox.appendChild(partsRow);
+  if (layersRow) partsBox.appendChild(layersRow);
   timelineRoot.closest(".panel-timeline")?.before(partsBox);
   // The toolbar row the arrange switch lived in may now be empty.
   timelineRoot.querySelectorAll<HTMLElement>(".timeline-toolbar").forEach((bar) => {
@@ -319,19 +323,20 @@ export function mountSidePanel(
   let step: Step = "fit";
   function setStep(next: Step): void {
     step = next;
-    const open = step === "tune";
-    document.body.classList.toggle("step-fit", !open);
-    document.body.classList.toggle("step-tune", open);
-    customizeToggle.setAttribute("aria-expanded", String(open));
-    customizeToggle.classList.toggle("is-open", open);
+    setSideTab(step === "fit" ? "fit" : "levels");
+    document.body.classList.toggle("step-fit", step === "fit");
+    document.body.classList.toggle("step-tune", step === "tune");
+    stepperRoot.querySelectorAll<HTMLElement>("[data-step]").forEach((b) => {
+      b.classList.toggle("is-active", b.dataset.step === step);
+      b.setAttribute("aria-current", b.dataset.step === step ? "step" : "false");
+    });
     // Lanes that were hidden have no width yet: let the timeline redraw.
     window.dispatchEvent(new Event("resize"));
   }
-  customizeToggle.addEventListener("click", () => setStep(step === "tune" ? "fit" : "tune"));
-  q(fit, "[data-goto-tune]")!.addEventListener("click", () => {
-    setStep("tune");
-    partsBox.scrollIntoView({ block: "start", behavior: "smooth" });
-  });
+  stepperRoot.querySelectorAll<HTMLButtonElement>("[data-step]").forEach((b) =>
+    b.addEventListener("click", () => setStep(b.dataset.step === "tune" ? "tune" : "fit")),
+  );
+  q(fit, "[data-goto-tune]")!.addEventListener("click", () => setStep("tune"));
   setStep("fit");
 
   // --- Live state ----------------------------------------------------------------------------
@@ -353,6 +358,7 @@ export function mountSidePanel(
 
     const fitted = !!info && engine.canFit;
     aha.hidden = !fitted;
+    stepperRoot.querySelector("[data-step-num=fit]")?.classList.toggle("is-done", fitted);
     if (fitted && info) {
       ahaTitle.textContent = `Music fitted to your ${formatFilmTime(info.duration)} film`;
       // Once per film, and again when the cut search has put the logo on the end card.
