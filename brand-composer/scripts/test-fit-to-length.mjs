@@ -59,7 +59,7 @@ const regions = { intro: [1, 4], a: [5, 12], b: [13, 20], final: [49, 56] };
   assert.deepEqual(r.lengths, [8, 16, 16, 16], `proportional: ${r.lengths}`);
   const short = fitAllParts(template, anchorOffsetInMusic(14, timing), timing, regions);
   assert.equal(short.totalBars, 14);
-  assert.deepEqual(short.lengths, [2, 4, 4, 4], `proportional: ${short.lengths}`);
+  assert.deepEqual(short.lengths, [4, 0, 4, 6], `phrases, most important parts: ${short.lengths}`);
 }
 
 // Every whole-second target from 12 to 90 s: exact whenever the template allows it.
@@ -109,7 +109,7 @@ assert.deepEqual(regionChunks(1, 20, [5, 12]), [
   ];
   // "a" is 20 bars long (8 bars of material).
   const loop = expandLongSections(cues, 24, regions, "loop");
-  assert.deepEqual(loop.map((c) => [c.bar, c.section, c.sourceBar]), [[1, "intro", 1], [5, "a", 5], [13, "a", 5], [21, "a", 9]]);
+  assert.deepEqual(loop.map((c) => [c.bar, c.section, c.sourceBar]), [[1, "intro", 1], [5, "a", 5], [9, "a", 5], [13, "a", 5], [17, "a", 5], [21, "a", 9]]);
   const cont = expandLongSections(cues, 24, regions, "continue");
   assert.deepEqual(cont.map((c) => [c.bar, c.section, c.sourceBar]), [[1, "intro", 1], [5, "a", 5], [13, "b", 13], [21, "a", 5]]);
   // Nothing too long: unchanged.

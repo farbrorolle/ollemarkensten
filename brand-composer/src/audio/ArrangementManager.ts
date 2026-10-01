@@ -302,9 +302,9 @@ export class ArrangementManager {
       // This section's end holds a pickup into a section that doesn't come next: silence it.
       const strayPickup = !track.isSwell && !continuesIntoNext ? (track.pickups[String(sourceEnd + 1)] ?? 0) : 0;
 
-      // A loop of the same part comes in at once (the part before rings over it: same chords).
-      const isLoopOfPrev = index > 0 && segments[index - 1]!.sectionId === segment.sectionId;
-      const fadeIn = index === 0 || continuesFromPrev || ownPickup || isLoopOfPrev ? CUT_FADE_SECONDS : fadeSecondsFor(segment.transition);
+      // The new part always comes in at full level right on its downbeat (a fade-in would swallow
+      // the kick on the 1); a "crossfade" is the outgoing part ringing over it, not a fade-in.
+      const fadeIn = CUT_FADE_SECONDS;
       // Ring-out: let the track sound on after the section, until its next attack or silence (analysed
       // per source bar), then fade. Capped so sustained pads don't hang on.
       const tail = Math.min(MAX_RING_OUT_SECONDS, track.tails[sourceEnd - 1] ?? 0);

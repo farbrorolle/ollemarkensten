@@ -277,16 +277,16 @@ export function fitOriginal(
  * - "continue" (original form): the music simply runs on into the next part(s) of the track, as
  *   written (after the last part it goes on from the 2nd, like `fitOriginal`).
  */
-/** Bars at the end of a part that belong to its ending (fill/lead-in), played only once when it loops. */
-const ENDING_BARS = 4;
+/** Loops and part lengths move in whole phrases of this many bars. */
+const PHRASE = 4;
 
 export function expandLongSections(
   cues: CueConfig[],
   totalBars: number,
   regions: Record<string, [number, number]>,
   mode: "loop" | "continue",
-  /** Per section: bars at its end that lead into the next part (pickups/fills), played only on the last pass. */
-  endingBars: Record<string, number> = {},
+  /** (Unused since loops move in whole phrases; kept for callers.) */
+  _endingBars: Record<string, number> = {},
   /** "continue": after the last part, go round again from this section (default: the 2nd). */
   loopFromSection?: string,
 ): CueConfig[] {
@@ -313,21 +313,31 @@ export function expandLongSections(
       return;
     }
     if (mode === "loop") {
-      // The part's ending (its last phrase: fill/lead-in into the next part) is played only once,
-      // at the very end: first the part without its ending, then loops of its body, and the last
-      // loop runs out through the ending -- so it still leads nicely into what follows.
+      // Loops in whole 4-bar phrases. The part plays up to its last phrase (its ending: fill /
+      // lead-in into the next part), then the phrase before the ending repeats as often as needed,
+      // and the ending comes once, at the very end -- so it still leads into what follows.
+      // Short parts (one phrase) simply repeat whole.
       const regionBars = region[1] - region[0] + 1;
-      const ending = Math.min(regionBars - 2, Math.max(regionBars >= 16 ? ENDING_BARS : 0, endingBars[cue.section] ?? 0));
-      const bodyEnd = region[1] - ending; // last bar of the body
-      const first = Math.max(1, bodyEnd - src + 1);
-      push(cue, first);
-      let left = length - first;
-      const body = bodyEnd - region[0] + 1;
-      while (left > regionBars) {
-        push({ bar, section: cue.section, transition: "crossfade", sourceBar: region[0] }, body);
-        left -= body;
+      const endStart = region[1] - (PHRASE - 1); // first bar of the ending phrase
+      const loopStart = endStart - PHRASE; // first bar of the phrase that loops
+      if (regionBars < 2 * PHRASE || src > loopStart) {
+        push(cue, available);
+        let left = length - available;
+        while (left > 0) {
+          const n = Math.min(left, regionBars);
+          push({ bar, section: cue.section, transition: "crossfade", sourceBar: n < regionBars ? keepEndSourceBar(region, n) : region[0] }, n);
+          left -= n;
+        }
+        return;
       }
-      if (left > 0) push({ bar, section: cue.section, transition: "crossfade", sourceBar: keepEndSourceBar(region, left) }, left);
+      push(cue, endStart - src);
+      let extra = length - available;
+      while (extra >= PHRASE) {
+        push({ bar, section: cue.section, transition: "crossfade", sourceBar: loopStart }, PHRASE);
+        extra -= PHRASE;
+      }
+      if (extra > 0) push({ bar, section: cue.section, transition: "crossfade", sourceBar: endStart - extra }, extra);
+      push({ bar, section: cue.section, transition: "crossfade", sourceBar: endStart }, PHRASE);
       return;
     }
     push(cue, available);
@@ -387,8 +397,11 @@ export function fitAuto(
 }
 
 /**
- * "Fit all parts": every part of the original form is in the music, each with the same share of
- * the length as in the original (shorter parts play from their beginning, longer ones loop).
+ * "Include all parts": every part of the original form is in the music, each with (about) the
+ * same share of the length as in the original -- in whole 4-bar phrases, so parts are cut and
+ * loop on phrase boundaries. Shorter parts play from their beginning, longer ones loop. If there
+ * isn't room for a phrase of every part, the least important parts are left out. Left-over bars:
+ * 2-3 go to the last part, a single one makes the music start a bar later.
  */
 export function fitAllParts(
   template: FitBlock[],
@@ -397,23 +410,34 @@ export function fitAllParts(
   regions?: Record<string, [number, number]>,
 ): FitResult {
   const beforeFirstBar = (timing.anchorBeat - 1) * timing.beatSeconds;
-  const idealBars = Math.max(template.length, Math.floor((targetAnchorSeconds - beforeFirstBar) / timing.barSeconds + 1e-9) + 1);
-  const total = template.reduce((sum, b) => sum + b.bars, 0) || 1;
-  const raw = template.map((b) => (b.bars * idealBars) / total);
-  const lens = raw.map((r) => Math.max(1, Math.floor(r)));
-  let missing = idealBars - lens.reduce((a, b) => a + b, 0);
-  // Largest remainders get the left-over bars (or give them back, if the minimum of 1 overshot).
-  const order = raw.map((r, i) => ({ i, rem: r - Math.floor(r) })).sort((a, b) => b.rem - a.rem);
-  for (let k = 0; missing > 0; k = (k + 1) % order.length, missing--) lens[order[k]!.i]! += 1;
-  for (let k = order.length - 1; missing < 0 && k >= 0; k--) {
-    const idx = order[k]!.i;
-    if (lens[idx]! > 1) {
-      lens[idx]! -= 1;
+  const idealBars = Math.max(1, Math.floor((targetAnchorSeconds - beforeFirstBar) / timing.barSeconds + 1e-9) + 1);
+  const phrases = Math.floor(idealBars / PHRASE);
+  const odd = idealBars - phrases * PHRASE;
+  // Which parts get in: all of them, or (too short) the most important ones, in order.
+  let included = template.map((_, i) => i);
+  if (phrases < template.length) {
+    const ranked = [...included].sort(
+      (a, b) => (template[b]!.priority ?? 1) - (template[a]!.priority ?? 1) || a - b,
+    );
+    const keep = new Set(ranked.slice(0, Math.max(1, phrases)));
+    included = included.filter((i) => keep.has(i));
+  }
+  const totalOriginal = included.reduce((sum, i) => sum + template[i]!.bars, 0) || 1;
+  const share = included.map((i) => (template[i]!.bars / totalOriginal) * Math.max(phrases, included.length));
+  const counts = share.map((x) => Math.max(1, Math.floor(x)));
+  let missing = Math.max(phrases, included.length) - counts.reduce((a, b) => a + b, 0);
+  const order = share.map((x, k) => ({ k, rem: x - Math.floor(x) })).sort((a, b) => b.rem - a.rem);
+  for (let n = 0; missing > 0; n = (n + 1) % order.length, missing--) counts[order[n]!.k]! += 1;
+  for (let n = order.length - 1; missing < 0 && n >= 0; n--) {
+    const k = order[n]!.k;
+    if (counts[k]! > 1) {
+      counts[k]! -= 1;
       missing++;
-      k++;
     }
   }
-  return buildResult(template, lens.map((len, index) => ({ index, len })), targetAnchorSeconds, timing, regions);
+  const parts = included.map((index, k) => ({ index, len: counts[k]! * PHRASE }));
+  if (odd >= 2 && parts.length) parts[parts.length - 1]!.len += odd;
+  return buildResult(template, parts, targetAnchorSeconds, timing, regions);
 }
 
 function buildResult(
