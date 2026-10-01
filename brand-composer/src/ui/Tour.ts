@@ -8,9 +8,9 @@ export interface TourStep {
   text: string;
 }
 
-const SEEN_KEY = "customdaw.tourSeen";
-
-export function mountTour(steps: TourStep[]): { start(): void; startOnce(): void } {
+/** Runs a tour: `start(steps)` any time; `startOnce(key, steps)` only the first time per key and page load. */
+export function mountTour(): { start(steps: TourStep[]): void; startOnce(key: string, steps: TourStep[]): void } {
+  let steps: TourStep[] = [];
   let card: HTMLElement | null = null;
   let current: Element | null = null;
   let index = 0;
@@ -80,27 +80,18 @@ export function mountTour(steps: TourStep[]): { start(): void; startOnce(): void
     window.setTimeout(place, 350); // after the smooth scroll
   }
 
-  const seen = (): boolean => {
-    try {
-      return localStorage.getItem(SEEN_KEY) === "1";
-    } catch {
-      return false;
-    }
-  };
-  let shownThisSession = false;
+  const shown = new Set<string>();
   return {
-    start() {
-      shownThisSession = true;
+    start(next) {
+      close();
+      steps = next;
       show(0);
     },
-    startOnce() {
-      if (shownThisSession || seen()) return;
-      shownThisSession = true;
-      try {
-        localStorage.setItem(SEEN_KEY, "1");
-      } catch {
-        /* private mode: just this session */
-      }
+    startOnce(key, next) {
+      if (shown.has(key)) return;
+      shown.add(key);
+      close();
+      steps = next;
       show(0);
     },
   };

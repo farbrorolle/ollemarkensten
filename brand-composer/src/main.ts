@@ -110,13 +110,25 @@ async function bootstrap(): Promise<void> {
   const sidechainPanel = mountSidechainPanel(sidechainRoot, engine);
   mountLogoPanel(logoRoot, engine);
   const tracksPanel = document.querySelector<HTMLElement>(".panel-tracks")!;
-  const tour = mountTour([
-    { target: () => document.querySelector("[data-music-block]"), title: "Your film and the music", text: "The music has been re-arranged to fit your film. The top lane is the film's own sound; below it the music, coloured by part." },
-    { target: () => document.querySelector(".timeline-logo-anchor:not([hidden])"), title: "This green line is your sonic logo", text: "It's placed on the film's last cut, the end card. Drag it, or use Previous / Next cut to move it." },
-    { target: () => document.querySelector('[data-step="tune"]'), title: "Fine-tune when you like", text: "Add, replace or stretch parts, add swells and set levels. Everything stays in sync with the film." },
-    { target: () => document.querySelector("[data-export-open]"), title: "Export", text: "Download the film with the new sound, or the music as a WAV." },
-  ]);
-  document.querySelector("[data-tour]")?.addEventListener("click", () => tour.start());
+  const tour = mountTour();
+  const el = (sel: string) => (): Element | null => document.querySelector(sel);
+  // Before a film: what the app does, and how to try it without one.
+  const introTour = [
+    { target: el(".video-drop"), title: "Start with your film", text: "Drop your film here. The music re-arranges itself automatically to the film's length – and the sonic logo lands on the film's end card." },
+    { target: el("[data-music-block]"), title: "This is your music", text: "The brand's track in its original form, coloured by part. Drag its right edge to make it longer or shorter – it re-arranges itself, always in time." },
+    { target: el("[data-length-chips]"), title: "No film yet? Pick a length", text: "Try 60, 30 or 15 seconds, or your own length, and hear how the track adapts." },
+    { target: el(".timeline-logo-anchor:not([hidden])"), title: "Your sonic logo", text: "The green line is where the logo hits. It always comes at the end, on the beat." },
+    { target: el('[data-step="tune"]'), title: "Fine-tune when you like", text: "Add, replace or stretch parts, add swells and set levels." },
+    { target: el("[data-export-open]"), title: "Export", text: "Download the film with the new sound, or the music as a WAV." },
+  ];
+  // After a film has been fitted.
+  const filmTour = [
+    { target: el("[data-music-block]"), title: "Your film and the music", text: "The music has been re-arranged to fit your film. The top lane is the film's own sound; below it the music, coloured by part." },
+    { target: el(".timeline-logo-anchor:not([hidden])"), title: "This green line is your sonic logo", text: "It's placed on the film's last cut, the end card. Drag it, or use Previous / Next cut to move it." },
+    { target: el('[data-step="tune"]'), title: "Fine-tune when you like", text: "Add, replace or stretch parts, add swells and set levels. Everything stays in sync with the film." },
+    { target: el("[data-export-open]"), title: "Export", text: "Download the film with the new sound, or the music as a WAV." },
+  ];
+  document.querySelector("[data-tour]")?.addEventListener("click", () => tour.start(film.info ? filmTour : introTour));
   let tourTimer = 0;
   const sidePanel = mountSidePanel(
     document.querySelector<HTMLElement>("[data-side-content]")!,
@@ -130,7 +142,8 @@ async function bootstrap(): Promise<void> {
     },
     () => {
       window.clearTimeout(tourTimer);
-      tourTimer = window.setTimeout(() => tour.startOnce(), 2500);
+      const key = film.info ? `${film.info.name}|${film.info.duration}` : "";
+      tourTimer = window.setTimeout(() => tour.startOnce(key, filmTour), 2500);
     },
   );  mountLevelsPanel(
     document.querySelector<HTMLElement>('[data-tab-panel="levels"]')!,
