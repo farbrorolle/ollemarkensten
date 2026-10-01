@@ -3520,3 +3520,13 @@ body.view-customer.step-fit .timeline-lane-cues {
 .output-bar .master-strip {
   margin-left: auto;
 }
+.timeline-palette-logo {
+  border-color: color-mix(in srgb, var(--green) 60%, transparent) !important;
+  background: color-mix(in srgb, var(--green) 12%, transparent) !important;
+  box-shadow: inset 4px 0 0 var(--green) !important;
+  color: var(--text);
+}
+.timeline-palette-logo.is-in-use {
+  opacity: 0.45;
+  cursor: default;
+}

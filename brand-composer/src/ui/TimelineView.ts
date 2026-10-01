@@ -358,6 +358,7 @@ export function mountTimeline(
   resetOriginalBtn.addEventListener("click", () => engine.resetToOriginalForm());
   resetFilmBtn.addEventListener("click", () => {
     const info = film?.info;
+    if (!engine.isLogoEnabled) engine.setLogoEnabled(true); // a reset brings a removed logo back
     if (!info || !engine.canFit) return;
     engine.fitToAnchor(film!.detectedCut ?? engine.defaultAnchorForFilm(info.duration));
   });
@@ -581,16 +582,34 @@ export function mountTimeline(
     palette.appendChild(card);
   }
 
-  // "+ Logo": puts a removed sonic logo back.
+  // The sonic logo as a card of its own: drag it into the form (it always lands at the end), or
+  // click it. Greyed out while the logo is already in.
+  const LOGO_MIME = "application/x-brand-logo";
   const logoCard = document.createElement("button");
   logoCard.type = "button";
   logoCard.className = "timeline-palette-chip timeline-palette-logo";
-  logoCard.textContent = "+ Logo";
-  logoCard.title = "Put the sonic logo back at the end";
+  logoCard.innerHTML = `<span class="chip-name">Sonic logo</span><span class="chip-bars">at the end</span>`;
+  logoCard.draggable = true;
   logoCard.addEventListener("click", () => engine.setLogoEnabled(true));
+  logoCard.addEventListener("dragstart", (e) => {
+    if (engine.isLogoEnabled) {
+      e.preventDefault();
+      return;
+    }
+    closeLengthMenu();
+    e.dataTransfer?.setData(LOGO_MIME, "logo");
+    e.dataTransfer?.setData("text/plain", "Sonic logo");
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = "copy";
+  });
+  logoCard.addEventListener("dragend", () => clearDropIndicator());
   palette.appendChild(logoCard);
   const syncLogoCard = (): void => {
-    logoCard.hidden = !engine.logoSettings || !engine.logo || engine.isLogoEnabled;
+    logoCard.hidden = !engine.logoSettings || !engine.logo;
+    logoCard.classList.toggle("is-in-use", engine.isLogoEnabled);
+    logoCard.draggable = !engine.isLogoEnabled;
+    logoCard.title = engine.isLogoEnabled
+      ? "The sonic logo is in (at the end). Remove it with × on the Logo block, or drag the block away."
+      : "Drag the sonic logo into the form (or click) – it always lands at the end";
   };
   syncLogoCard();
 
@@ -766,6 +785,16 @@ export function mountTimeline(
     commit();
   }
   sectionsRow.addEventListener("dragover", (e) => {
+    if (e.dataTransfer?.types.includes(LOGO_MIME)) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+      showGhost(editableSegments.length, "", 1);
+      if (ghostEl) {
+        ghostEl.textContent = "+ Sonic logo (at the end)";
+        ghostEl.style.width = "auto";
+      }
+      return;
+    }
     if (!e.dataTransfer?.types.includes(SECTION_MIME)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
@@ -778,6 +807,13 @@ export function mountTimeline(
     if (!(e.relatedTarget instanceof Node && sectionsRow.contains(e.relatedTarget))) clearDropIndicator();
   });
   sectionsRow.addEventListener("drop", (e) => {
+    if (e.dataTransfer?.types.includes(LOGO_MIME)) {
+      e.preventDefault();
+      e.stopPropagation();
+      clearDropIndicator();
+      engine.setLogoEnabled(true);
+      return;
+    }
     const sectionId = e.dataTransfer?.getData(SECTION_MIME);
     if (!sectionId) return;
     e.preventDefault();
@@ -1084,6 +1120,19 @@ export function mountTimeline(
         engine.setLogoEnabled(false);
       });
       logoBlock.appendChild(removeLogo);
+      // Like a part: drag the Logo block away from the form to remove it.
+      logoBlock.draggable = true;
+      logoBlock.addEventListener("dragstart", (e) => {
+        e.dataTransfer?.setData("text/plain", "logo-block");
+        if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+        logoBlock.classList.add("timeline-section-dragging");
+      });
+      logoBlock.addEventListener("dragend", (e) => {
+        logoBlock.classList.remove("timeline-section-dragging");
+        const r = formLane.getBoundingClientRect();
+        const away = !(e.clientX === 0 && e.clientY === 0) && (e.clientY < r.top - 24 || e.clientY > r.bottom + 24);
+        if (e.dataTransfer?.dropEffect === "none" && away) engine.setLogoEnabled(false);
+      });
       sectionsRow.appendChild(logoBlock);
     }
   }

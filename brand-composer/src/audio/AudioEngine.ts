@@ -363,6 +363,7 @@ export class AudioEngine {
   /** Back to the track exactly as composed: every part once, at full length, from the start. */
   resetToOriginalForm(): void {
     if (!this.fitConfig || !this.logoConfig) return;
+    this.logoEnabled = true; // a reset brings a removed logo back
     const template = this.fitConfig.template;
     const total = template.reduce((sum, b) => sum + b.bars, 0);
     const timing = { barSeconds: this.barSeconds, beatSeconds: this.beatSeconds, anchorBeat: this.logoConfig.anchorBeat };
