@@ -59,6 +59,25 @@ async function togglePlay(): Promise<void> {
   engine.play();
 }
 
+/** The Export button in the top bar opens a small menu holding the export choices (and their progress). */
+function mountExportMenu(): HTMLButtonElement {
+  const openBtn = document.querySelector<HTMLButtonElement>("[data-export-open]")!;
+  const menu = document.querySelector<HTMLElement>("[data-export-menu]")!;
+  const setOpen = (open: boolean): void => {
+    menu.hidden = !open;
+    openBtn.setAttribute("aria-expanded", String(open));
+  };
+  openBtn.addEventListener("click", () => setOpen(menu.hidden === true));
+  document.addEventListener("pointerdown", (e) => {
+    if (menu.hidden || !(e.target instanceof Node)) return;
+    if (!menu.contains(e.target) && !openBtn.contains(e.target)) setOpen(false);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") setOpen(false);
+  });
+  return openBtn;
+}
+
 async function bootstrap(): Promise<void> {
   // Default: the Broadcom DNA track (long bounces + sonic logo + fit-to-length rules).
   // ?config=demo loads the old synthetic demo; ?config=supabase the same demo with stems from
@@ -71,12 +90,17 @@ async function bootstrap(): Promise<void> {
         ? "/config/demo-project.json"
         : "/config/broadcom.json";
   const config = await loadProjectFromUrl(engine, configUrl);
-  titleEl.textContent = config.title;
-  document.title = `Custom DAW – ${config.title}`;
+  const shortTitle = config.title.replace(/\s*\(\d+\s*BPM\)\s*$/i, "");
+  titleEl.textContent = shortTitle;
+  document.title = `Custom DAW – ${shortTitle}`;
+  const metaEl = document.querySelector<HTMLElement>("[data-meta]");
+  if (metaEl) metaEl.textContent = `${config.bpm} BPM · ${(config.sections ?? []).length} parts`;
 
   const videoPanel = mountVideoPanel(videoRoot, engine, film, config.sections ?? [], () => void togglePlay());
   const transportPanel = mountTransportPanel(transportRoot, engine, () => film.primeFromGesture());
-  const exportBar = mountExportBar(transportRoot, engine, film);
+  const exportBar = mountExportBar(document.querySelector<HTMLElement>("#export-bar")!, engine, film);
+  const exportBtn = mountExportMenu();
+  const exportStatus = document.querySelector<HTMLElement>(".export-menu [data-export-status]");
   const masterPanel = mountMasterPanel(masterRoot, engine);
   const timeline = mountTimeline(timelineRoot, engine, config.sections ?? [], film);
   const trackList = mountTrackList(trackListRoot, engine, (trackId) => timeline.redrawTrack(trackId));
@@ -128,6 +152,10 @@ async function bootstrap(): Promise<void> {
     videoPanel.update();
     transportPanel.update();
     exportBar.update();
+    // Progress stays visible on the Export button when its menu is closed.
+    const pct = /(\d+)%/.exec(exportStatus?.textContent ?? "")?.[1];
+    const label = pct !== undefined ? `Exporting… ${pct}%` : "Export";
+    if (exportBtn.textContent !== label) exportBtn.textContent = label;
     masterPanel.update();
     sidechainPanel.update();
     trackList.update();

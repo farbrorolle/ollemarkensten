@@ -4,56 +4,79 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
     <title>Custom DAW</title>
   </head>
   <body>
-    <div id="app">
-      <header class="app-header">
-        <span class="app-name">Custom DAW</span>
-        <h1 data-title>Custom DAW</h1>
-        <span class="subtitle">Fit the music to your film</span>
-        <div class="view-switch" role="group" aria-label="Vy">
-          <button type="button" class="view-switch-btn" data-view="customer">Customer view</button>
-          <button type="button" class="view-switch-btn" data-view="creator">Creator view</button>
+    <div id="app" class="shell">
+      <header class="topbar">
+        <div class="topbar-left">
+          <span class="app-name">Custom DAW</span>
+          <div class="topbar-title">
+            <h1 data-title>Custom DAW</h1>
+            <span class="topbar-meta" data-meta></span>
+          </div>
+        </div>
+        <div class="topbar-center" data-stepper></div>
+        <div class="topbar-right">
+          <div class="view-switch" role="group" aria-label="View">
+            <button type="button" class="view-switch-btn" data-view="customer">Customer view</button>
+            <button type="button" class="view-switch-btn" data-view="creator">Composer view</button>
+          </div>
+          <div class="export-wrap">
+            <button type="button" class="btn btn-primary btn-export" data-export-open aria-haspopup="true" aria-expanded="false">Export</button>
+            <div class="export-menu" data-export-menu hidden>
+              <div id="export-bar"></div>
+            </div>
+          </div>
         </div>
       </header>
 
-      <main class="layout">
-        <section class="panel panel-video">
-          <h2>Film</h2>
-          <div id="video-panel"></div>
-        </section>
+      <main class="workspace">
+        <div class="ws-main">
+          <section class="panel panel-video">
+            <div id="video-panel"></div>
+          </section>
 
-        <section class="panel panel-transport" id="transport-panel"></section>
+          <section class="panel panel-transport" id="transport-panel"></section>
 
-        <section class="panel panel-timeline">
-          <h2>Music</h2>
-          <p class="hint">Drag the right edge of the music to change its length – it re-arranges automatically. Click the timeline to jump.</p>
-          <div id="timeline-view"></div>
-        </section>
+          <section class="panel panel-timeline">
+            <div class="panel-head">
+              <h2>Timeline</h2>
+              <p class="hint">Drag the right edge of the music to change its length – it re-arranges automatically. Click the timeline to jump.</p>
+            </div>
+            <div id="timeline-view"></div>
+          </section>
+        </div>
 
-        <section class="panel panel-master creator-only">
-          <h2>Master</h2>
-          <div id="master-panel"></div>
-        </section>
+        <aside class="ws-side" data-side>
+          <div class="ws-side-content" data-side-content>
+            <section class="panel panel-tracks">
+              <h2>Levels</h2>
+              <div class="track-list-header">
+                <span></span><span>Volume</span><span class="creator-only">Pan</span><span>Mute</span><span class="creator-only">Solo</span>
+              </div>
+              <div id="track-list"></div>
+            </section>
 
-        <section class="panel panel-sidechain creator-only">
-          <h2>Sidechain</h2>
-          <div id="sidechain-panel"></div>
-        </section>
+            <section class="panel panel-master creator-only">
+              <h2>Master</h2>
+              <div id="master-panel"></div>
+            </section>
 
-        <section class="panel panel-logo creator-only">
-          <h2>Sonic logo</h2>
-          <div id="logo-panel"></div>
-        </section>
+            <section class="panel panel-sidechain creator-only">
+              <h2>Sidechain</h2>
+              <div id="sidechain-panel"></div>
+            </section>
 
-        <section class="panel panel-tracks">
-          <h2>Mixer</h2>
-          <div class="track-list-header">
-            <span></span><span>Volume</span><span class="creator-only">Pan</span><span>Mute</span><span class="creator-only">Solo</span>
+            <section class="panel panel-logo creator-only">
+              <h2>Sonic logo</h2>
+              <div id="logo-panel"></div>
+            </section>
           </div>
-          <div id="track-list"></div>
-        </section>
+        </aside>
       </main>
     </div>
     <script type="module" src="/src/main.ts"></script>
