@@ -56,17 +56,17 @@ export function mountSidePanel(
       <p class="aha-text" data-aha-text></p>
       <button type="button" class="btn btn-small aha-play" data-aha-play>▶ Hear the ending</button>
     </div>
+    <div class="side-group" data-logo-group hidden>
+      <div class="side-label">Logo lands on</div>
+      <div class="logo-cut-row" data-logo-cut-row></div>
+      <p class="side-note" data-logo-note></p>
+    </div>
     <div class="side-group" data-arrange-group>
       <div class="side-label">How the music is arranged</div>
       <div class="arrange-cards" data-arrange-cards></div>
     </div>
     <div class="side-group side-switches" data-switches></div>
     <div class="side-links" data-links></div>
-    <div class="side-group" data-logo-group hidden>
-      <div class="side-label">Logo lands on</div>
-      <div class="logo-cut-row" data-logo-cut-row></div>
-      <p class="side-note" data-logo-note></p>
-    </div>
     <div class="side-group side-other-lengths">
       <div class="side-label">Other lengths <span class="side-optional">optional</span></div>
       <div class="chip-row" data-length-chips></div>
