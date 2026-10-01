@@ -3433,3 +3433,21 @@ body.view-customer.step-fit .timeline-lane-cues {
   font-size: 12.5px;
   color: var(--text-dim);
 }
+.zoom-group .zoom-label {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+.zoom-group .zoom-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.zoom-group .zoom-step {
+  width: 28px;
+  padding: 3px 0;
+  font-size: 15px;
+  line-height: 1;
+}

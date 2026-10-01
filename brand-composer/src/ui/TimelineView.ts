@@ -224,12 +224,12 @@ export function mountTimeline(
         <button type="button" class="btn btn-small" data-cut-next>Next cut ▶</button>
       </span>
       <span class="zoom-group" title="Zoom the timeline (also ⌘/Ctrl + scroll, or pinch on a trackpad)">
-        <span class="viewbar-label">Zoom</span>
-        <button type="button" class="btn btn-small" data-zoom-out aria-label="Zoom out">− Out</button>
-        <input type="range" min="0" max="100" step="1" value="0" data-zoom-slider aria-label="Zoom" />
-        <button type="button" class="btn btn-small" data-zoom-in aria-label="Zoom in">+ In</button>
+        <span class="viewbar-label zoom-label"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Zoom</span>
+        <button type="button" class="btn btn-small zoom-step" data-zoom-out aria-label="Zoom out" title="Zoom out: see more of the timeline">−</button>
+        <input type="range" min="0" max="100" step="1" value="0" data-zoom-slider aria-label="Zoom" title="Drag to zoom in on the timeline" />
+        <button type="button" class="btn btn-small zoom-step" data-zoom-in aria-label="Zoom in" title="Zoom in: see the bars closer">+</button>
         <span class="zoom-value" data-zoom-value>100%</span>
-        <button type="button" class="btn btn-small" data-zoom-fit title="Show the whole timeline">Fit</button>
+        <button type="button" class="btn btn-small" data-zoom-fit title="Show the whole timeline">Show all</button>
       </span>
     </div>
     <div class="timeline-scroll" data-scroll><div class="timeline-zoom" data-zoom-inner>
