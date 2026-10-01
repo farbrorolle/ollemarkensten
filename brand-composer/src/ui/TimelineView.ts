@@ -390,7 +390,8 @@ export function mountTimeline(
     if (cut !== null) engine.fitToAnchor(cut);
   });
   const syncCutButtons = (): void => {
-    const show = !!film?.cuts.length && engine.hasLogo && engine.canFit;
+    // Shown whenever a film is in (buttons greyed out until/unless the cut search finds cuts).
+    const show = !!film?.info && engine.hasLogo && engine.canFit;
     cutGroup.hidden = !show;
     if (!show) return;
     const prev = neighbourCut(-1);

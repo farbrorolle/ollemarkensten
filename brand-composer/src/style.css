@@ -2656,7 +2656,7 @@ body {
   padding: 10px;
 }
 .ws-main .video-element {
-  max-height: 42vh;
+  max-height: 36vh;
 }
 
 /* Transport as one slim row under the film. */
@@ -3450,4 +3450,73 @@ body.view-customer.step-fit .timeline-lane-cues {
   padding: 3px 0;
   font-size: 15px;
   line-height: 1;
+}
+
+/* Output controls under the film, in every step: film audio, music, loudness boost, master strip. */
+.ws-main .panel-transport {
+  row-gap: 10px;
+}
+.output-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-left: auto;
+}
+.output-bar .transport-film-audio {
+  margin-left: 0;
+}
+.output-bar .video-volume {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.output-bar .video-volume[hidden] {
+  display: none;
+}
+.output-bar .video-volume input[type="range"] {
+  width: 96px;
+}
+.output-bar .video-volume-value {
+  min-width: 52px;
+  font: 11.5px var(--font-mono);
+  color: var(--text);
+}
+.output-bar .master-strip {
+  height: 72px;
+}
+.output-bar {
+  width: 100%;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  padding-top: 10px;
+  border-top: 1px solid var(--panel-border);
+  margin-left: 0;
+}
+.output-faders {
+  display: grid;
+  grid-template-columns: auto minmax(80px, 160px) auto;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 2px;
+}
+.output-faders .video-volume {
+  display: contents;
+}
+.output-faders .video-volume > span:first-child,
+.output-faders .video-limiter > span:not([class]) {
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.output-faders .video-volume input[type="range"] {
+  width: 100%;
+}
+.output-faders .video-limiter-toggle,
+.output-faders .video-limiter-ceiling {
+  grid-column: 1 / -1;
+}
+.output-bar .master-strip {
+  margin-left: auto;
 }

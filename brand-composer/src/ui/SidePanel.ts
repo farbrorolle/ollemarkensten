@@ -54,6 +54,11 @@ export function mountSidePanel(
     </div>
     <h2>Fit the length</h2>
     <p class="side-sub" data-fit-sub></p>
+    <div class="side-group" data-logo-group hidden>
+      <div class="side-label">Logo lands on</div>
+      <div class="logo-cut-row" data-logo-cut-row></div>
+      <p class="side-note" data-logo-note></p>
+    </div>
     <div class="length-tip" data-length-tip hidden>
       <div class="length-tip-title">Try another length</div>
       <p>Drag the music's right edge in the timeline, or choose a preset below. The track re-arranges itself, always in time – or add your film and it fits itself.</p>
@@ -66,11 +71,6 @@ export function mountSidePanel(
         <button type="submit" class="btn btn-small btn-primary">Set</button>
       </form>
       <p class="side-note" data-length-note></p>
-    </div>
-    <div class="side-group" data-logo-group hidden>
-      <div class="side-label">Logo lands on</div>
-      <div class="logo-cut-row" data-logo-cut-row></div>
-      <p class="side-note">Previous / Next cut moves the music so the logo hits another cut. You can also drag the green line.</p>
     </div>
     <div class="side-group" data-arrange-group>
       <div class="side-label">When the length changes</div>
@@ -357,6 +357,9 @@ export function mountSidePanel(
             : `The logo hits at ${formatFilmTime(anchor)}.`;
     }
     logoGroup.hidden = !cutGroup || cutGroup.hidden;
+    q<HTMLElement>(fit, "[data-logo-note]")!.textContent = film.cuts.length
+      ? "Previous / Next cut moves the music so the logo hits another cut in the film. You can also drag the green line."
+      : "Looking for cuts in the film (takes a few seconds)… You can also drag the green line.";
     endCardLabel.textContent = anchor === null ? "" : `${onCut ? "End card" : "Logo"} ${formatFilmTime(anchor)}`;
   }
 

@@ -1,7 +1,5 @@
 /**
  * The Levels tab (design 2a, Fine-tune → Levels):
- *   Film & output – film audio, music, loudness boost (limiter gain) and the master strip; these
- *                   are the film panel's own controls, moved here with their listeners.
  *   Folders       – the existing mixer: one fader per folder of the track, with Levels per part.
  *
  * Also tidies the film panel: the film's name and Replace/Remove sit on the picture, the film
@@ -24,14 +22,21 @@ export function mountLevelsPanel(
     return el;
   };
 
-  // --- Output: the film panel's level controls ---
-  const output = section("Film & output");
+  // --- Output: film audio, music and loudness boost + the master strip, always in view under the
+  // film (in the transport), whatever step the customer is on.
+  const output = document.createElement("div");
+  output.className = "output-bar";
   const volumes = Array.from(videoRoot.querySelectorAll<HTMLElement>(".video-bar-actions > .video-volume"));
-  for (const v of volumes) output.appendChild(v);
+  const faders = document.createElement("div");
+  faders.className = "output-faders";
+  for (const v of volumes) faders.appendChild(v);
+  output.appendChild(faders);
   const strip = videoRoot.querySelector<HTMLElement>(".master-strip");
   if (strip) output.appendChild(strip);
   const limiterLabel = output.querySelector<HTMLElement>(".video-limiter > span:not([class])");
   if (limiterLabel && limiterLabel.textContent === "Limiter gain") limiterLabel.textContent = "Loudness boost";
+  transportRoot.appendChild(output);
+  const filmVolume = volumes.find((v) => v.querySelector("[data-film-volume]"));
 
   // --- The project's folders (one fader each, as exported from the session) + levels per part ---
   const folders = section("Folders", "One fader per folder of the track. Levels per part sets them for just one part.");
@@ -57,10 +62,11 @@ export function mountLevelsPanel(
   const loadedEl = videoRoot.querySelector<HTMLElement>("[data-loaded]");
   if (audioBtn) {
     audioBtn.classList.add("transport-film-audio");
-    transportRoot.appendChild(audioBtn);
+    output.prepend(audioBtn);
     // Only with a film loaded.
     const sync = (): void => {
       audioBtn.hidden = !!loadedEl?.hidden;
+      if (filmVolume) filmVolume.hidden = !!loadedEl?.hidden;
     };
     sync();
     if (loadedEl) new MutationObserver(sync).observe(loadedEl, { attributes: true, attributeFilter: ["hidden"] });
