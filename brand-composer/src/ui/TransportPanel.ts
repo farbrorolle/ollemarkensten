@@ -94,7 +94,7 @@ export function mountTransportPanel(root: HTMLElement, engine: AudioEngine, onPl
   return {
     update() {
       positionEl.textContent = formatBarsBeats(String(Tone.getTransport().position));
-      const t = Tone.getTransport().seconds;
+      const t = Math.max(0, Tone.getTransport().seconds);
       const m = Math.floor(t / 60);
       timeEl.textContent = `${m}:${(t - m * 60).toFixed(1).padStart(4, "0")}`;
       const sectionId = engine.sectionAtSeconds(Math.max(0, engine.audibleSeconds));

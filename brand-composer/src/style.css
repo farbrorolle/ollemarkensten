@@ -3414,3 +3414,22 @@ body.view-customer.step-fit .timeline-lane-cues {
 .levels-folders .panel-tracks > h2 {
   display: none;
 }
+.length-tip {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid rgba(124, 99, 255, 0.45);
+  border-radius: 10px;
+  background: rgba(124, 99, 255, 0.1);
+}
+.length-tip[hidden] {
+  display: none;
+}
+.length-tip-title {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.length-tip p {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}

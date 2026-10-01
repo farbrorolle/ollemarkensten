@@ -54,6 +54,10 @@ export function mountSidePanel(
     </div>
     <h2>Fit the length</h2>
     <p class="side-sub" data-fit-sub></p>
+    <div class="length-tip" data-length-tip hidden>
+      <div class="length-tip-title">Try another length</div>
+      <p>Drag the music's right edge in the timeline, or choose a preset below. The track re-arranges itself, always in time – or add your film and it fits itself.</p>
+    </div>
     <div class="side-group">
       <div class="side-label">Length</div>
       <div class="chip-row" data-length-chips></div>
@@ -327,9 +331,10 @@ export function mountSidePanel(
     if (key === lastKey) return;
     lastKey = key;
 
+    q<HTMLElement>(fit, "[data-length-tip]")!.hidden = !!info;
     fitSub.textContent = info
       ? "The music is fitted to your film. Change the length, move the logo to another cut, or choose how it is arranged."
-      : "Pick a duration, drag the music's right edge, or add a film. The track re-arranges itself.";
+      : "Start from the track as composed – or add your film and the music fits itself.";
     renderChips();
 
     const fitted = !!info && engine.canFit;

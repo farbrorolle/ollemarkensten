@@ -113,7 +113,6 @@ async function bootstrap(): Promise<void> {
   const tour = mountTour([
     { target: () => document.querySelector("[data-music-block]"), title: "Your film and the music", text: "The music has been re-arranged to fit your film. The top lane is the film's own sound; below it the music, coloured by part." },
     { target: () => document.querySelector(".timeline-logo-anchor:not([hidden])"), title: "This green line is your sonic logo", text: "It's placed on the film's last cut, the end card. Drag it, or use Previous / Next cut to move it." },
-    { target: () => document.querySelector("[data-length-chips]"), title: "Try another length", text: "Pick a duration or drag the music's right edge. The track re-arranges itself, always in time." },
     { target: () => document.querySelector('[data-step="tune"]'), title: "Fine-tune when you like", text: "Add, replace or stretch parts, add swells and set levels. Everything stays in sync with the film." },
     { target: () => document.querySelector("[data-export-open]"), title: "Export", text: "Download the film with the new sound, or the music as a WAV." },
   ]);
