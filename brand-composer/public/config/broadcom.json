@@ -4952,5 +4952,17 @@
       "release": 0.2,
       "knee": 6
     }
-  }
+  },
+  "layers": [
+    {
+      "id": "melody",
+      "name": "Melody",
+      "section": "motif",
+      "tracks": [
+        "f03",
+        "f09",
+        "f10"
+      ]
+    }
+  ]
 }

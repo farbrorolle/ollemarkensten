@@ -61,6 +61,10 @@ export class Track {
    * Voice 0 is `legacyPlayer`. Each has its own gain, driven by gain envelopes.
    */
   private readonly regionVoices: { player: Tone.Player; gain: Tone.Gain }[] = [];
+  /** Region tracks: the normal playback (both voices) goes through this, so a layer can replace it. */
+  readonly regionBus: Tone.Gain | null = null;
+  /** Region tracks: an extra voice for layer blocks (e.g. the melody played over another part). */
+  readonly layerVoice: { player: Tone.Player; gain: Tone.Gain } | null = null;
   private readonly legacyFile: string | null = null;
   private readonly takes = new Map<string, SectionTake>();
 
@@ -120,12 +124,19 @@ export class Track {
       this.legacyPlayer = new Tone.Player({ loop: this.playMode === "loop", fadeIn: 0.002, fadeOut: 0.01 });
       if (this.playMode === "region") {
         const second = new Tone.Player({ loop: false, fadeIn: 0.002, fadeOut: 0.01 });
+        this.regionBus = new Tone.Gain(1);
+        this.regionBus.connect(this.sidechainGain);
         for (const player of [this.legacyPlayer, second]) {
           const gain = new Tone.Gain(0);
           player.connect(gain);
-          gain.connect(this.sidechainGain);
+          gain.connect(this.regionBus);
           this.regionVoices.push({ player, gain });
         }
+        const layerPlayer = new Tone.Player({ loop: false, fadeIn: 0.002, fadeOut: 0.01 });
+        const layerGain = new Tone.Gain(0);
+        layerPlayer.connect(layerGain);
+        layerGain.connect(this.sidechainGain);
+        this.layerVoice = { player: layerPlayer, gain: layerGain };
       } else {
         this.legacyPlayer.connect(this.sidechainGain);
       }
@@ -177,6 +188,7 @@ export class Track {
   private shareRegionBuffer(): void {
     const second = this.regionVoices[1];
     if (second && this.legacyPlayer?.loaded) second.player.buffer = this.legacyPlayer.buffer;
+    if (this.layerVoice && this.legacyPlayer?.loaded) this.layerVoice.player.buffer = this.legacyPlayer.buffer;
   }
 
   /** Region mode: voice `i` (0 or 1) -- its player and its gain. */
@@ -202,6 +214,7 @@ export class Track {
   resyncSectionTakes(): void {
     if (this.legacyPlayer && this.playMode !== "loop") this.legacyPlayer.unsync().sync();
     for (const voice of this.regionVoices.slice(1)) voice.player.unsync().sync();
+    this.layerVoice?.player.unsync().sync();
     for (const take of this.takes.values()) {
       take.player.unsync().sync();
       take.takeGain.gain.cancelScheduledValues(0);
@@ -237,6 +250,7 @@ export class Track {
     if (this.playMode === "loop") this.legacyPlayer?.sync().start(0);
     else this.legacyPlayer?.sync(); // started per cue by ArrangementManager / AudioEngine
     for (const voice of this.regionVoices.slice(1)) voice.player.sync();
+    this.layerVoice?.player.sync();
     for (const take of this.takes.values()) take.player.sync();
   }
 
@@ -283,6 +297,9 @@ export class Track {
       take.player.dispose();
       take.takeGain.dispose();
     }
+    this.layerVoice?.player.dispose();
+    this.layerVoice?.gain.dispose();
+    this.regionBus?.dispose();
     this.sidechainGain.dispose();
     this.sectionGain.dispose();
     this.autoGain.dispose();

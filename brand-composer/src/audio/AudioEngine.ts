@@ -13,13 +13,14 @@ import type {
   CompressorSettings,
   CueConfig,
   FitConfig,
+  LayerConfig,
   LogoConfig,
   ProjectConfig,
   SectionConfig,
   SidechainConfig,
   TransitionType,
 } from "../project/types.ts";
-import { expandLongSections, fitOriginal, fitToLength } from "../project/fitToLength.ts";
+import { expandLongSections, fitOriginal, fitToLength, regionChunks } from "../project/fitToLength.ts";
 import type { FitResult } from "../project/fitToLength.ts";
 
 const MUTE_RAMP_SECONDS = 0.03;
@@ -551,6 +552,7 @@ export class AudioEngine {
     this.regions = config.sourceRegions;
     this.fitConfig = config.fit;
     this.logoConfig = config.logo;
+    this.layerConfigs = config.layers ?? [];
     this.logoTrack = config.logo ? (this.tracks.get(config.logo.track) ?? null) : null;
     if (config.logo && !this.logoTrack) throw new Error(`Logo references unknown track "${config.logo.track}"`);
     this._lastFit = null;
@@ -595,6 +597,7 @@ export class AudioEngine {
       this.redoStack.length = 0;
     }
     this.currentState = {
+      layers: this._layers.map((l) => ({ ...l })),
       volumeCues: this._volumeCues.map((c) => ({ ...c })),
       cues: cues.map((c) => ({ ...c })),
       loopBars,
@@ -629,10 +632,99 @@ export class AudioEngine {
     this.scheduleLogo();
     this.cueEnvelopes = this.buildCueEnvelopes();
     this.envelopes.push(...this.cueEnvelopes);
+    this.envelopes.push(...this.scheduleLayers());
     this.envelopes.forEach((e) => e.reset(Tone.now()));
     this.applyPlaybackMode(); // schedule() always turns looping on; re-apply film/logo mode on top
     if (wasPlaying && (this.filmMode || playedFrom < this.arrangementSeconds - 0.1)) Tone.getTransport().start(undefined, playedFrom);
     for (const listener of this.arrangementListeners) listener();
+  }
+
+  // --- Layers: e.g. the melody dragged over another part ---------------------------------------
+
+  private layerConfigs: LayerConfig[] = [];
+  private _layers: LayerBlock[] = [];
+
+  get layerTypes(): readonly LayerConfig[] {
+    return this.layerConfigs;
+  }
+
+  get layers(): readonly LayerBlock[] {
+    return this._layers;
+  }
+
+  /** Replaces all layer blocks (undoable) and re-schedules the music (keeps playing). */
+  setLayers(layers: LayerBlock[]): void {
+    const state = this.currentState;
+    if (!state) return;
+    this.undoStack.push(state);
+    this.redoStack.length = 0;
+    this._layers = layers.map((l) => ({ ...l })).sort((a, b) => a.startBar - b.startBar);
+    this.restoring = true;
+    try {
+      this.applyArrangement(state.cues, state.loopBars, state.musicStartSeconds, state.fit);
+    } finally {
+      this.restoring = false;
+    }
+  }
+
+  /**
+   * Plays each layer block on its tracks' extra voice -- from the layer's section (with its pickup
+   * just before, looping if the block is longer) -- while the tracks' normal playback is faded out
+   * underneath, so nothing doubles. Under the logo the layer stops at the hit.
+   */
+  private scheduleLayers(): GainEnvelope[] {
+    if (!this._layers.length || !this.regions) return [];
+    const envelopes: GainEnvelope[] = [];
+    const barSec = this.barSeconds;
+    const FADE = 0.06;
+    const hit = this.hasLogo ? this.logoAnchorSeconds : null;
+    const musicEnd = this.arrangement.barStartSeconds(this.arrangement.totalBars + 1);
+    for (const config of this.layerConfigs) {
+      const blocks = this._layers.filter((l) => l.layerId === config.id && l.bars > 0);
+      const region = this.regions[config.section];
+      if (!blocks.length || !region) continue;
+      for (const trackId of config.tracks) {
+        const track = this.tracks.get(trackId);
+        const voice = track?.layerVoice;
+        const bus = track?.regionBus;
+        if (!track || !voice || !bus || !voice.player.loaded) continue;
+        const bufferSeconds = voice.player.buffer.duration;
+        const layerPts: EnvelopePoint[] = [];
+        const busPts: EnvelopePoint[] = [];
+        let lastStart = -Infinity;
+        for (const block of blocks) {
+          const start = this.arrangement.barStartSeconds(block.startBar);
+          let end = Math.min(this.arrangement.barStartSeconds(block.startBar + block.bars), musicEnd);
+          if (hit !== null) end = Math.min(end, hit);
+          if (end <= start + 0.05) continue;
+          // The melody's own pickup (upbeat) leads into the block.
+          const pickup = track.pickups[String(region[0])] ?? 0;
+          const pickStart = start - pickup * barSec;
+          const pickOffset = (region[0] - pickup - track.fileStartBar) * barSec;
+          let fadeInAt = start;
+          if (pickup && pickStart >= 0 && pickStart > lastStart + 1e-3 && pickOffset >= 0) {
+            voice.player.start(pickStart, pickOffset, pickup * barSec);
+            lastStart = pickStart;
+            fadeInAt = pickStart;
+          }
+          for (const chunk of regionChunks(block.startBar, block.bars, region, region[0])) {
+            const when = this.arrangement.barStartSeconds(chunk.startBar);
+            if (when >= end || when <= lastStart + 1e-3) continue;
+            const offset = (chunk.sourceBar - track.fileStartBar) * barSec;
+            if (offset < 0 || offset >= bufferSeconds) continue;
+            const tail = Math.min(2, track.tails[chunk.sourceBar + chunk.bars - 2] ?? 0);
+            const duration = Math.min(end - when + tail, bufferSeconds - offset);
+            voice.player.start(when, offset, duration);
+            lastStart = when;
+          }
+          const tail = hit !== null && end >= hit - 1e-3 ? 0.03 : 0.25;
+          layerPts.push({ t: fadeInAt, v: 0 }, { t: fadeInAt + FADE, v: 1 }, { t: end, v: 1 }, { t: end + tail, v: 0 });
+          busPts.push({ t: start - FADE, v: 1 }, { t: start, v: 0 }, { t: end, v: 0 }, { t: end + FADE, v: 1 });
+        }
+        envelopes.push(new GainEnvelope(voice.gain.gain, 0, layerPts), new GainEnvelope(bus.gain, 1, busPts));
+      }
+    }
+    return envelopes;
   }
 
   // --- Volume cue points: per-instrument level changes along the timeline ---------------------
@@ -737,6 +829,7 @@ export class AudioEngine {
 
   private restoreState(state: ArrangementState): void {
     this._volumeCues = state.volumeCues.map((c) => ({ ...c }));
+    this._layers = state.layers.map((l) => ({ ...l }));
     this.logoEnabled = state.logoEnabled;
     this._arrangeMode = state.arrangeMode;
     this.restoring = true;
@@ -869,6 +962,7 @@ export class AudioEngine {
 
 /** Everything needed to put an arrangement back (undo/redo). */
 interface ArrangementState {
+  layers: LayerBlock[];
   volumeCues: VolumeCue[];
   cues: CueConfig[];
   loopBars: number;
@@ -891,3 +985,11 @@ export interface VolumeCue {
 export const VOLUME_CUE_MUTE_DB = -40;
 /** Seconds the level glides into a cue's new value (ending on the cue). */
 const VOLUME_CUE_RAMP = 0.12;
+
+/** A layer block in the timeline: layer `layerId` plays from `startBar` for `bars` bars. */
+export interface LayerBlock {
+  id: string;
+  layerId: string;
+  startBar: number;
+  bars: number;
+}

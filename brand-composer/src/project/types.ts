@@ -219,5 +219,20 @@ export interface ProjectConfig {
   /** Rules for "fit to length" (see src/project/fitToLength.ts). */
   fit?: FitConfig;
   logo?: LogoConfig;
+  /** Instrument layers the customer can drag over any part (e.g. the melody over the intro). */
+  layers?: LayerConfig[];
   master?: MasterConfig;
+}
+
+/**
+ * A layer: some tracks (e.g. the melody) that can be played from one section's material over
+ * any other part of the timeline, as blocks in their own lane.
+ */
+export interface LayerConfig {
+  id: string;
+  name: string;
+  /** Section whose material is played (e.g. "motif"). */
+  section: string;
+  /** Track ids that make up the layer. */
+  tracks: string[];
 }

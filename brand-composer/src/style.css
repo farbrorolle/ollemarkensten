@@ -1868,3 +1868,64 @@ body.view-customer .track-row {
   margin-right: auto;
   color: #ff6b81;
 }
+
+/* Layers lane: e.g. the melody dragged over another part. */
+.timeline-lane-layers {
+  height: 30px;
+  cursor: default;
+  align-items: stretch;
+}
+
+.timeline-lane-layers[hidden] {
+  display: none;
+}
+
+.timeline-layers {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  margin: 3px 0;
+}
+
+.timeline-layers-hint {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  color: var(--text-dim);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.timeline-layer-block {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px 0 6px;
+  box-sizing: border-box;
+  border: 1px solid #f7a8ff;
+  border-radius: 4px;
+  background: rgba(247, 168, 255, 0.16);
+  color: #f7a8ff;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.timeline-layer-block .timeline-section-remove {
+  color: #f7a8ff;
+}
+
+.timeline-palette-layer {
+  border-color: #f7a8ff;
+  background: rgba(247, 168, 255, 0.12);
+}

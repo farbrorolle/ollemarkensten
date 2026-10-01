@@ -1,6 +1,6 @@
 import * as Tone from "tone";
 import { VOLUME_CUE_MUTE_DB } from "../audio/AudioEngine.ts";
-import type { AudioEngine, VolumeCue } from "../audio/AudioEngine.ts";
+import type { AudioEngine, LayerBlock, VolumeCue } from "../audio/AudioEngine.ts";
 import type { Track } from "../audio/Track.ts";
 import type { CueConfig, SectionConfig, TransitionType } from "../project/types.ts";
 import type { FilmInfo, VideoSync } from "../video/VideoSync.ts";
@@ -1107,6 +1107,156 @@ export function mountTimeline(
   formLane.appendChild(sectionsRow);
   lanesEl.appendChild(formLane);
   formLane.addEventListener("click", (e) => e.stopPropagation()); // editing the form doesn't seek
+
+  // --- Layers: instrument groups (e.g. the melody) that can be dragged over any part. They play
+  // their own section's material on top of whatever part is there (replacing their normal playback).
+  const LAYER_MIME = "application/x-brand-layer";
+  const layerTypes = engine.layerTypes;
+  const layerLane = document.createElement("div");
+  layerLane.className = "timeline-lane timeline-lane-layers";
+  layerLane.hidden = layerTypes.length === 0;
+  layerLane.innerHTML = `<span class="timeline-lane-name" title="Drag e.g. the melody here to play it over any part">Layers</span><div class="timeline-layers" data-layers><span class="timeline-layers-hint" data-layers-hint>Drag ♪ Melody here to play it over any part</span></div>`;
+  formLane.after(layerLane);
+  const layersEl = layerLane.querySelector<HTMLElement>("[data-layers]")!;
+  const layersHint = layerLane.querySelector<HTMLElement>("[data-layers-hint]")!;
+  layerLane.addEventListener("click", (e) => e.stopPropagation());
+  const layerName = (id: string): string => layerTypes.find((l) => l.id === id)?.name ?? id;
+  const layerDefaultBars = (id: string): number => {
+    const type = layerTypes.find((l) => l.id === id);
+    const region = type ? engine.sourceRegionFor(type.section) : undefined;
+    return region ? region[1] - region[0] + 1 : 8;
+  };
+  const barAtLayerX = (clientX: number): number => {
+    const rect = layersEl.getBoundingClientRect();
+    const seconds = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * spanSeconds;
+    return Math.max(1, Math.min(totalBars, Math.round(1 + (seconds - engine.musicStartSeconds) / engine.barSeconds)));
+  };
+  let layerIdCounter = 0;
+  /** Fits a block in between the other blocks of its layer (no overlaps) and inside the music. */
+  function placeBlock(block: LayerBlock, others: readonly LayerBlock[]): LayerBlock | null {
+    let start = Math.max(1, Math.min(totalBars, block.startBar));
+    const same = others.filter((o) => o.layerId === block.layerId && o.id !== block.id).sort((a, b) => a.startBar - b.startBar);
+    const inside = same.find((o) => start >= o.startBar && start < o.startBar + o.bars);
+    if (inside) start = inside.startBar + inside.bars;
+    const next = same.find((o) => o.startBar >= start);
+    const limit = Math.min(totalBars + 1, next ? next.startBar : Infinity);
+    const bars = Math.min(block.bars, limit - start);
+    return bars >= 1 ? { ...block, startBar: start, bars } : null;
+  }
+  function addLayer(layerId: string, startBar: number): void {
+    const placed = placeBlock({ id: `layer-${Date.now().toString(36)}-${layerIdCounter++}`, layerId, startBar, bars: layerDefaultBars(layerId) }, engine.layers);
+    if (placed) engine.setLayers([...engine.layers, placed]);
+  }
+
+  for (const type of layerTypes) {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "timeline-palette-chip timeline-palette-layer";
+    card.draggable = true;
+    card.innerHTML = `<span class="chip-name"></span><span class="chip-bars">layer · ${layerDefaultBars(type.id)} bars</span>`;
+    card.querySelector(".chip-name")!.textContent = `♪ ${type.name}`;
+    card.title = `Drag ${type.name} into the Layers lane to play it over any part (or click to put it at the start)`;
+    card.addEventListener("dragstart", (e) => {
+      e.dataTransfer?.setData(LAYER_MIME, type.id);
+      e.dataTransfer?.setData("text/plain", type.name);
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = "copy";
+      layerDrag = type.id;
+    });
+    card.addEventListener("dragend", () => {
+      layerDrag = null;
+      layerGhost?.remove();
+      layerGhost = null;
+    });
+    card.addEventListener("click", () => addLayer(type.id, 1));
+    palette.appendChild(card);
+  }
+
+  let layerDrag: string | null = null;
+  let layerGhost: HTMLElement | null = null;
+  layersEl.addEventListener("dragover", (e) => {
+    if (!e.dataTransfer?.types.includes(LAYER_MIME) || !layerDrag) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    const placed = placeBlock({ id: "ghost", layerId: layerDrag, startBar: barAtLayerX(e.clientX), bars: layerDefaultBars(layerDrag) }, engine.layers);
+    if (!layerGhost) {
+      layerGhost = document.createElement("div");
+      layerGhost.className = "timeline-section-ghost";
+      layersEl.appendChild(layerGhost);
+    }
+    if (!placed) {
+      layerGhost.hidden = true;
+      return;
+    }
+    layerGhost.hidden = false;
+    layerGhost.style.left = `${xOfBar(placed.startBar) * 100}%`;
+    layerGhost.style.width = `${(xOfBar(placed.startBar + placed.bars) - xOfBar(placed.startBar)) * 100}%`;
+    layerGhost.textContent = `+ ${layerName(layerDrag)} · ${placed.bars} bars`;
+  });
+  layersEl.addEventListener("dragleave", (e) => {
+    if (e.relatedTarget instanceof Node && layersEl.contains(e.relatedTarget)) return;
+    layerGhost?.remove();
+    layerGhost = null;
+  });
+  layersEl.addEventListener("drop", (e) => {
+    const layerId = e.dataTransfer?.getData(LAYER_MIME);
+    if (!layerId) return;
+    e.preventDefault();
+    layerGhost?.remove();
+    layerGhost = null;
+    layerDrag = null;
+    addLayer(layerId, barAtLayerX(e.clientX));
+  });
+
+  function renderLayers(): void {
+    layersEl.querySelectorAll(".timeline-layer-block").forEach((el) => el.remove());
+    layersHint.hidden = engine.layers.length > 0;
+    for (const block of engine.layers) {
+      const el = document.createElement("div");
+      el.className = "timeline-layer-block";
+      const place = (startBar: number, bars: number): void => {
+        el.style.left = `${xOfBar(startBar) * 100}%`;
+        el.style.width = `${(xOfBar(startBar + bars) - xOfBar(startBar)) * 100}%`;
+      };
+      place(block.startBar, block.bars);
+      el.title = `${layerName(block.layerId)} · ${block.bars} bars – drag to move, drag the right edge to change the length`;
+      el.innerHTML = `<span class="timeline-section-label"></span><button type="button" class="timeline-section-remove" title="Remove">×</button><span class="timeline-section-resize" title="Drag to change the length"></span>`;
+      el.querySelector(".timeline-section-label")!.textContent = `♪ ${layerName(block.layerId)} · ${block.bars}`;
+      el.querySelector(".timeline-section-remove")!.addEventListener("click", (e) => {
+        e.stopPropagation();
+        engine.setLayers(engine.layers.filter((l) => l.id !== block.id));
+      });
+      el.querySelector(".timeline-section-remove")!.addEventListener("pointerdown", (e) => e.stopPropagation());
+      const barWidthPx = (): number => (layersEl.getBoundingClientRect().width * engine.barSeconds) / spanSeconds || 1;
+      // Move (body) or resize (right edge), in whole bars.
+      el.addEventListener("pointerdown", (e) => {
+        const resizing = (e.target as HTMLElement).classList.contains("timeline-section-resize");
+        e.preventDefault();
+        e.stopPropagation();
+        el.setPointerCapture(e.pointerId);
+        const startX = e.clientX;
+        let next = { ...block };
+        const onMove = (ev: PointerEvent): void => {
+          const delta = Math.round((ev.clientX - startX) / barWidthPx());
+          next = resizing ? { ...block, bars: Math.max(1, block.bars + delta) } : { ...block, startBar: block.startBar + delta };
+          const placed = placeBlock(next, engine.layers);
+          if (placed) {
+            next = placed;
+            place(placed.startBar, placed.bars);
+          }
+        };
+        const onUp = (): void => {
+          el.removeEventListener("pointermove", onMove);
+          el.removeEventListener("pointerup", onUp);
+          if (next.startBar !== block.startBar || next.bars !== block.bars) {
+            engine.setLayers(engine.layers.map((l) => (l.id === block.id ? next : l)));
+          }
+        };
+        el.addEventListener("pointermove", onMove);
+        el.addEventListener("pointerup", onUp);
+      });
+      layersEl.appendChild(el);
+    }
+  }
   let filmDrawKey = "";
   let filmToggleText = "";
   let filmEndText = "";
@@ -1452,6 +1602,7 @@ export function mountTimeline(
     syncLogoCard();
     syncArrangeButtons();
     renderCues();
+    renderLayers();
     if (showSections) {
       for (const track of tracks) {
         const entry = lanesByTrack.get(track.id);
@@ -1554,6 +1705,7 @@ export function mountTimeline(
   renderSections();
   renderSegmentList();
   renderCues();
+  renderLayers();
   engine.onArrangementChange(redrawAll);
   film?.onChange(() => {
     if (Math.abs(computeSpan() - spanSeconds) > 1e-3) redrawAll();
