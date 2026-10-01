@@ -15,6 +15,7 @@ import { mountExportBar } from "./ui/ExportBar.ts";
 import { mountSidePanel } from "./ui/SidePanel.ts";
 import { mountLevelsPanel } from "./ui/LevelsPanel.ts";
 import { mountTour } from "./ui/Tour.ts";
+import { mountRulesPanel } from "./ui/RulesPanel.ts";
 
 const engine = new AudioEngine();
 const film = new VideoSync(engine);
@@ -113,6 +114,7 @@ async function bootstrap(): Promise<void> {
   const trackList = mountTrackList(trackListRoot, engine, (trackId) => timeline.redrawTrack(trackId));
   const sidechainPanel = mountSidechainPanel(sidechainRoot, engine);
   mountLogoPanel(logoRoot, engine);
+  mountRulesPanel(document.querySelector<HTMLElement>("#rules-panel")!, engine);
   const tracksPanel = document.querySelector<HTMLElement>(".panel-tracks")!;
   const tour = mountTour();
   const el = (sel: string) => (): Element | null => document.querySelector(sel);

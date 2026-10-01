@@ -14,6 +14,7 @@ import { captureOutput, capturedToWav } from "./captureOutput.ts";
 import type {
   CompressorSettings,
   CueConfig,
+  FitBlock,
   FitConfig,
   LayerConfig,
   LogoConfig,
@@ -340,6 +341,34 @@ export class AudioEngine {
   /** The creator's shorten/extend rules per section (empty if the project has none). */
   get fitTemplate(): FitConfig["template"] {
     return this.fitConfig?.template ?? [];
+  }
+
+  /**
+   * Composer view: changes one part's fit rule (min/max/step/priority/keep/transition) or the
+   * section longer music goes round again from, then re-fits the music to its current end so the
+   * change is heard straight away. Only the project's in-memory rules change (not the file).
+   */
+  setFitRule(section: string, patch: Partial<Omit<FitBlock, "section" | "bars">>): void {
+    const block = this.fitConfig?.template.find((b) => b.section === section);
+    if (!block) return;
+    Object.assign(block, patch);
+    this.refitAfterRuleChange();
+  }
+
+  setLoopFrom(section: string): void {
+    if (!this.fitConfig) return;
+    this.fitConfig.loopFrom = section;
+    this.refitAfterRuleChange();
+  }
+
+  /** The current fit rules as JSON (for the project file). */
+  get fitRulesJson(): string {
+    return JSON.stringify(this.fitConfig ?? {}, null, 2);
+  }
+
+  private refitAfterRuleChange(): void {
+    const anchor = this.logoAnchorSeconds;
+    if (this.canFit && anchor !== null) this.fitToAnchor(anchor);
   }
 
   get canFit(): boolean {
