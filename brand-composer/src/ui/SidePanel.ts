@@ -24,6 +24,7 @@ export function mountSidePanel(
   engine: AudioEngine,
   film: VideoSync,
   playFrom: (seconds: number) => void,
+  onFitted?: () => void,
 ): SidePanelHandle {
   const loopName = engine.loopFromSectionId ? engine.sectionName(engine.loopFromSectionId) : "the start";
 
@@ -262,6 +263,27 @@ export function mountSidePanel(
     playFrom(Math.max(0, anchor - 6));
   });
 
+  // "Done automatically" across the bottom of the film for a few seconds after a fit (design 2c).
+  const filmAha = document.createElement("div");
+  filmAha.className = "video-aha";
+  filmAha.innerHTML = `<div class="video-aha-kicker">Done automatically</div><div class="video-aha-title"></div><div class="video-aha-text"></div>`;
+  document.querySelector("[data-stage]")?.appendChild(filmAha);
+  let ahaShownFor = "";
+  let ahaTimer = 0;
+  const showFilmAha = (title: string, anchor: number | null, onCut: boolean): void => {
+    filmAha.querySelector(".video-aha-title")!.textContent = title;
+    const text = filmAha.querySelector<HTMLElement>(".video-aha-text")!;
+    text.textContent = anchor === null ? "The music ends with the film." : onCut ? "The logo lands on the end card at " : "The logo hits at ";
+    if (anchor !== null) {
+      const b = document.createElement("b");
+      b.textContent = formatFilmTime(anchor);
+      text.appendChild(b);
+    }
+    filmAha.classList.add("is-visible");
+    window.clearTimeout(ahaTimer);
+    ahaTimer = window.setTimeout(() => filmAha.classList.remove("is-visible"), 7000);
+  };
+
   // --- Steps ---------------------------------------------------------------------------------
   let step: Step = "fit";
   const tabs = Array.from(tune.querySelectorAll<HTMLButtonElement>("[data-tab]"));
@@ -315,6 +337,13 @@ export function mountSidePanel(
     stepperRoot.querySelector("[data-step-num=fit]")?.classList.toggle("is-done", fitted);
     if (fitted && info) {
       ahaTitle.textContent = `Music fitted to your ${formatFilmTime(info.duration)} film`;
+      // Once per film, and again when the cut search has put the logo on the end card.
+      const ahaKey = `${info.name}|${info.duration}|${onCut ? "cut" : "end"}`;
+      if (ahaKey !== ahaShownFor) {
+        ahaShownFor = ahaKey;
+        showFilmAha(ahaTitle.textContent, anchor, !!onCut);
+        onFitted?.();
+      }
       ahaText.textContent =
         anchor === null
           ? "The music ends with the film."

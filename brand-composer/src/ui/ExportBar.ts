@@ -11,13 +11,14 @@ export function mountExportBar(root: HTMLElement, engine: AudioEngine, film: Vid
   bar.className = "export-bar";
   bar.innerHTML = `
     <span class="position-label">Export</span>
-    <button type="button" class="btn" data-export-music title="The music (with the logo) as a 24-bit WAV, starting at the film's first frame">⇩ Music (WAV)</button>
-    <button type="button" class="btn btn-accent" data-export-film title="Your film with the new sound (music + the film's own sound if it is on)">⇩ Film with music</button>
+    <button type="button" class="btn export-option" data-export-music title="The music (with the logo) as a 24-bit WAV, starting at the film's first frame"><span class="export-option-title">Export music (WAV)</span><span class="export-option-sub">24-bit · lines up with the film's first frame</span></button>
+    <button type="button" class="btn btn-accent export-option" data-export-film title="Your film with the new sound (music + the film's own sound if it is on)"><span class="export-option-title">Export film with music</span><span class="export-option-sub" data-export-film-sub>Same picture, new sound</span></button>
     <span class="export-status" data-export-status></span>`;
   root.appendChild(bar);
   const musicBtn = bar.querySelector<HTMLButtonElement>("[data-export-music]")!;
   const filmBtn = bar.querySelector<HTMLButtonElement>("[data-export-film]")!;
   const status = bar.querySelector<HTMLElement>("[data-export-status]")!;
+  const filmSub = bar.querySelector<HTMLElement>("[data-export-film-sub]")!;
   let busy = false;
   const setBusy = (on: boolean): void => {
     busy = on;
@@ -72,6 +73,8 @@ export function mountExportBar(root: HTMLElement, engine: AudioEngine, film: Vid
   return {
     update() {
       if (!busy) filmBtn.disabled = !film.info;
+      const sub = film.info ? "Same picture, new sound (the film's own format)" : "Add a film first";
+      if (filmSub.textContent !== sub) filmSub.textContent = sub;
     },
   };
 }

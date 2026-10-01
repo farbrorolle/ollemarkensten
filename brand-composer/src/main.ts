@@ -14,6 +14,7 @@ import { findCuts } from "./video/cutDetect.ts";
 import { mountExportBar } from "./ui/ExportBar.ts";
 import { mountSidePanel } from "./ui/SidePanel.ts";
 import { mountLevelsPanel } from "./ui/LevelsPanel.ts";
+import { mountTour } from "./ui/Tour.ts";
 
 const engine = new AudioEngine();
 const film = new VideoSync(engine);
@@ -109,6 +110,15 @@ async function bootstrap(): Promise<void> {
   const sidechainPanel = mountSidechainPanel(sidechainRoot, engine);
   mountLogoPanel(logoRoot, engine);
   const tracksPanel = document.querySelector<HTMLElement>(".panel-tracks")!;
+  const tour = mountTour([
+    { target: () => document.querySelector("[data-music-block]"), title: "Your film and the music", text: "The music has been re-arranged to fit your film. The top lane is the film's own sound; below it the music, coloured by part." },
+    { target: () => document.querySelector(".timeline-logo-anchor:not([hidden])"), title: "This green line is your sonic logo", text: "It's placed on the film's last cut, the end card. Drag it, or use Previous / Next cut to move it." },
+    { target: () => document.querySelector("[data-length-chips]"), title: "Try another length", text: "Pick a duration or drag the music's right edge. The track re-arranges itself, always in time." },
+    { target: () => document.querySelector('[data-step="tune"]'), title: "Fine-tune when you like", text: "Add, replace or stretch parts, add swells and set levels. Everything stays in sync with the film." },
+    { target: () => document.querySelector("[data-export-open]"), title: "Export", text: "Download the film with the new sound, or the music as a WAV." },
+  ]);
+  document.querySelector("[data-tour]")?.addEventListener("click", () => tour.start());
+  let tourTimer = 0;
   const sidePanel = mountSidePanel(
     document.querySelector<HTMLElement>("[data-side-content]")!,
     document.querySelector<HTMLElement>("[data-stepper]")!,
@@ -118,6 +128,10 @@ async function bootstrap(): Promise<void> {
     (seconds) => {
       Tone.getTransport().seconds = seconds;
       if (Tone.getTransport().state !== "started") void togglePlay();
+    },
+    () => {
+      window.clearTimeout(tourTimer);
+      tourTimer = window.setTimeout(() => tour.startOnce(), 2500);
     },
   );  mountLevelsPanel(
     document.querySelector<HTMLElement>('[data-tab-panel="levels"]')!,
