@@ -118,18 +118,17 @@ async function bootstrap(): Promise<void> {
     { target: el("[data-music-block]"), title: "This is your music", text: "The brand's track in its original form, coloured by part. Drag its right edge to make it longer or shorter – it re-arranges itself, always in time." },
     { target: el("[data-length-chips]"), title: "No film yet? Pick a length", text: "Try 60, 30 or 15 seconds, or your own length, and hear how the track adapts." },
     { target: el(".timeline-logo-anchor:not([hidden])"), title: "Your sonic logo", text: "The green line is where the logo hits. It always comes at the end, on the beat." },
-    { target: el('[data-step="tune"]'), title: "Customize the arrangement", text: "Optional: add, replace or stretch parts, put the melody over any part, add swells." },
+    { target: el("[data-customize-toggle]"), title: "Customize the arrangement", text: "Optional: add, replace or stretch parts, put the melody over any part, add swells." },
     { target: el("[data-export-open]"), title: "Export", text: "Download the film with the new sound, or the music as a WAV." },
   ];
   // After a film has been fitted.
   const filmTour = [
     { target: el("[data-music-block]"), title: "Your film and the music", text: "The music has been re-arranged to fit your film. The top lane is the film's own sound; below it the music, coloured by part." },
     { target: el(".timeline-logo-anchor:not([hidden])"), title: "This green line is your sonic logo", text: "It's placed on the film's last cut, the end card. Drag it, or use Previous / Next cut to move it." },
-    { target: el('[data-step="tune"]'), title: "Customize the arrangement", text: "Optional: add, replace or stretch parts, put the melody over any part, add swells. Everything stays in sync with the film." },
+    { target: el("[data-customize-toggle]"), title: "Customize the arrangement", text: "Optional: add, replace or stretch parts, put the melody over any part, add swells. Everything stays in sync with the film." },
     { target: el("[data-export-open]"), title: "Export", text: "Download the film with the new sound, or the music as a WAV." },
   ];
   document.querySelector("[data-tour]")?.addEventListener("click", () => tour.start(film.info ? filmTour : introTour));
-  let tourTimer = 0;
   const sidePanel = mountSidePanel(
     document.querySelector<HTMLElement>("[data-side-content]")!,
     document.querySelector<HTMLElement>("[data-stepper]")!,
@@ -139,11 +138,6 @@ async function bootstrap(): Promise<void> {
     (seconds) => {
       Tone.getTransport().seconds = seconds;
       if (Tone.getTransport().state !== "started") void togglePlay();
-    },
-    () => {
-      window.clearTimeout(tourTimer);
-      const key = film.info ? `${film.info.name}|${film.info.duration}` : "";
-      tourTimer = window.setTimeout(() => tour.startOnce(key, filmTour), 2500);
     },
   );  mountLevelsPanel(
     document.querySelector<HTMLElement>('[data-tab-panel="levels"]')!,
