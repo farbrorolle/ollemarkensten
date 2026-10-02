@@ -1,7 +1,10 @@
 import "./style.css";
 import * as Tone from "tone";
 import { AudioEngine } from "./audio/AudioEngine.ts";
-import { loadProjectFromUrl } from "./project/loadProjectFromConfig.ts";
+import { loadProjectFromConfig } from "./project/loadProjectFromConfig.ts";
+import { applyComposerSettings, startupPreset } from "./project/presets.ts";
+import type { ProjectConfig } from "./project/types.ts";
+import { mountPresetsPanel } from "./ui/PresetsPanel.ts";
 import { mountTransportPanel } from "./ui/TransportPanel.ts";
 import { mountMasterPanel } from "./ui/MasterPanel.ts";
 import { mountTrackList } from "./ui/TrackListView.ts";
@@ -97,7 +100,14 @@ async function bootstrap(): Promise<void> {
       : configName === "demo"
         ? "/config/demo-project.json"
         : "/config/broadcom.json";
-  const config = await loadProjectFromUrl(engine, configUrl);
+  const response = await fetch(configUrl);
+  if (!response.ok) throw new Error(`Failed to fetch project config: ${configUrl} (${response.status})`);
+  const config = (await response.json()) as ProjectConfig;
+  // The composer's saved settings (the default version, or ?preset=<id>) over the project file.
+  const presetProject = configName ?? "broadcom";
+  const preset = await startupPreset(presetProject);
+  if (preset) applyComposerSettings(config, preset.settings);
+  await loadProjectFromConfig(engine, config);
   const shortTitle = config.title.replace(/\s*\(\d+\s*BPM\)\s*$/i, "");
   titleEl.textContent = shortTitle;
   document.title = `Custom DAW – ${shortTitle}`;
@@ -115,6 +125,7 @@ async function bootstrap(): Promise<void> {
   const sidechainPanel = mountSidechainPanel(sidechainRoot, engine);
   mountLogoPanel(logoRoot, engine);
   mountRulesPanel(document.querySelector<HTMLElement>("#rules-panel")!, engine);
+  mountPresetsPanel(document.querySelector<HTMLElement>("#presets-panel")!, engine, film, presetProject, preset);
   const tracksPanel = document.querySelector<HTMLElement>(".panel-tracks")!;
   const tour = mountTour();
   const el = (sel: string) => (): Element | null => document.querySelector(sel);

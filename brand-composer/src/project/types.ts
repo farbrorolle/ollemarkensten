@@ -213,6 +213,14 @@ export interface MasterConfig {
   /** Gain into the limiter, dB. */
   limiterDrive?: number;
   compressor?: Partial<CompressorSettings>;
+  /** Music limiter on/off (default on). */
+  musicLimiterOn?: boolean;
+  /** Output limiter (music + film audio): gain into it ("Loudness boost"), dB. */
+  outputDrive?: number;
+  /** Output limiter ceiling, dBFS (default 0). */
+  outputCeiling?: number;
+  /** Output limiter on/off (default on). */
+  outputLimiterOn?: boolean;
 }
 
 export interface ProjectConfig {
@@ -264,4 +272,18 @@ export interface LayerConfig {
   section: string;
   /** Track ids that make up the layer. */
   tracks: string[];
+}
+
+/**
+ * Composer view, "Saved settings": the composer's settings, saved as a named version on the
+ * site (Netlify Blobs) and laid over the project file on load (see src/project/presets.ts).
+ */
+export interface ComposerSettings {
+  logo?: LogoConfig;
+  fit?: FitConfig;
+  master?: MasterConfig;
+  sidechains?: SidechainConfig[];
+  /** Folder faders: id + level. Only these fields are laid over the project's tracks. */
+  tracks?: { id: string; volume?: number; pan?: number; mute?: boolean }[];
+  buses?: { id: string; volume?: number; pan?: number }[];
 }

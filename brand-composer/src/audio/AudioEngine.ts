@@ -12,6 +12,7 @@ import type { EnvelopePoint } from "./GainEnvelope.ts";
 import { reencodeBlobAsWav } from "./wav.ts";
 import { captureOutput, capturedToWav } from "./captureOutput.ts";
 import type {
+  ComposerSettings,
   CompressorSettings,
   CueConfig,
   FitBlock,
@@ -385,6 +386,31 @@ export class AudioEngine {
     this.refitAfterRuleChange();
   }
 
+  /**
+   * Composer view, "Saved settings": everything the composer can set, as config fields
+   * (laid over the project file when a saved version is loaded -- see src/project/presets.ts).
+   */
+  settingsSnapshot(): ComposerSettings {
+    const round = (n: number): number => Math.round(n * 100) / 100;
+    return {
+      logo: this.logoConfig ? structuredClone(this.logoConfig) : undefined,
+      fit: this.fitConfig ? structuredClone(this.fitConfig) : undefined,
+      master: {
+        gain: round(this.masterGain),
+        limiterThreshold: this.musicLimiterThreshold,
+        limiterDrive: round(this.limiterDriveDb),
+        compressor: { ...this.compressorSettings },
+        musicLimiterOn: this.musicLimiterOn,
+        outputDrive: round(this.outputDriveDb),
+        outputCeiling: this.outputCeiling,
+        outputLimiterOn: this.outputLimiterOn,
+      },
+      sidechains: Array.from(this.sidechains.values()).map((sc) => ({ id: sc.id, source: sc.sourceId, target: sc.targetId, ...sc.params })),
+      tracks: Array.from(this.tracks.values()).map((t) => ({ id: t.id, volume: round(t.volume), pan: round(t.pan), mute: t.mute })),
+      buses: Array.from(this.buses.values()).map((b) => ({ id: b.id, volume: round(b.volume), pan: round(b.pan) })),
+    };
+  }
+
   /** The current fit rules as JSON (for the project file). */
   get fitRulesJson(): string {
     return JSON.stringify(this.fitConfig ?? {}, null, 2);
@@ -683,6 +709,10 @@ export class AudioEngine {
     if (config.master?.limiterDrive !== undefined) this.setLimiterDrive(config.master.limiterDrive);
     this.compressorSettings = { ...DEFAULT_COMPRESSOR, ...config.master?.compressor };
     this.applyCompressor();
+    if (config.master?.musicLimiterOn !== undefined) this.setMusicLimiterOn(config.master.musicLimiterOn);
+    if (config.master?.outputCeiling !== undefined) this.setOutputCeiling(config.master.outputCeiling);
+    if (config.master?.outputLimiterOn !== undefined) this.setOutputLimiterOn(config.master.outputLimiterOn);
+    if (config.master?.outputDrive !== undefined) this.setOutputDrive(config.master.outputDrive);
 
     // Arrangement: schedule every cue up front (fixed positions, not a live-triggered thing).
     this.sectionsById = new Map((config.sections ?? []).map((section) => [section.id, section]));
