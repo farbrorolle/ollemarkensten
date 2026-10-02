@@ -1,5 +1,13 @@
 import { TAIL_DEFAULTS } from "../audio/AudioEngine.ts";
 import type { AudioEngine } from "../audio/AudioEngine.ts";
+import type { LogoEnding } from "../project/types.ts";
+
+const ENDINGS: [LogoEnding, string][] = [
+  ["stop", "Stops at the hit"],
+  ["fade", "Fades out"],
+  ["ring", "Rings out"],
+  ["tail", "Reverb tail"],
+];
 
 const fmt = (v: number, unit: string): string =>
   unit === "Hz" ? `${(v / 1000).toFixed(v < 10000 ? 2 : 1)} kHz` : unit === "dB" ? `${v} dB` : `${v.toFixed(2)} s`;
@@ -35,9 +43,43 @@ export function mountLogoPanel(root: HTMLElement, engine: AudioEngine): void {
   }
   const folders = Array.from(engine.tracks.values()).filter((t) => !t.isLogo);
   const muted = new Set(logo.mute?.tracks ?? []);
-  const ringing = new Set(logo.ringOut ?? []);
-  const tailing = new Set(logo.tail ?? []);
-  const fading = new Set(logo.fadeOut ?? []);
+  // How each folder ends, and its own tracks where they differ from it ("Custom").
+  const base = new Map(folders.map((t) => [t.id, engine.folderEnding(t)]));
+  const overrides: Record<string, LogoEnding> = { ...(logo.partEndings ?? {}) };
+  const open = new Set<string>();
+  const hasParts = (t: (typeof folders)[number]): boolean => t.parts.length > 1 && !t.isSwell;
+  const isCustom = (t: (typeof folders)[number]): boolean => t.parts.some((p) => (overrides[p.id] ?? base.get(t.id)) !== base.get(t.id));
+  const options = (value: string, custom = false): string =>
+    (custom ? `<option value="custom" selected>Custom</option>` : "") +
+    ENDINGS.map(([v, label]) => `<option value="${v}"${!custom && value === v ? " selected" : ""}>${label}</option>`).join("");
+  const endingRow = (t: (typeof folders)[number]): string => {
+    const custom = hasParts(t) && isCustom(t);
+    const expanded = open.has(t.id);
+    const toggle = hasParts(t)
+      ? `<button type="button" class="logo-parts-toggle${expanded ? " is-open" : ""}" data-parts-toggle="${t.id}" aria-expanded="${expanded}" title="${expanded ? "Hide" : "Show"} the folder's own tracks">${expanded ? "▾" : "▸"} ${t.parts.length} tracks</button>`
+      : "";
+    const parts = expanded
+      ? `<div class="logo-parts">${t.parts
+          .map(
+            (p) => `<label class="logo-part-row"><span></span><select data-part-ending="${p.id}" data-folder="${t.id}">${options(overrides[p.id] ?? base.get(t.id)!)}</select></label>`,
+          )
+          .join("")}</div>`
+      : "";
+    return `<div class="logo-ending-cell${custom ? " is-custom" : ""}">
+      <div class="logo-ending-row"><span class="logo-ending-name"><span></span>${toggle}</span><select data-ending="${t.id}">${options(base.get(t.id)!, custom)}</select></div>
+      ${parts}
+    </div>`;
+  };
+  const renderEndings = (): void => {
+    const box = root.querySelector<HTMLElement>("[data-endings]")!;
+    box.innerHTML = folders.map(endingRow).join("");
+    // Names as text (never markup).
+    box.querySelectorAll<HTMLElement>(".logo-ending-cell").forEach((cell, i) => {
+      const t = folders[i]!;
+      cell.querySelector(".logo-ending-name > span")!.textContent = t.name;
+      cell.querySelectorAll<HTMLElement>(".logo-part-row > span").forEach((el, j) => (el.textContent = t.parts[j]!.name));
+    });
+  };
 
   root.innerHTML = `
     <div class="creator-subhead">Mute melody before the logo</div>
@@ -47,18 +89,8 @@ export function mountLogoPanel(root: HTMLElement, engine: AudioEngine): void {
         .join("")}
     </div>
     <div class="creator-subhead">How each folder ends at the logo</div>
-    <p class="hint logo-ending-hint">Stops at the hit: cut tight (drums, bass). Fades out: a smooth fade into the logo (length below). Rings out: what's already sounding decays naturally, nothing new starts. Reverb tail: the dry sound is cut at the hit and only a reverb of the last beat rings on under the logo.</p>
-    <div class="logo-endings" data-endings>
-      ${folders
-        .map((t) => {
-          const mode = ringing.has(t.id) ? "ring" : fading.has(t.id) ? "fade" : tailing.has(t.id) ? "tail" : "stop";
-          const opt = (v: string, label: string): string => `<option value="${v}"${mode === v ? " selected" : ""}>${label}</option>`;
-          return `<label class="logo-ending-row"><span>${t.name}</span><select data-ending="${t.id}">
-            ${opt("stop", "Stops at the hit")}${opt("fade", "Fades out")}${opt("ring", "Rings out")}${opt("tail", "Reverb tail")}
-          </select></label>`;
-        })
-        .join("")}
-    </div>
+    <p class="hint logo-ending-hint">Stops at the hit: cut tight (drums, bass). Fades out: a smooth fade into the logo (length below). Rings out: what's already sounding decays naturally, nothing new starts. Reverb tail: the dry sound is cut at the hit and only a reverb of the last beat rings on under the logo. Open ▸ to set each of a folder's own tracks; when they differ the folder shows Custom.</p>
+    <div class="logo-endings" data-endings></div>
     <div class="tail-fade">
       <div class="creator-subhead">Fade-out into the logo <span class="hint" style="margin:0;text-transform:none;letter-spacing:0">(the folders set to Fades out)</span></div>
       <div class="tail-grid">
@@ -95,14 +127,12 @@ export function mountLogoPanel(root: HTMLElement, engine: AudioEngine): void {
   const apply = (): void => {
     const tracks = Array.from(root.querySelectorAll<HTMLInputElement>("[data-folders] input:checked")).map((i) => i.value);
     const fade = q<HTMLSelectElement>("[data-fade]").value;
-    const endings = Array.from(root.querySelectorAll<HTMLSelectElement>("[data-ending]"));
-    const ringOut = endings.filter((e) => e.value === "ring").map((e) => e.dataset.ending!);
-    const tail = endings.filter((e) => e.value === "tail").map((e) => e.dataset.ending!);
-    const fadeOut = endings.filter((e) => e.value === "fade").map((e) => e.dataset.ending!);
+    const ids = (mode: LogoEnding): string[] => folders.filter((t) => base.get(t.id) === mode).map((t) => t.id);
     engine.setLogoSettings({
-      ringOut,
-      tail,
-      fadeOut,
+      ringOut: ids("ring"),
+      tail: ids("tail"),
+      fadeOut: ids("fade"),
+      partEndings: { ...overrides },
       tailSeconds: Number(q<HTMLInputElement>("[data-tail-seconds]").value),
       tailDb: Number(q<HTMLInputElement>("[data-tail-db]").value),
       tailSendSeconds: Number(q<HTMLInputElement>("[data-tail-send]").value),
@@ -115,7 +145,41 @@ export function mountLogoPanel(root: HTMLElement, engine: AudioEngine): void {
       anchorBeat: Number(q<HTMLSelectElement>("[data-beat]").value),
     });
   };
-  root.addEventListener("change", apply);
+  for (const t of folders) if (hasParts(t) && isCustom(t)) open.add(t.id);
+  renderEndings();
+  root.addEventListener("change", (event) => {
+    const el = event.target as HTMLElement;
+    if (el instanceof HTMLSelectElement && el.dataset.ending) {
+      // A folder: all its tracks follow it again.
+      const t = folders.find((f) => f.id === el.dataset.ending)!;
+      if (el.value === "custom") return;
+      base.set(t.id, el.value as LogoEnding);
+      for (const p of t.parts) delete overrides[p.id];
+      renderEndings();
+    } else if (el instanceof HTMLSelectElement && el.dataset.partEnding) {
+      // One of a folder's own tracks: differs from the folder -> the folder shows "Custom".
+      const t = folders.find((f) => f.id === el.dataset.folder)!;
+      const value = el.value as LogoEnding;
+      if (value === base.get(t.id)) delete overrides[el.dataset.partEnding];
+      else overrides[el.dataset.partEnding] = value;
+      // Every track the same again: that is simply the folder's ending.
+      const all = new Set(t.parts.map((p) => overrides[p.id] ?? base.get(t.id)));
+      if (all.size === 1) {
+        base.set(t.id, [...all][0]!);
+        for (const p of t.parts) delete overrides[p.id];
+      }
+      renderEndings();
+    }
+    apply();
+  });
+  root.addEventListener("click", (event) => {
+    const btn = (event.target as HTMLElement).closest<HTMLElement>("[data-parts-toggle]");
+    if (!btn) return;
+    const id = btn.dataset.partsToggle!;
+    if (open.has(id)) open.delete(id);
+    else open.add(id);
+    renderEndings();
+  });
   // Show slider values while dragging (the change itself is applied on release).
   root.querySelectorAll<HTMLInputElement>(".tail-slider input").forEach((input) => {
     input.addEventListener("input", () => {

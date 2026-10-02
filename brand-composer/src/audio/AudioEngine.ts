@@ -19,6 +19,7 @@ import type {
   FitConfig,
   LayerConfig,
   LogoConfig,
+  LogoEnding,
   ProjectConfig,
   SectionConfig,
   SidechainConfig,
@@ -54,6 +55,8 @@ export class AudioEngine {
   private readonly tailLevel: Tone.Gain;
   private readonly tailTone: Tone.Filter;
   private readonly tailSends = new Map<string, Tone.Gain>();
+  /** Sends to the reverb tail from a folder's own tracks (part id -> send), see connectPartSends. */
+  private readonly partSends = new Map<string, Tone.Gain>();
   /** Volume cues on the whole music ("Music volume" lane): after the master bus, before the compressor. */
   readonly musicCueGain: Tone.Gain;
   readonly compressor: Tone.Compressor;
@@ -641,6 +644,8 @@ export class AudioEngine {
     this.tracks.clear();
     for (const send of this.tailSends.values()) send.dispose();
     this.tailSends.clear();
+    for (const send of this.partSends.values()) send.dispose();
+    this.partSends.clear();
     for (const bus of this.buses.values()) bus.dispose();
     this.buses.clear();
     Tone.getTransport().cancel(0);
@@ -799,6 +804,27 @@ export class AudioEngine {
     );
     this.arrangement.logoFadeSeconds = this.logoConfig?.fadeOutSeconds ?? TAIL_DEFAULTS.fadeSeconds;
     this.arrangement.logoFadeBefore = this.logoConfig?.fadeOutBeforeSeconds ?? TAIL_DEFAULTS.fadeBeforeSeconds;
+    this.arrangement.logoTailSendSeconds = this.tailSendSeconds;
+    this.arrangement.logoPartEndings = new Map();
+    for (const track of this.tracks.values()) {
+      if (!this.hasCustomEnding(track)) continue;
+      if (!track.partsLoaded) {
+        // Load the folder's own track files, then place the music again.
+        void track.loadParts().then(() => {
+          this.connectPartSends(track);
+          if (!this.hasCustomEnding(track)) return;
+          this.restoring = true; // not an edit of its own (no undo step)
+          try {
+            this.reschedule();
+          } finally {
+            this.restoring = false;
+          }
+        });
+        continue;
+      }
+      this.connectPartSends(track);
+      this.arrangement.logoPartEndings.set(track.id, new Map(track.parts.map((p) => [p.id, this.partEnding(track, p.id)])));
+    }
     const ring = new Set(this.logoConfig?.ringOut ?? []);
     this.arrangement.logoRingOut = new Set(
       Array.from(this.tracks.values())
@@ -1101,10 +1127,44 @@ export class AudioEngine {
     }
   }
 
+  /** How a folder ends at the logo (its own setting, or its bus's). */
+  folderEnding(track: Track): LogoEnding {
+    const logo = this.logoConfig;
+    const has = (list?: string[]): boolean => !!list && (list.includes(track.id) || list.includes(track.busId));
+    return has(logo?.ringOut) ? "ring" : has(logo?.fadeOut) ? "fade" : has(logo?.tail) ? "tail" : "stop";
+  }
+
+  /** How one of a folder's own tracks ends at the logo (its own setting, else the folder's). */
+  partEnding(track: Track, partId: string): LogoEnding {
+    return this.logoConfig?.partEndings?.[partId] ?? this.folderEnding(track);
+  }
+
+  /** The folder's own tracks end in different ways ("Custom"). */
+  hasCustomEnding(track: Track): boolean {
+    if (track.parts.length < 2 || track.isSwell) return false;
+    const folder = this.folderEnding(track);
+    return track.parts.some((p) => this.partEnding(track, p.id) !== folder);
+  }
+
+  private get tailSendSeconds(): number {
+    return Math.max(0.05, Math.min(2, this.logoConfig?.tailSendSeconds ?? this.beatSeconds));
+  }
+
+  /** Each of a folder's own tracks gets a (closed) send to the logo's reverb tail. */
+  private connectPartSends(track: Track): void {
+    for (const part of track.parts) {
+      if (this.partSends.has(part.id)) continue;
+      const send = new Tone.Gain(0);
+      part.gain.connect(send);
+      send.connect(this.tailReverb);
+      this.partSends.set(part.id, send);
+    }
+  }
+
   /** Places the logo so its anchor hits beat `anchorBeat` of the last bar, and adds the mute/fade envelopes. */
   private scheduleLogo(): void {
     for (const track of this.tracks.values()) track.autoGain.gain.value = 1;
-    for (const send of this.tailSends.values()) {
+    for (const send of [...this.tailSends.values(), ...this.partSends.values()]) {
       send.gain.cancelScheduledValues(0);
       send.gain.value = 0;
     }
@@ -1124,21 +1184,31 @@ export class AudioEngine {
     this.tailLevel.gain.value = Tone.dbToGain(logo.tailDb ?? TAIL_DEFAULTS.db);
     this.tailTone.frequency.value = logo.tailToneHz ?? TAIL_DEFAULTS.toneHz;
     // By default the reverb is fed from the last beat before the hit.
-    const send = Math.max(0.05, Math.min(2, logo.tailSendSeconds ?? this.beatSeconds));
+    const send = this.tailSendSeconds;
     const decay = Math.max(0.5, Math.min(10, logo.tailSeconds ?? TAIL_DEFAULTS.seconds));
     if (Math.abs(Number(this.tailReverb.decay) - decay) > 0.01) this.tailReverb.decay = decay;
+    const sendShape = (v: number): EnvelopePoint[] => [
+      { t: anchor - send - 0.05, v: 0 },
+      { t: anchor - send, v },
+      { t: anchor + 0.1, v },
+      { t: anchor + 0.25, v: 0 },
+    ];
     for (const track of this.tracks.values()) {
+      const custom = this.arrangement.logoPartEndings.get(track.id);
+      if (custom) {
+        // The folder's own tracks: each set to Reverb tail feeds the reverb (at the folder's level --
+        // these sends are taken before the folder's fader).
+        const level = track.channel.mute ? 0 : Tone.dbToGain(track.volume);
+        for (const [partId, ending] of custom) {
+          const sendGain = this.partSends.get(partId);
+          if (sendGain && ending === "tail" && level > 0) this.envelopes.push(new GainEnvelope(sendGain.gain, 0, sendShape(level)));
+        }
+        continue;
+      }
       const sendGain = this.tailSends.get(track.id);
       if (!sendGain) continue;
       if (!(tailIds.has(track.id) || tailIds.has(track.busId))) continue;
-      this.envelopes.push(
-        new GainEnvelope(sendGain.gain, 0, [
-          { t: anchor - send - 0.05, v: 0 },
-          { t: anchor - send, v: 1 },
-          { t: anchor + 0.1, v: 1 },
-          { t: anchor + 0.25, v: 0 },
-        ]),
-      );
+      this.envelopes.push(new GainEnvelope(sendGain.gain, 0, sendShape(1)));
     }
 
     // Per track: at most one mute (fast ramp) and one fade (to silence at the anchor); the
@@ -1172,11 +1242,16 @@ export class AudioEngine {
   /** Creator view: change the melody mute / fade settings and re-place everything. */
   setLogoSettings(
     settings: Partial<
-      Pick<LogoConfig, "mute" | "fadeMusic" | "anchorSeconds" | "anchorBeat" | "ringOut" | "tail" | "tailSeconds" | "tailDb" | "tailSendSeconds" | "fadeOut" | "fadeOutSeconds" | "fadeOutBeforeSeconds" | "tailToneHz">
+      Pick<LogoConfig, "mute" | "fadeMusic" | "anchorSeconds" | "anchorBeat" | "ringOut" | "tail" | "tailSeconds" | "tailDb" | "tailSendSeconds" | "fadeOut" | "fadeOutSeconds" | "fadeOutBeforeSeconds" | "tailToneHz" | "partEndings">
     >,
   ): void {
     if (!this.logoConfig) return;
     this.logoConfig = { ...this.logoConfig, ...settings };
+    this.reschedule();
+  }
+
+  /** Re-places everything on the current arrangement (after a logo setting changed). */
+  private reschedule(): void {
     const segments = this.arrangement.arrangementSegments;
     const cues: CueConfig[] = segments.map((s) => ({
       bar: s.startBar,

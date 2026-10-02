@@ -2,7 +2,7 @@ import * as Tone from "tone";
 import type { Track } from "./Track.ts";
 import { GainEnvelope } from "./GainEnvelope.ts";
 import type { EnvelopePoint } from "./GainEnvelope.ts";
-import type { CueConfig, SectionConfig, TransitionType } from "../project/types.ts";
+import type { CueConfig, LogoEnding, SectionConfig, TransitionType } from "../project/types.ts";
 import { regionChunks } from "../project/fitToLength.ts";
 import { planSwells } from "../project/swellPlan.ts";
 import type { PlayedChunk, SwellEvent } from "../project/swellPlan.ts";
@@ -58,6 +58,9 @@ const LOGO_RING_OUT_SECONDS = 1.5;
 const END_FADE = "8n";
 /** Reverb-tail folders: how fast their dry sound is cut at the logo hit. */
 const TAIL_DRY_CUT_SECONDS = 0.06;
+/** Where a folder's own tracks take over from its bounce at the logo: a tiny crossfade (same audio). */
+const PART_SWITCH_SECONDS = 0.005;
+const PART_PRE_ROLL_SECONDS = 0.03;
 
 export interface ArrangementSegment {
   /** 1-indexed, inclusive. */
@@ -173,6 +176,13 @@ export class ArrangementManager {
   logoFade = new Set<string>();
   logoFadeSeconds = 1;
   logoFadeBefore = 0;
+  /** Seconds before the hit the reverb tail is fed from (for where the folder's own tracks take over). */
+  logoTailSendSeconds = 0.4;
+  /**
+   * Folders whose own tracks end in different ways at the logo (track id -> part id -> ending).
+   * Only folders whose part files are loaded. Set by AudioEngine.
+   */
+  logoPartEndings = new Map<string, Map<string, LogoEnding>>();
 
   /** Transport seconds of the logo's hit, or null without a logo. */
   private logoHitSeconds(timing: ArrangementTiming): number | null {
@@ -314,6 +324,7 @@ export class ArrangementManager {
     // Tone players only accept starts in time order: anything that would go back in time on a
     // voice is moved to just after its previous start (and skipped if nothing is left of it).
     const lastStart = [-Infinity, -Infinity];
+    const partEnvelopes: GainEnvelope[] = [];
     const startIn = (v: number, when: number, offset: number, duration: number): boolean => {
       const min = lastStart[v]! + 1e-3;
       if (when < min) {
@@ -415,6 +426,7 @@ export class ArrangementManager {
 
       const hit = !next ? this.logoHitSeconds(timing) : null;
       let tailFade = false; // the music fading out into the logo: a smooth (cosine) curve
+      let partSwitch: { at: number; sourceBar: number; endings: Map<string, LogoEnding>; natural: number; fadeIn: number } | null = null;
       if (hit !== null) {
         // The music meets the logo. Grooves/beats fade out quickly at the hit; tracks chosen to ring
         // out may let what is already sounding decay naturally into the logo (until their next attack
@@ -436,6 +448,27 @@ export class ArrangementManager {
         hold = rings ? 0.7 : 0;
         tailFade = fades;
         playPastEnd = Math.max(0, end + ringOut - this.barStartSeconds(segment.endBar));
+
+        // The folder's tracks end in different ways: from a bar line before the earliest of their
+        // endings, the separate track files take over from the folder's bounce (they sum to it
+        // exactly, so the switch is inaudible) and each ends its own way.
+        const endings = this.logoPartEndings.get(track.id);
+        if (endings?.size) {
+          const chunkStart = this.barStartSeconds(lastChunk.startBar);
+          let earliest = hit;
+          for (const e of endings.values()) {
+            if (e === "fade") earliest = Math.min(earliest, hit - Math.max(0, this.logoFadeBefore));
+            if (e === "tail") earliest = Math.min(earliest, hit - this.logoTailSendSeconds - 0.05);
+          }
+          const barsIn = Math.max(0, Math.min(lastChunk.bars - 1, Math.floor((earliest - chunkStart) / barSec + 1e-6)));
+          const at = chunkStart + barsIn * barSec;
+          partSwitch = { at, sourceBar: lastChunk.sourceBar + barsIn, endings, natural, fadeIn: PART_SWITCH_SECONDS };
+          end = at;
+          ringOut = PART_SWITCH_SECONDS;
+          hold = 0;
+          tailFade = false;
+          playPastEnd = Math.max(0, end + ringOut - this.barStartSeconds(segment.endBar));
+        }
       }
 
       // Into the next part: an equal-power crossfade before its downbeat (unless this track is cut
@@ -465,7 +498,10 @@ export class ArrangementManager {
       // The first chunk starts early by the crossfade (when the file has audio there).
       const firstOffset = (Math.max(chunks[0]!.sourceBar, track.fileStartBar) - track.fileStartBar) * barSec;
       const preRoll = 0 * (!pickedUp && xfIn > 0 && firstOffset >= xfIn ? xfIn : 0);
-      if (!pickedUp) {
+      // The folder's own tracks take over right from the part's start: they come in instead of the bounce.
+      const partsFromStart = !!partSwitch && partSwitch.at <= start + 1e-6 && !pickedUp;
+      if (partsFromStart) partSwitch!.fadeIn = CUT_FADE_SECONDS;
+      if (!pickedUp && !partsFromStart) {
         if (preRoll > 0) {
           for (let k = 0; k <= XF_STEPS; k++) {
             const x = k / XF_STEPS;
@@ -518,12 +554,69 @@ export class ArrangementManager {
           const x = k / 16;
           pts.push({ t: end + x * ringOut, v: Math.cos((x * Math.PI) / 2) });
         }
+      } else if (partsFromStart) {
+        // (the bounce stays silent in this part)
       } else {
         pts.push({ t: end + ringOut * hold, v: 1 }, { t: end + ringOut, v: 0 });
       }
+
+      if (partSwitch && hit !== null) partEnvelopes.push(...this.scheduleParts(track, partSwitch, hit, barSec));
     });
 
-    return voices.map((voice, i) => new GainEnvelope(voice!.gain.gain, 0, points[i]!));
+    // Parts not taking over at the logo stay silent.
+    for (const part of track.parts) {
+      if (part.player.loaded && !partEnvelopes.some((e) => e.param === part.gain.gain)) partEnvelopes.push(new GainEnvelope(part.gain.gain, 0, []));
+    }
+    return [...voices.map((voice, i) => new GainEnvelope(voice!.gain.gain, 0, points[i]!)), ...partEnvelopes];
+  }
+
+  /**
+   * At the logo: the folder's own tracks take over from its bounce at `sw.at` (a bar line) and each
+   * ends its own way -- stops at the hit, fades out, rings out (as the folder would) or is cut for
+   * the reverb tail (AudioEngine opens each one's send to the reverb).
+   */
+  private scheduleParts(
+    track: Track,
+    sw: { at: number; sourceBar: number; endings: Map<string, LogoEnding>; natural: number; fadeIn: number },
+    hit: number,
+    barSec: number,
+  ): GainEnvelope[] {
+    const out: GainEnvelope[] = [];
+    const offset = (sw.sourceBar - track.fileStartBar) * barSec;
+    for (const part of track.parts) {
+      if (!part.player.loaded) continue;
+      const bufferSeconds = part.player.buffer.duration;
+      const ending = sw.endings.get(part.id) ?? "stop";
+      const rings = ending === "ring" && sw.natural > 0.05;
+      const fades = ending === "fade";
+      const end = fades ? Math.max(sw.at, hit - Math.max(0, this.logoFadeBefore)) : hit;
+      const ringOut = rings
+        ? sw.natural
+        : fades
+          ? Math.max(0.03, this.logoFadeSeconds)
+          : ending === "tail"
+            ? TAIL_DRY_CUT_SECONDS
+            : Tone.Time(END_FADE).toSeconds();
+      const pts: EnvelopePoint[] = [
+        { t: sw.at, v: 0 },
+        { t: sw.at + sw.fadeIn, v: 1 },
+      ];
+      if (fades) {
+        for (let k = 0; k <= 16; k++) {
+          const x = k / 16;
+          pts.push({ t: end + x * ringOut, v: Math.cos((x * Math.PI) / 2) });
+        }
+      } else {
+        pts.push({ t: end + ringOut * (rings ? 0.7 : 0), v: 1 }, { t: end + ringOut, v: 0 });
+      }
+      if (offset >= 0 && offset < bufferSeconds) {
+        // Started a little early (still silent): the player's own short fade-in is over by the switch.
+        const pre = Math.min(PART_PRE_ROLL_SECONDS, offset);
+        part.player.start(sw.at - pre, offset - pre, Math.min(end + ringOut - sw.at + 0.05 + pre, bufferSeconds - offset + pre));
+      }
+      out.push(new GainEnvelope(part.gain.gain, 0, pts));
+    }
+    return out;
   }
 
   /**

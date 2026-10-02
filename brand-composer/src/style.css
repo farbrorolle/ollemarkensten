@@ -4117,3 +4117,57 @@ body.view-creator .ws-side .track-row {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 }
+
+/* Sonic logo rules: a folder's own tracks (▸), each with its own ending ("Custom" on the folder). */
+.logo-ending-cell {
+  min-width: 0;
+}
+.logo-ending-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.logo-parts-toggle {
+  padding: 1px 7px;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.logo-parts-toggle:hover,
+.logo-parts-toggle.is-open {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+.logo-ending-cell.is-custom select[data-ending] {
+  border-color: var(--accent-text);
+  color: var(--accent-text);
+}
+.logo-parts {
+  margin: 2px 0 6px 10px;
+  padding-left: 10px;
+  border-left: 2px solid var(--panel-border);
+}
+.logo-part-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.logo-part-row select {
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 11.5px;
+}

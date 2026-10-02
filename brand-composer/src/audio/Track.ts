@@ -1,6 +1,15 @@
 import * as Tone from "tone";
 import type { TrackConfig } from "../project/types.ts";
 
+/** One of a folder's own tracks, as a separate player (see Track.parts). */
+export interface TrackPart {
+  id: string;
+  name: string;
+  file: string;
+  player: Tone.Player;
+  gain: Tone.Gain;
+}
+
 interface SectionTake {
   readonly sectionId: string;
   readonly player: Tone.Player;
@@ -68,6 +77,12 @@ export class Track {
   /** Region tracks: an extra voice for layer blocks (e.g. the melody played over another part). */
   readonly layerVoice: { player: Tone.Player; gain: Tone.Gain } | null = null;
   private readonly legacyFile: string | null = null;
+  /**
+   * The folder's own tracks as separate players (region tracks with `parts` in the config).
+   * Silent except at the logo, for folders whose tracks end in different ways; loaded on demand.
+   */
+  readonly parts: TrackPart[] = [];
+  private partsLoading: Promise<void> | null = null;
   private readonly takes = new Map<string, SectionTake>();
 
   private readonly sidechainGain: Tone.Gain;
@@ -144,6 +159,15 @@ export class Track {
         this.legacyPlayer.connect(this.sidechainGain);
       }
       this.legacyFile = config.file ?? null;
+      if (this.regionBus) {
+        for (const part of config.parts ?? []) {
+          const player = new Tone.Player({ loop: false, fadeIn: 0.002, fadeOut: 0.01 });
+          const gain = new Tone.Gain(0);
+          player.connect(gain);
+          gain.connect(this.regionBus);
+          this.parts.push({ id: part.id, name: part.name, file: part.file, player, gain });
+        }
+      }
     }
 
     this._mute = config.mute ?? false;
@@ -163,6 +187,22 @@ export class Track {
         if (file) await take.player.load(file);
       }),
     );
+  }
+
+  /** True once every part's file is loaded. */
+  get partsLoaded(): boolean {
+    return this.parts.length > 0 && this.parts.every((p) => p.player.loaded);
+  }
+
+  /** Loads the folder's separate track files (once). */
+  loadParts(): Promise<void> {
+    this.partsLoading ??= Promise.all(
+      this.parts.map(async (p) => {
+        await p.player.load(p.file);
+        if (this.playMode !== "loop") p.player.sync();
+      }),
+    ).then(() => undefined);
+    return this.partsLoading;
   }
 
   /** Loads a local audio file (from a <input type="file"> or a drag-and-drop) as this track's stem. */
@@ -241,6 +281,7 @@ export class Track {
     if (this.legacyPlayer && this.playMode !== "loop") this.legacyPlayer.unsync().sync();
     for (const voice of this.regionVoices.slice(1)) voice.player.unsync().sync();
     this.layerVoice?.player.unsync().sync();
+    for (const part of this.parts) if (part.player.loaded) part.player.unsync().sync();
     for (const take of this.takes.values()) {
       take.player.unsync().sync();
       take.takeGain.gain.cancelScheduledValues(0);
@@ -325,6 +366,10 @@ export class Track {
     }
     this.layerVoice?.player.dispose();
     this.layerVoice?.gain.dispose();
+    for (const part of this.parts) {
+      part.player.dispose();
+      part.gain.dispose();
+    }
     this.regionBus?.dispose();
     this.sidechainGain.dispose();
     this.sectionGain.dispose();

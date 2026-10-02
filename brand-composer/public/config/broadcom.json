@@ -357,6 +357,18 @@
         0.0,
         0.0,
         0.0
+      ],
+      "parts": [
+        {
+          "id": "f01.piano",
+          "name": "Piano",
+          "file": "/audio/broadcom/parts/f01-piano.flac"
+        },
+        {
+          "id": "f01.synths",
+          "name": "Synths",
+          "file": "/audio/broadcom/parts/f01-synths.flac"
+        }
       ]
     },
     {
@@ -688,6 +700,28 @@
         0.0,
         0.0,
         0.0
+      ],
+      "parts": [
+        {
+          "id": "f02.melody",
+          "name": "Melody",
+          "file": "/audio/broadcom/parts/f02-melody.flac"
+        },
+        {
+          "id": "f02.piano-sample-glitch",
+          "name": "Piano sample glitch",
+          "file": "/audio/broadcom/parts/f02-piano-sample-glitch.flac"
+        },
+        {
+          "id": "f02.pulse-repeat-synth",
+          "name": "Pulse repeat synth",
+          "file": "/audio/broadcom/parts/f02-pulse-repeat-synth.flac"
+        },
+        {
+          "id": "f02.rhythmic-glitch",
+          "name": "Rhythmic glitch",
+          "file": "/audio/broadcom/parts/f02-rhythmic-glitch.flac"
+        }
       ]
     },
     {
@@ -1022,7 +1056,19 @@
       ],
       "pickups": {
         "21": 1
-      }
+      },
+      "parts": [
+        {
+          "id": "f03.pianos",
+          "name": "Pianos",
+          "file": "/audio/broadcom/parts/f03-pianos.flac"
+        },
+        {
+          "id": "f03.synths",
+          "name": "Synths",
+          "file": "/audio/broadcom/parts/f03-synths.flac"
+        }
+      ]
     },
     {
       "id": "f04",
@@ -1353,6 +1399,18 @@
         0.0,
         0.0,
         0.0
+      ],
+      "parts": [
+        {
+          "id": "f04.kick-extra",
+          "name": "Kick extra",
+          "file": "/audio/broadcom/parts/f04-kick-extra.flac"
+        },
+        {
+          "id": "f04.kick-main",
+          "name": "Kick main",
+          "file": "/audio/broadcom/parts/f04-kick-main.flac"
+        }
       ]
     },
     {
@@ -1684,6 +1742,38 @@
         0.0,
         0.0,
         0.0
+      ],
+      "parts": [
+        {
+          "id": "f05.click-delay",
+          "name": "Click delay",
+          "file": "/audio/broadcom/parts/f05-click-delay.flac"
+        },
+        {
+          "id": "f05.cymbal",
+          "name": "Cymbal",
+          "file": "/audio/broadcom/parts/f05-cymbal.flac"
+        },
+        {
+          "id": "f05.glitch-kit-groove",
+          "name": "Glitch kit groove",
+          "file": "/audio/broadcom/parts/f05-glitch-kit-groove.flac"
+        },
+        {
+          "id": "f05.glitch-loop",
+          "name": "Glitch loop",
+          "file": "/audio/broadcom/parts/f05-glitch-loop.flac"
+        },
+        {
+          "id": "f05.shaker-hihat",
+          "name": "Shaker hihat",
+          "file": "/audio/broadcom/parts/f05-shaker-hihat.flac"
+        },
+        {
+          "id": "f05.table-perc",
+          "name": "Table perc",
+          "file": "/audio/broadcom/parts/f05-table-perc.flac"
+        }
       ]
     },
     {
@@ -2015,6 +2105,18 @@
         0.0,
         0.0,
         0.0
+      ],
+      "parts": [
+        {
+          "id": "f06.piano-bass",
+          "name": "Piano bass",
+          "file": "/audio/broadcom/parts/f06-piano-bass.flac"
+        },
+        {
+          "id": "f06.sub-bass",
+          "name": "Sub bass",
+          "file": "/audio/broadcom/parts/f06-sub-bass.flac"
+        }
       ]
     },
     {
@@ -2683,7 +2785,19 @@
       ],
       "pickups": {
         "49": 1
-      }
+      },
+      "parts": [
+        {
+          "id": "f08.bright-signal",
+          "name": "Bright signal",
+          "file": "/audio/broadcom/parts/f08-bright-signal.flac"
+        },
+        {
+          "id": "f08.pluck-from-logo",
+          "name": "Pluck from logo",
+          "file": "/audio/broadcom/parts/f08-pluck-from-logo.flac"
+        }
+      ]
     },
     {
       "id": "f09",
@@ -3014,6 +3128,18 @@
         0.0,
         0.0,
         0.0
+      ],
+      "parts": [
+        {
+          "id": "f09.high",
+          "name": "High",
+          "file": "/audio/broadcom/parts/f09-high.flac"
+        },
+        {
+          "id": "f09.low",
+          "name": "Low",
+          "file": "/audio/broadcom/parts/f09-low.flac"
+        }
       ]
     },
     {
@@ -3676,6 +3802,18 @@
         0.0,
         0.0,
         0.0
+      ],
+      "parts": [
+        {
+          "id": "f11.guitar-1",
+          "name": "Guitar 1",
+          "file": "/audio/broadcom/parts/f11-guitar-1.flac"
+        },
+        {
+          "id": "f11.guitar-2",
+          "name": "Guitar 2",
+          "file": "/audio/broadcom/parts/f11-guitar-2.flac"
+        }
       ]
     },
     {
@@ -4007,6 +4145,18 @@
         0.0,
         0.0,
         0.0
+      ],
+      "parts": [
+        {
+          "id": "f12.pad-1",
+          "name": "Pad 1",
+          "file": "/audio/broadcom/parts/f12-pad-1.flac"
+        },
+        {
+          "id": "f12.pad-2",
+          "name": "Pad 2",
+          "file": "/audio/broadcom/parts/f12-pad-2.flac"
+        }
       ]
     },
     {

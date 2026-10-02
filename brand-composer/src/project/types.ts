@@ -57,7 +57,23 @@ export interface TrackConfig {
   pan?: number; // -1..1, default 0
   mute?: boolean;
   solo?: boolean;
+  /**
+   * Long-bounce folders: the folder's own tracks as separate files (same timing and
+   * silence-trimming as `file`; together they sum to it). Only played at the logo, for
+   * folders whose tracks end in different ways (`LogoConfig.partEndings`).
+   */
+  parts?: TrackPartConfig[];
 }
+
+export interface TrackPartConfig {
+  /** "<folder id>.<slug>", e.g. "f02.melody". */
+  id: string;
+  name: string;
+  file: string;
+}
+
+/** How a folder (or one of its tracks) ends at the sonic logo. */
+export type LogoEnding = "stop" | "fade" | "ring" | "tail";
 
 export interface SidechainConfig {
   id: string;
@@ -193,6 +209,8 @@ export interface LogoConfig {
   fadeOutSeconds?: number;
   /** How long before the hit the fade-out starts, seconds (default 0 = at the hit). */
   fadeOutBeforeSeconds?: number;
+  /** Per track inside a folder (part id -> ending), where it differs from its folder's ending. */
+  partEndings?: Record<string, LogoEnding>;
   /** Brightness of the tail: low-pass frequency in Hz (default 5000; lower = darker, further back). */
   tailToneHz?: number;
 }
