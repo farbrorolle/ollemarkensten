@@ -37,6 +37,7 @@ export function mountLogoPanel(root: HTMLElement, engine: AudioEngine): void {
   const muted = new Set(logo.mute?.tracks ?? []);
   const ringing = new Set(logo.ringOut ?? []);
   const tailing = new Set(logo.tail ?? []);
+  const fading = new Set(logo.fadeOut ?? []);
 
   root.innerHTML = `
     <div class="creator-subhead">Mute melody before the logo</div>
@@ -46,23 +47,23 @@ export function mountLogoPanel(root: HTMLElement, engine: AudioEngine): void {
         .join("")}
     </div>
     <div class="creator-subhead">How each folder ends at the logo</div>
-    <p class="hint logo-ending-hint">Stops at the hit: cut tight (drums, bass). Rings out: what's already sounding decays naturally, nothing new starts. Reverb tail: the dry sound stops and its last moment rings on in a reverb under the logo.</p>
+    <p class="hint logo-ending-hint">Stops at the hit: cut tight (drums, bass). Fades out: a smooth fade into the logo (length below). Rings out: what's already sounding decays naturally, nothing new starts. Reverb tail: the dry sound is cut at the hit and only a reverb of the last beat rings on under the logo.</p>
     <div class="logo-endings" data-endings>
       ${folders
-        .map(
-          (t) => `<label class="logo-ending-row"><span>${t.name}</span><select data-ending="${t.id}">
-            <option value="stop"${!ringing.has(t.id) && !tailing.has(t.id) ? " selected" : ""}>Stops at the hit</option>
-            <option value="ring"${ringing.has(t.id) ? " selected" : ""}>Rings out</option>
-            <option value="tail"${tailing.has(t.id) && !ringing.has(t.id) ? " selected" : ""}>Reverb tail</option>
-          </select></label>`,
-        )
+        .map((t) => {
+          const mode = ringing.has(t.id) ? "ring" : fading.has(t.id) ? "fade" : tailing.has(t.id) ? "tail" : "stop";
+          const opt = (v: string, label: string): string => `<option value="${v}"${mode === v ? " selected" : ""}>${label}</option>`;
+          return `<label class="logo-ending-row"><span>${t.name}</span><select data-ending="${t.id}">
+            ${opt("stop", "Stops at the hit")}${opt("fade", "Fades out")}${opt("ring", "Rings out")}${opt("tail", "Reverb tail")}
+          </select></label>`;
+        })
         .join("")}
     </div>
     <div class="tail-fade">
-      <div class="creator-subhead">Fade into the logo <span class="hint" style="margin:0;text-transform:none;letter-spacing:0">(the folders set to Reverb tail)</span></div>
+      <div class="creator-subhead">Fade-out into the logo <span class="hint" style="margin:0;text-transform:none;letter-spacing:0">(the folders set to Fades out)</span></div>
       <div class="tail-grid">
-        ${slider("data-tail-dry", "Fade-out length", 0.05, 4, 0.05, logo.tailDryFadeSeconds ?? TAIL_DEFAULTS.dryFadeSeconds, "s")}
-        ${slider("data-tail-before", "Fade starts before the hit", 0, 3, 0.05, logo.tailFadeBeforeSeconds ?? TAIL_DEFAULTS.fadeBeforeSeconds, "s")}
+        ${slider("data-fade-len", "Fade-out length", 0.05, 4, 0.05, logo.fadeOutSeconds ?? TAIL_DEFAULTS.fadeSeconds, "s")}
+        ${slider("data-fade-before", "Fade starts before the hit", 0, 3, 0.05, logo.fadeOutBeforeSeconds ?? TAIL_DEFAULTS.fadeBeforeSeconds, "s")}
       </div>
     </div>
     <details class="tail-settings">
@@ -70,7 +71,7 @@ export function mountLogoPanel(root: HTMLElement, engine: AudioEngine): void {
       <div class="tail-grid">
         ${slider("data-tail-db", "Level under the logo", -30, 0, 1, logo.tailDb ?? TAIL_DEFAULTS.db, "dB")}
         ${slider("data-tail-seconds", "Length", 1, 6, 0.1, logo.tailSeconds ?? TAIL_DEFAULTS.seconds, "s")}
-        ${slider("data-tail-send", "Starts before the hit", 0.05, 1, 0.05, logo.tailSendSeconds ?? TAIL_DEFAULTS.sendSeconds, "s")}
+        ${slider("data-tail-send", "Fed from (before the hit)", 0.05, 1.5, 0.05, logo.tailSendSeconds ?? engine.beatSeconds, "s")}
         ${slider("data-tail-tone", "Brightness", 1000, 12000, 250, logo.tailToneHz ?? TAIL_DEFAULTS.toneHz, "Hz")}
       </div>
       <button type="button" class="btn btn-small" data-tail-reset>Reset fade + reverb to the defaults</button>
@@ -97,14 +98,16 @@ export function mountLogoPanel(root: HTMLElement, engine: AudioEngine): void {
     const endings = Array.from(root.querySelectorAll<HTMLSelectElement>("[data-ending]"));
     const ringOut = endings.filter((e) => e.value === "ring").map((e) => e.dataset.ending!);
     const tail = endings.filter((e) => e.value === "tail").map((e) => e.dataset.ending!);
+    const fadeOut = endings.filter((e) => e.value === "fade").map((e) => e.dataset.ending!);
     engine.setLogoSettings({
       ringOut,
       tail,
+      fadeOut,
       tailSeconds: Number(q<HTMLInputElement>("[data-tail-seconds]").value),
       tailDb: Number(q<HTMLInputElement>("[data-tail-db]").value),
       tailSendSeconds: Number(q<HTMLInputElement>("[data-tail-send]").value),
-      tailDryFadeSeconds: Number(q<HTMLInputElement>("[data-tail-dry]").value),
-      tailFadeBeforeSeconds: Number(q<HTMLInputElement>("[data-tail-before]").value),
+      fadeOutSeconds: Number(q<HTMLInputElement>("[data-fade-len]").value),
+      fadeOutBeforeSeconds: Number(q<HTMLInputElement>("[data-fade-before]").value),
       tailToneHz: Number(q<HTMLInputElement>("[data-tail-tone]").value),
       mute: tracks.length ? { tracks, before: q<HTMLSelectElement>("[data-before]").value } : null,
       fadeMusic: fade || null,
@@ -127,9 +130,9 @@ export function mountLogoPanel(root: HTMLElement, engine: AudioEngine): void {
     };
     set("[data-tail-db]", TAIL_DEFAULTS.db);
     set("[data-tail-seconds]", TAIL_DEFAULTS.seconds);
-    set("[data-tail-send]", TAIL_DEFAULTS.sendSeconds);
-    set("[data-tail-dry]", TAIL_DEFAULTS.dryFadeSeconds);
-    set("[data-tail-before]", TAIL_DEFAULTS.fadeBeforeSeconds);
+    set("[data-tail-send]", engine.beatSeconds);
+    set("[data-fade-len]", TAIL_DEFAULTS.fadeSeconds);
+    set("[data-fade-before]", TAIL_DEFAULTS.fadeBeforeSeconds);
     set("[data-tail-tone]", TAIL_DEFAULTS.toneHz);
     apply();
   });

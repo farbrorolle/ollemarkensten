@@ -185,12 +185,14 @@ export interface LogoConfig {
   tailSeconds?: number;
   /** Level of the reverb tail under the logo, dB (default -12: the logo stays in front). */
   tailDb?: number;
-  /** How long before the hit the music starts feeding the reverb, seconds (default 0.3). */
+  /** How long before the hit the music starts feeding the reverb, seconds (default: one beat). */
   tailSendSeconds?: number;
-  /** How long the tail folders' music takes to fade out into the logo, seconds (default 1). */
-  tailDryFadeSeconds?: number;
-  /** How long before the hit that fade starts, seconds (default 0 = at the hit). */
-  tailFadeBeforeSeconds?: number;
+  /** Tracks/buses that fade out into the logo (a smooth fade instead of stopping at the hit). */
+  fadeOut?: string[];
+  /** Length of that fade-out, seconds (default 1). */
+  fadeOutSeconds?: number;
+  /** How long before the hit the fade-out starts, seconds (default 0 = at the hit). */
+  fadeOutBeforeSeconds?: number;
   /** Brightness of the tail: low-pass frequency in Hz (default 5000; lower = darker, further back). */
   tailToneHz?: number;
 }

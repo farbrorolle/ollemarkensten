@@ -761,8 +761,14 @@ export class AudioEngine {
         .filter((t) => tailSet.has(t.id) || tailSet.has(t.busId))
         .map((t) => t.id),
     );
-    this.arrangement.logoTailDryFade = this.logoConfig?.tailDryFadeSeconds ?? TAIL_DEFAULTS.dryFadeSeconds;
-    this.arrangement.logoTailFadeBefore = this.logoConfig?.tailFadeBeforeSeconds ?? TAIL_DEFAULTS.fadeBeforeSeconds;
+    const fadeSet = new Set(this.logoConfig?.fadeOut ?? []);
+    this.arrangement.logoFade = new Set(
+      Array.from(this.tracks.values())
+        .filter((t) => fadeSet.has(t.id) || fadeSet.has(t.busId))
+        .map((t) => t.id),
+    );
+    this.arrangement.logoFadeSeconds = this.logoConfig?.fadeOutSeconds ?? TAIL_DEFAULTS.fadeSeconds;
+    this.arrangement.logoFadeBefore = this.logoConfig?.fadeOutBeforeSeconds ?? TAIL_DEFAULTS.fadeBeforeSeconds;
     const ring = new Set(this.logoConfig?.ringOut ?? []);
     this.arrangement.logoRingOut = new Set(
       Array.from(this.tracks.values())
@@ -1087,7 +1093,8 @@ export class AudioEngine {
     const tailIds = new Set(logo.tail ?? []);
     this.tailLevel.gain.value = Tone.dbToGain(logo.tailDb ?? TAIL_DEFAULTS.db);
     this.tailTone.frequency.value = logo.tailToneHz ?? TAIL_DEFAULTS.toneHz;
-    const send = Math.max(0.05, Math.min(2, logo.tailSendSeconds ?? TAIL_DEFAULTS.sendSeconds));
+    // By default the reverb is fed from the last beat before the hit.
+    const send = Math.max(0.05, Math.min(2, logo.tailSendSeconds ?? this.beatSeconds));
     const decay = Math.max(0.5, Math.min(10, logo.tailSeconds ?? TAIL_DEFAULTS.seconds));
     if (Math.abs(Number(this.tailReverb.decay) - decay) > 0.01) this.tailReverb.decay = decay;
     for (const track of this.tracks.values()) {
@@ -1135,7 +1142,7 @@ export class AudioEngine {
   /** Creator view: change the melody mute / fade settings and re-place everything. */
   setLogoSettings(
     settings: Partial<
-      Pick<LogoConfig, "mute" | "fadeMusic" | "anchorSeconds" | "anchorBeat" | "ringOut" | "tail" | "tailSeconds" | "tailDb" | "tailSendSeconds" | "tailDryFadeSeconds" | "tailFadeBeforeSeconds" | "tailToneHz">
+      Pick<LogoConfig, "mute" | "fadeMusic" | "anchorSeconds" | "anchorBeat" | "ringOut" | "tail" | "tailSeconds" | "tailDb" | "tailSendSeconds" | "fadeOut" | "fadeOutSeconds" | "fadeOutBeforeSeconds" | "tailToneHz">
     >,
   ): void {
     if (!this.logoConfig) return;
@@ -1270,7 +1277,7 @@ export interface VolumeCue {
 
 export const VOLUME_CUE_MUTE_DB = -40;
 /** Starting points for the logo's reverb tail (the composer can change them per project). */
-export const TAIL_DEFAULTS = { db: -12, seconds: 2.5, sendSeconds: 0.3, dryFadeSeconds: 1, fadeBeforeSeconds: 0, toneHz: 5000 };
+export const TAIL_DEFAULTS = { db: -12, seconds: 2.5, fadeSeconds: 1, fadeBeforeSeconds: 0, toneHz: 5000 };
 /** The trackId of volume cues that set the level of the whole music. */
 export const MUSIC_CUE_TRACK = "__music";
 /** Seconds the level glides into a cue's new value (ending on the cue). */

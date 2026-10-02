@@ -56,6 +56,8 @@ export interface SwellMark {
 const LOGO_RING_OUT_SECONDS = 1.5;
 /** Fade at the very end of the music (under the logo's ring-out). */
 const END_FADE = "8n";
+/** Reverb-tail folders: how fast their dry sound is cut at the logo hit. */
+const TAIL_DRY_CUT_SECONDS = 0.06;
 
 export interface ArrangementSegment {
   /** 1-indexed, inclusive. */
@@ -165,11 +167,12 @@ export class ArrangementManager {
   swellCutoffBeat = 0;
   /** Tracks that may ring out under the logo (everything else stops at its hit). Set by AudioEngine. */
   logoRingOut = new Set<string>();
-  /** Tracks ending in the logo's reverb tail: their dry sound fades out over logoTailDryFade from the hit. */
+  /** Tracks ending in the logo's reverb tail: their dry sound is cut quickly at the hit (the reverb carries on). */
   logoTail = new Set<string>();
-  logoTailDryFade = 1;
-  /** …and the fade may start this long before the hit. */
-  logoTailFadeBefore = 0;
+  /** Tracks fading out into the logo, over logoFadeSeconds, starting logoFadeBefore before the hit. */
+  logoFade = new Set<string>();
+  logoFadeSeconds = 1;
+  logoFadeBefore = 0;
 
   /** Transport seconds of the logo's hit, or null without a logo. */
   private logoHitSeconds(timing: ArrangementTiming): number | null {
@@ -420,11 +423,18 @@ export class ArrangementManager {
         const sourceBeat = (lastChunk.sourceBar - 1) * 4 + beatsIn; // beat boundary in the bounce
         const natural = Math.min(LOGO_RING_OUT_SECONDS, track.beatTails[sourceBeat - 1] ?? 0);
         const rings = this.logoRingOut.has(track.id) && natural > 0.05;
-        const tail = this.logoTail.has(track.id) && !rings;
-        end = tail ? Math.max(this.barStartSeconds(lastChunk.startBar), hit - Math.max(0, this.logoTailFadeBefore)) : hit;
-        ringOut = rings ? natural : tail ? Math.max(0.03, this.logoTailDryFade) : Tone.Time(END_FADE).toSeconds();
+        const fades = this.logoFade.has(track.id) && !rings;
+        const tail = this.logoTail.has(track.id) && !rings && !fades;
+        end = fades ? Math.max(this.barStartSeconds(lastChunk.startBar), hit - Math.max(0, this.logoFadeBefore)) : hit;
+        ringOut = rings
+          ? natural
+          : fades
+            ? Math.max(0.03, this.logoFadeSeconds)
+            : tail
+              ? TAIL_DRY_CUT_SECONDS // the dry sound stops right away; only the reverb rings over
+              : Tone.Time(END_FADE).toSeconds();
         hold = rings ? 0.7 : 0;
-        tailFade = tail;
+        tailFade = fades;
         playPastEnd = Math.max(0, end + ringOut - this.barStartSeconds(segment.endBar));
       }
 

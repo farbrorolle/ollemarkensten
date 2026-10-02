@@ -4962,10 +4962,10 @@
     ],
     "tailSeconds": 2.5,
     "tailDb": -12,
-    "tailSendSeconds": 0.3,
-    "tailDryFadeSeconds": 1,
     "tailToneHz": 5000,
-    "tailFadeBeforeSeconds": 0
+    "fadeOut": [],
+    "fadeOutSeconds": 1,
+    "fadeOutBeforeSeconds": 0
   },
   "master": {
     "gain": 0,
