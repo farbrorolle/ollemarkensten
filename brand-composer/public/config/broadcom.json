@@ -4955,16 +4955,17 @@
     ],
     "tail": [
       "f01",
-      "f02",
       "f07",
       "f11",
       "f12"
     ],
-    "tailSeconds": 2.5,
-    "tailDb": -12,
+    "tailSeconds": 3,
+    "tailDb": -11,
     "tailToneHz": 5000,
-    "fadeOut": [],
-    "fadeOutSeconds": 1,
+    "fadeOut": [
+      "f02"
+    ],
+    "fadeOutSeconds": 0.8,
     "fadeOutBeforeSeconds": 0
   },
   "master": {

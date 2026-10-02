@@ -1277,7 +1277,7 @@ export interface VolumeCue {
 
 export const VOLUME_CUE_MUTE_DB = -40;
 /** Starting points for the logo's reverb tail (the composer can change them per project). */
-export const TAIL_DEFAULTS = { db: -12, seconds: 2.5, fadeSeconds: 1, fadeBeforeSeconds: 0, toneHz: 5000 };
+export const TAIL_DEFAULTS = { db: -11, seconds: 3, fadeSeconds: 0.8, fadeBeforeSeconds: 0, toneHz: 5000 };
 /** The trackId of volume cues that set the level of the whole music. */
 export const MUSIC_CUE_TRACK = "__music";
 /** Seconds the level glides into a cue's new value (ending on the cue). */
