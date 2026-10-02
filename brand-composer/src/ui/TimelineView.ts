@@ -363,8 +363,10 @@ export function mountTimeline(
     engine.fitToAnchor(film!.detectedCut ?? engine.defaultAnchorForFilm(info.duration));
   });
   const syncFitButtons = (): void => {
-    // Only with Auto arrange (an option of it). Off by default.
-    fitAllBtn.hidden = !engine.canFit || engine.arrangeMode !== "auto";
+    // Always shown (so it can be found); only active with Auto arrange.
+    fitAllBtn.hidden = !engine.canFit;
+    fitAllBtn.disabled = engine.arrangeMode !== "auto";
+    fitAllBtn.title = engine.arrangeMode === "auto" ? "Keep every part of the track in the music, each with the same share of the length as in the original" : "Works with Auto arrange – choose Auto arrange above to use it";
     fitAllBtn.classList.toggle("is-active", engine.fitAllParts);
     fitAllBtn.setAttribute("aria-pressed", String(engine.fitAllParts));
     resetOriginalBtn.hidden = !engine.canFit;
