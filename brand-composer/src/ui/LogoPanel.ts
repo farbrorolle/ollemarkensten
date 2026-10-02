@@ -58,16 +58,22 @@ export function mountLogoPanel(root: HTMLElement, engine: AudioEngine): void {
         )
         .join("")}
     </div>
+    <div class="tail-fade">
+      <div class="creator-subhead">Fade into the logo <span class="hint" style="margin:0;text-transform:none;letter-spacing:0">(the folders set to Reverb tail)</span></div>
+      <div class="tail-grid">
+        ${slider("data-tail-dry", "Fade-out length", 0.05, 4, 0.05, logo.tailDryFadeSeconds ?? TAIL_DEFAULTS.dryFadeSeconds, "s")}
+        ${slider("data-tail-before", "Fade starts before the hit", 0, 3, 0.05, logo.tailFadeBeforeSeconds ?? TAIL_DEFAULTS.fadeBeforeSeconds, "s")}
+      </div>
+    </div>
     <details class="tail-settings">
       <summary>Reverb tail settings <span>– advanced, the defaults are a good start</span></summary>
       <div class="tail-grid">
         ${slider("data-tail-db", "Level under the logo", -30, 0, 1, logo.tailDb ?? TAIL_DEFAULTS.db, "dB")}
         ${slider("data-tail-seconds", "Length", 1, 6, 0.1, logo.tailSeconds ?? TAIL_DEFAULTS.seconds, "s")}
         ${slider("data-tail-send", "Starts before the hit", 0.05, 1, 0.05, logo.tailSendSeconds ?? TAIL_DEFAULTS.sendSeconds, "s")}
-        ${slider("data-tail-dry", "Dry sound fades out over", 0.05, 1, 0.05, logo.tailDryFadeSeconds ?? TAIL_DEFAULTS.dryFadeSeconds, "s")}
         ${slider("data-tail-tone", "Brightness", 1000, 12000, 250, logo.tailToneHz ?? TAIL_DEFAULTS.toneHz, "Hz")}
       </div>
-      <button type="button" class="btn btn-small" data-tail-reset>Reset to the defaults</button>
+      <button type="button" class="btn btn-small" data-tail-reset>Reset fade + reverb to the defaults</button>
     </details>
     <div class="creator-grid" style="margin-top:12px">
       <label><span>Muted how long before the logo hit</span>
@@ -98,6 +104,7 @@ export function mountLogoPanel(root: HTMLElement, engine: AudioEngine): void {
       tailDb: Number(q<HTMLInputElement>("[data-tail-db]").value),
       tailSendSeconds: Number(q<HTMLInputElement>("[data-tail-send]").value),
       tailDryFadeSeconds: Number(q<HTMLInputElement>("[data-tail-dry]").value),
+      tailFadeBeforeSeconds: Number(q<HTMLInputElement>("[data-tail-before]").value),
       tailToneHz: Number(q<HTMLInputElement>("[data-tail-tone]").value),
       mute: tracks.length ? { tracks, before: q<HTMLSelectElement>("[data-before]").value } : null,
       fadeMusic: fade || null,
@@ -122,6 +129,7 @@ export function mountLogoPanel(root: HTMLElement, engine: AudioEngine): void {
     set("[data-tail-seconds]", TAIL_DEFAULTS.seconds);
     set("[data-tail-send]", TAIL_DEFAULTS.sendSeconds);
     set("[data-tail-dry]", TAIL_DEFAULTS.dryFadeSeconds);
+    set("[data-tail-before]", TAIL_DEFAULTS.fadeBeforeSeconds);
     set("[data-tail-tone]", TAIL_DEFAULTS.toneHz);
     apply();
   });

@@ -4963,8 +4963,9 @@
     "tailSeconds": 2.5,
     "tailDb": -12,
     "tailSendSeconds": 0.3,
-    "tailDryFadeSeconds": 0.2,
-    "tailToneHz": 5000
+    "tailDryFadeSeconds": 1,
+    "tailToneHz": 5000,
+    "tailFadeBeforeSeconds": 0
   },
   "master": {
     "gain": 0,

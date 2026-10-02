@@ -167,7 +167,9 @@ export class ArrangementManager {
   logoRingOut = new Set<string>();
   /** Tracks ending in the logo's reverb tail: their dry sound fades out over logoTailDryFade from the hit. */
   logoTail = new Set<string>();
-  logoTailDryFade = 0.2;
+  logoTailDryFade = 1;
+  /** …and the fade may start this long before the hit. */
+  logoTailFadeBefore = 0;
 
   /** Transport seconds of the logo's hit, or null without a logo. */
   private logoHitSeconds(timing: ArrangementTiming): number | null {
@@ -409,6 +411,7 @@ export class ArrangementManager {
       let playPastEnd = Math.max(0, end + ringOut - this.barStartSeconds(segment.endBar));
 
       const hit = !next ? this.logoHitSeconds(timing) : null;
+      let tailFade = false; // the music fading out into the logo: a smooth (cosine) curve
       if (hit !== null) {
         // The music meets the logo. Grooves/beats fade out quickly at the hit; tracks chosen to ring
         // out may let what is already sounding decay naturally into the logo (until their next attack
@@ -417,10 +420,12 @@ export class ArrangementManager {
         const sourceBeat = (lastChunk.sourceBar - 1) * 4 + beatsIn; // beat boundary in the bounce
         const natural = Math.min(LOGO_RING_OUT_SECONDS, track.beatTails[sourceBeat - 1] ?? 0);
         const rings = this.logoRingOut.has(track.id) && natural > 0.05;
-        end = hit;
-        ringOut = rings ? natural : this.logoTail.has(track.id) ? Math.max(0.03, this.logoTailDryFade) : Tone.Time(END_FADE).toSeconds();
+        const tail = this.logoTail.has(track.id) && !rings;
+        end = tail ? Math.max(this.barStartSeconds(lastChunk.startBar), hit - Math.max(0, this.logoTailFadeBefore)) : hit;
+        ringOut = rings ? natural : tail ? Math.max(0.03, this.logoTailDryFade) : Tone.Time(END_FADE).toSeconds();
         hold = rings ? 0.7 : 0;
-        playPastEnd = Math.max(0, hit + ringOut - this.barStartSeconds(segment.endBar));
+        tailFade = tail;
+        playPastEnd = Math.max(0, end + ringOut - this.barStartSeconds(segment.endBar));
       }
 
       // Into the next part: an equal-power crossfade before its downbeat (unless this track is cut
@@ -498,6 +503,11 @@ export class ArrangementManager {
           { t: end + ringOut * hold, v: RING_OVER_LEVEL },
           { t: end + ringOut, v: 0 },
         );
+      } else if (tailFade) {
+        for (let k = 0; k <= 16; k++) {
+          const x = k / 16;
+          pts.push({ t: end + x * ringOut, v: Math.cos((x * Math.PI) / 2) });
+        }
       } else {
         pts.push({ t: end + ringOut * hold, v: 1 }, { t: end + ringOut, v: 0 });
       }

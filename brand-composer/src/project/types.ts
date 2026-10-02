@@ -187,8 +187,10 @@ export interface LogoConfig {
   tailDb?: number;
   /** How long before the hit the music starts feeding the reverb, seconds (default 0.3). */
   tailSendSeconds?: number;
-  /** How long the tail folders' dry sound takes to fade out from the hit, seconds (default 0.2). */
+  /** How long the tail folders' music takes to fade out into the logo, seconds (default 1). */
   tailDryFadeSeconds?: number;
+  /** How long before the hit that fade starts, seconds (default 0 = at the hit). */
+  tailFadeBeforeSeconds?: number;
   /** Brightness of the tail: low-pass frequency in Hz (default 5000; lower = darker, further back). */
   tailToneHz?: number;
 }
