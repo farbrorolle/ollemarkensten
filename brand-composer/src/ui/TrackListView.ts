@@ -2,6 +2,7 @@ import * as Tone from "tone";
 import { MUSIC_CUE_TRACK, VOLUME_CUE_MUTE_DB } from "../audio/AudioEngine.ts";
 import type { AudioEngine } from "../audio/AudioEngine.ts";
 import type { Track } from "../audio/Track.ts";
+import { dbToPos, faderLabel, setupFader } from "./fader.ts";
 
 /**
  * The level (dB vs the mix) a track already has in the part the Levels buttons work on. The faders
@@ -39,7 +40,7 @@ function mountTrackRow(
       ${loadControls}
       <span class="track-part-level" data-part-level></span>
     </span>
-    <input data-volume type="range" min="-40" max="6" step="0.5" title="Volume (dB) – all the way down = muted" />
+    <input data-volume type="range" />
     <input data-pan class="creator-only" type="range" min="-1" max="1" step="0.05" title="Pan" />
     <button data-mute class="btn btn-toggle">M</button>
     <button data-solo class="btn btn-toggle creator-only">S</button>
@@ -56,15 +57,14 @@ function mountTrackRow(
 
   liveButtons.push({ track, solo: soloBtn, mute: muteBtn, volume: volumeInput, partLevel: row.querySelector<HTMLElement>("[data-part-level]")! });
   const baseVolume = track.volume;
-  volumeInput.value = String(track.volume);
   panInput.value = String(track.pan);
   muteBtn.classList.toggle("btn-toggle-active", track.mute);
   soloBtn.classList.toggle("btn-toggle-active", track.solo);
 
-  // The fader shows the level heard in the part (its set level + the change you're trying).
-  volumeInput.addEventListener("input", () => {
-    const v = Number(volumeInput.value);
-    track.volume = v <= Number(volumeInput.min) ? -Infinity : baseVolume + v - partLevelOf(track.id);
+  // Console-style fader (Logic-like taper). It shows the level heard in the part (its set level +
+  // the change you're trying); all the way down = muted, double-click / Alt-click = back to 0 dB.
+  setupFader(volumeInput, track.volume, (db) => {
+    track.volume = db === -Infinity ? -Infinity : baseVolume + db - partLevelOf(track.id);
   });
   volumeInput.addEventListener("pointerdown", () => draggingFaders.add(volumeInput));
   // (released anywhere – the pointer may leave the fader while dragging)
@@ -248,8 +248,11 @@ function mountPartLevels(panel: HTMLElement, engine: AudioEngine, base: Map<stri
       // Fader = level heard in this part (set level + what you're trying), unless it's in your hand.
       if (!draggingFaders.has(lb.volume)) {
         const heard = db + trialOffset(lb.track);
-        const shown = Number.isFinite(heard) ? Math.max(Number(lb.volume.min), Math.min(Number(lb.volume.max), heard)) : Number(lb.volume.min);
-        if (Math.abs(Number(lb.volume.value) - shown) > 0.01) lb.volume.value = String(shown);
+        const pos = dbToPos(Number.isFinite(heard) ? Math.min(6, heard) : -Infinity);
+        if (Number(lb.volume.value) !== pos) {
+          lb.volume.value = String(pos);
+          lb.volume.title = `${faderLabel(Number.isFinite(heard) ? heard : -Infinity)} – double-click or Alt-click for 0 dB`;
+        }
       }
     }
   };

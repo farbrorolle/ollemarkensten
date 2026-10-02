@@ -3,6 +3,7 @@ import type { AudioEngine } from "../audio/AudioEngine.ts";
 import type { SectionConfig } from "../project/types.ts";
 import type { VideoSync } from "../video/VideoSync.ts";
 import { formatFilmTime, formatSeconds } from "../video/syncMath.ts";
+import { faderLabel, setupFader } from "./fader.ts";
 
 export interface VideoPanelHandle {
   update(): void;
@@ -53,12 +54,12 @@ export function mountVideoPanel(
           <button type="button" class="btn video-audio-toggle" data-audio></button>
           <label class="video-volume" title="Film audio level (separate from the music)">
             <span>Film audio</span>
-            <input type="range" min="-40" max="6" step="0.5" data-film-volume />
+            <input type="range" data-film-volume />
             <span class="video-volume-value" data-film-volume-value></span>
           </label>
           <label class="video-volume" title="Music level">
             <span>Music</span>
-            <input type="range" min="-40" max="6" step="0.5" data-music-volume />
+            <input type="range" data-music-volume />
             <span class="video-volume-value" data-music-volume-value></span>
           </label>
           <span class="video-volume video-limiter" title="Master limiter on the film audio and the music together: turn up to make everything louder without clipping">
@@ -164,25 +165,22 @@ export function mountVideoPanel(
   audioBtn.addEventListener("click", () => film.setAudioOn(!film.audioOn));
   const volumeInput = q<HTMLInputElement>("[data-film-volume]");
   const volumeValue = q("[data-film-volume-value]");
-  volumeInput.value = String(film.volumeDb);
-  // All the way down = muted (not just -40 dB).
-  const faderDb = (input: HTMLInputElement): number => (Number(input.value) <= Number(input.min) ? -Infinity : Number(input.value));
-  const dbLabel = (db: number): string => (db === -Infinity ? "muted" : `${db > 0 ? "+" : ""}${db.toFixed(1)} dB`);
-  volumeInput.addEventListener("input", () => {
+  // Console-style faders (Logic-like taper); all the way down = muted, double-click = 0 dB.
+  const dbLabel = faderLabel;
+  setupFader(volumeInput, film.volumeDb, (db) => {
     // The fader is the only control now: moving it also turns the film's sound back on.
-    if (!film.audioOn && faderDb(volumeInput) !== -Infinity) film.setAudioOn(true);
-    film.setVolumeDb(faderDb(volumeInput));
+    if (!film.audioOn && db !== -Infinity) film.setAudioOn(true);
+    film.setVolumeDb(db);
   });
 
   // Music level + the output limiter over film audio and music together.
   const signed = (v: number): string => `${v > 0 ? "+" : ""}${v.toFixed(1)} dB`;
   const musicInput = q<HTMLInputElement>("[data-music-volume]");
   const musicValue = q("[data-music-volume-value]");
-  musicInput.value = String(engine.masterGain);
   musicValue.textContent = dbLabel(engine.masterGain);
-  musicInput.addEventListener("input", () => {
-    engine.setMasterGain(faderDb(musicInput));
-    musicValue.textContent = dbLabel(faderDb(musicInput));
+  setupFader(musicInput, engine.masterGain, (db) => {
+    engine.setMasterGain(db);
+    musicValue.textContent = dbLabel(db);
   });
   const limOn = q<HTMLInputElement>("[data-out-lim-on]");
   const limInput = q<HTMLInputElement>("[data-out-lim]");
