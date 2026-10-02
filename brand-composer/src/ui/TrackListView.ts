@@ -40,7 +40,7 @@ function mountTrackRow(
       ${loadControls}
       <span class="track-part-level" data-part-level></span>
     </span>
-    <input data-volume type="range" />
+    <span class="fader-cell"><input data-volume type="range" /><button type="button" class="btn btn-fader-reset" data-reset title="Back to 0 dB (also removes this instrument's own levels per part – Undo brings them back)">0</button></span>
     <input data-pan class="creator-only" type="range" min="-1" max="1" step="0.05" title="Pan" />
     <button data-mute class="btn btn-toggle">M</button>
     <button data-solo class="btn btn-toggle creator-only">S</button>
@@ -65,6 +65,13 @@ function mountTrackRow(
   // the change you're trying); all the way down = muted, double-click / Alt-click = back to 0 dB.
   setupFader(volumeInput, track.volume, (db) => {
     track.volume = db === -Infinity ? -Infinity : baseVolume + db - partLevelOf(track.id);
+  });
+  row.querySelector("[data-reset]")!.addEventListener("click", () => {
+    track.volume = baseVolume;
+    if (engine.volumeCues.some((c) => c.trackId === track.id)) {
+      engine.setVolumeCues(engine.volumeCues.filter((c) => c.trackId !== track.id));
+    }
+    volumeInput.value = String(dbToPos(0));
   });
   volumeInput.addEventListener("pointerdown", () => draggingFaders.add(volumeInput));
   // (released anywhere – the pointer may leave the fader while dragging)
@@ -129,6 +136,7 @@ function mountPartLevels(panel: HTMLElement, engine: AudioEngine, base: Map<stri
     <button type="button" class="btn" data-paste disabled title="Give this part the copied levels">Paste</button>
     <button type="button" class="btn" data-all title="Use these levels (as you hear them now) for the whole music">Apply to all parts</button>
     <button type="button" class="btn" data-clear title="Remove this part's own levels">Clear part</button>
+    <button type="button" class="btn" data-reset-all title="Every fader back to 0 dB and all levels per part removed (Undo brings them back)">Reset all to 0 dB</button>
     <span class="part-levels-status" data-status></span>`;
   const header = panel.querySelector(".track-list-header");
   panel.insertBefore(bar, header ?? panel.firstChild);
@@ -216,6 +224,12 @@ function mountPartLevels(panel: HTMLElement, engine: AudioEngine, base: Map<stri
     engine.setVolumeCues(cues);
     resetFaders();
     status.textContent = "These levels now apply to the whole music ✓";
+  });
+  bar.querySelector("[data-reset-all]")!.addEventListener("click", () => {
+    for (const t of tracks()) t.volume = base.get(t.id) ?? 0;
+    const kept = engine.volumeCues.filter((c) => c.trackId === MUSIC_CUE_TRACK);
+    if (kept.length !== engine.volumeCues.length) engine.setVolumeCues(kept);
+    status.textContent = "All levels back to 0 dB ✓";
   });
   bar.querySelector("[data-clear]")!.addEventListener("click", () => {
     const part = currentPart();
