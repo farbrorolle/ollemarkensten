@@ -30,6 +30,7 @@ export function mountLogoPanel(root: HTMLElement, engine: AudioEngine): void {
   const folders = Array.from(engine.tracks.values()).filter((t) => !t.isLogo);
   const muted = new Set(logo.mute?.tracks ?? []);
   const ringing = new Set(logo.ringOut ?? []);
+  const tailing = new Set(logo.tail ?? []);
 
   root.innerHTML = `
     <div class="creator-subhead">Mute melody before the logo</div>
@@ -38,11 +39,26 @@ export function mountLogoPanel(root: HTMLElement, engine: AudioEngine): void {
         .map((t) => `<label><input type="checkbox" value="${t.id}"${muted.has(t.id) ? " checked" : ""} /> ${t.name}</label>`)
         .join("")}
     </div>
-    <div class="creator-subhead">Ring out under the logo <span class="hint" style="margin:0;text-transform:none;letter-spacing:0">(everything else stops at the logo hit)</span></div>
-    <div class="checkbox-row" data-ring>
+    <div class="creator-subhead">How each folder ends at the logo</div>
+    <p class="hint logo-ending-hint">Stops at the hit: cut tight (drums, bass). Rings out: what's already sounding decays naturally, nothing new starts. Reverb tail: the dry sound stops and its last moment rings on in a reverb under the logo.</p>
+    <div class="logo-endings" data-endings>
       ${folders
-        .map((t) => `<label><input type="checkbox" value="${t.id}"${ringing.has(t.id) ? " checked" : ""} /> ${t.name}</label>`)
+        .map(
+          (t) => `<label class="logo-ending-row"><span>${t.name}</span><select data-ending="${t.id}">
+            <option value="stop"${!ringing.has(t.id) && !tailing.has(t.id) ? " selected" : ""}>Stops at the hit</option>
+            <option value="ring"${ringing.has(t.id) ? " selected" : ""}>Rings out</option>
+            <option value="tail"${tailing.has(t.id) && !ringing.has(t.id) ? " selected" : ""}>Reverb tail</option>
+          </select></label>`,
+        )
         .join("")}
+    </div>
+    <div class="creator-grid" style="margin-top:10px">
+      <label><span>Reverb tail length</span>
+        <select data-tail-seconds>${[1.5, 2, 3, 4, 6].map((v) => `<option value="${v}"${v === (logo.tailSeconds ?? 3) ? " selected" : ""}>${v} s</option>`).join("")}</select>
+      </label>
+      <label><span>Reverb tail level under the logo</span>
+        <select data-tail-db>${[-12, -6, -3, 0, 3, 6, 9].map((v) => `<option value="${v}"${v === (logo.tailDb ?? 0) ? " selected" : ""}>${v > 0 ? "+" : ""}${v} dB</option>`).join("")}</select>
+      </label>
     </div>
     <div class="creator-grid" style="margin-top:12px">
       <label><span>Muted how long before the logo hit</span>
@@ -63,9 +79,14 @@ export function mountLogoPanel(root: HTMLElement, engine: AudioEngine): void {
   const apply = (): void => {
     const tracks = Array.from(root.querySelectorAll<HTMLInputElement>("[data-folders] input:checked")).map((i) => i.value);
     const fade = q<HTMLSelectElement>("[data-fade]").value;
-    const ringOut = Array.from(root.querySelectorAll<HTMLInputElement>("[data-ring] input:checked")).map((i) => i.value);
+    const endings = Array.from(root.querySelectorAll<HTMLSelectElement>("[data-ending]"));
+    const ringOut = endings.filter((e) => e.value === "ring").map((e) => e.dataset.ending!);
+    const tail = endings.filter((e) => e.value === "tail").map((e) => e.dataset.ending!);
     engine.setLogoSettings({
       ringOut,
+      tail,
+      tailSeconds: Number(q<HTMLSelectElement>("[data-tail-seconds]").value),
+      tailDb: Number(q<HTMLSelectElement>("[data-tail-db]").value),
       mute: tracks.length ? { tracks, before: q<HTMLSelectElement>("[data-before]").value } : null,
       fadeMusic: fade || null,
       anchorSeconds: Math.max(0, Number(q<HTMLInputElement>("[data-anchor]").value) || 0),

@@ -48,6 +48,10 @@ export const DEFAULT_COMPRESSOR: CompressorSettings = {
  */
 export class AudioEngine {
   readonly masterBus: Bus;
+  /** Logo ending: folders set to "reverb tail" send their last moment into this reverb at the hit. */
+  private readonly tailReverb: Tone.Reverb;
+  private readonly tailLevel: Tone.Gain;
+  private readonly tailSends = new Map<string, Tone.Gain>();
   /** Volume cues on the whole music ("Music volume" lane): after the master bus, before the compressor. */
   readonly musicCueGain: Tone.Gain;
   readonly compressor: Tone.Compressor;
@@ -100,6 +104,11 @@ export class AudioEngine {
     this.limiterDrive = new Tone.Gain(1);
     this.musicCueGain = new Tone.Gain(1);
     this.masterBus.connect(this.musicCueGain);
+    // The logo's reverb tail joins the music before the music bus processing.
+    this.tailReverb = new Tone.Reverb({ decay: 3, preDelay: 0.01, wet: 1 });
+    this.tailLevel = new Tone.Gain(1);
+    this.tailReverb.connect(this.tailLevel);
+    this.tailLevel.connect(this.musicCueGain);
     this.musicCueGain.connect(this.compressor);
     this.compressor.connect(this.limiterDrive);
     this.limiterDrive.connect(this.limiter);
@@ -601,6 +610,8 @@ export class AudioEngine {
     this.sidechains.clear();
     for (const track of this.tracks.values()) track.dispose();
     this.tracks.clear();
+    for (const send of this.tailSends.values()) send.dispose();
+    this.tailSends.clear();
     for (const bus of this.buses.values()) bus.dispose();
     this.buses.clear();
     Tone.getTransport().cancel(0);
@@ -646,6 +657,13 @@ export class AudioEngine {
       if (!destBus) throw new Error(`Track "${trackConfig.id}" references unknown bus "${trackConfig.bus}"`);
       track.connect(destBus.input);
       this.tracks.set(track.id, track);
+      if (trackConfig.role !== "logo") {
+        // Closed send to the logo's reverb tail (opened just around the logo hit, see scheduleLogo).
+        const send = new Tone.Gain(0);
+        track.channel.connect(send);
+        send.connect(this.tailReverb);
+        this.tailSends.set(track.id, send);
+      }
     }
     await Promise.all(config.tracks.map((trackConfig) => this.tracks.get(trackConfig.id)!.load()));
 
@@ -1039,6 +1057,10 @@ export class AudioEngine {
   /** Places the logo so its anchor hits beat `anchorBeat` of the last bar, and adds the mute/fade envelopes. */
   private scheduleLogo(): void {
     for (const track of this.tracks.values()) track.autoGain.gain.value = 1;
+    for (const send of this.tailSends.values()) {
+      send.gain.cancelScheduledValues(0);
+      send.gain.value = 0;
+    }
     const player = this.hasLogo ? this.logoTrack?.filePlayer : undefined;
     const logo = this.logoConfig;
     const anchor = this.logoAnchorSeconds;
@@ -1047,6 +1069,27 @@ export class AudioEngine {
     const start = anchor - logo.anchorSeconds;
     // If the arrangement is so short that the logo would start before 0, start the file part-way in.
     player.start(Math.max(0, start), Math.max(0, -start));
+
+    // Reverb tail: for the chosen folders, open the send to the tail reverb just around the hit, so
+    // the last moment before the music stops rings on under the logo (their dry sound stops at the
+    // hit as usual; nothing new is played).
+    const tailIds = new Set(logo.tail ?? []);
+    this.tailLevel.gain.value = Tone.dbToGain(logo.tailDb ?? 0);
+    const decay = Math.max(0.5, Math.min(10, logo.tailSeconds ?? 3));
+    if (Math.abs(Number(this.tailReverb.decay) - decay) > 0.01) this.tailReverb.decay = decay;
+    for (const track of this.tracks.values()) {
+      const send = this.tailSends.get(track.id);
+      if (!send) continue;
+      if (!(tailIds.has(track.id) || tailIds.has(track.busId))) continue;
+      this.envelopes.push(
+        new GainEnvelope(send.gain, 0, [
+          { t: anchor - 0.5, v: 0 },
+          { t: anchor - 0.2, v: 1 },
+          { t: anchor + 0.12, v: 1 },
+          { t: anchor + 0.3, v: 0 },
+        ]),
+      );
+    }
 
     // Per track: at most one mute (fast ramp) and one fade (to silence at the anchor); the
     // envelope follows whichever is lower at every point.
@@ -1078,7 +1121,7 @@ export class AudioEngine {
 
   /** Creator view: change the melody mute / fade settings and re-place everything. */
   setLogoSettings(
-    settings: Partial<Pick<LogoConfig, "mute" | "fadeMusic" | "anchorSeconds" | "anchorBeat" | "ringOut">>,
+    settings: Partial<Pick<LogoConfig, "mute" | "fadeMusic" | "anchorSeconds" | "anchorBeat" | "ringOut" | "tail" | "tailSeconds" | "tailDb">>,
   ): void {
     if (!this.logoConfig) return;
     this.logoConfig = { ...this.logoConfig, ...settings };
@@ -1180,6 +1223,8 @@ export class AudioEngine {
     this.outputClip.dispose();
     this.loudness.dispose();
     this.outputAnalyser.dispose();
+    this.tailReverb.dispose();
+    this.tailLevel.dispose();
   }
 }
 

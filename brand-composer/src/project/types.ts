@@ -176,6 +176,15 @@ export interface LogoConfig {
    * Everything else stops at the logo's hit, so the logo stands alone.
    */
   ringOut?: string[];
+  /**
+   * Tracks/buses that end in a reverb tail: at the logo hit their dry sound stops and the last
+   * moment is sent into a long reverb that dies away under the logo (no new notes start).
+   */
+  tail?: string[];
+  /** Reverb tail length in seconds (default 3). */
+  tailSeconds?: number;
+  /** Level of the reverb tail under the logo, dB (default 0). */
+  tailDb?: number;
 }
 
 export interface CompressorSettings {
