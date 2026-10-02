@@ -181,10 +181,16 @@ export interface LogoConfig {
    * moment is sent into a long reverb that dies away under the logo (no new notes start).
    */
   tail?: string[];
-  /** Reverb tail length in seconds (default 3). */
+  /** Reverb tail length (decay) in seconds (default 2.5). */
   tailSeconds?: number;
-  /** Level of the reverb tail under the logo, dB (default 0). */
+  /** Level of the reverb tail under the logo, dB (default -12: the logo stays in front). */
   tailDb?: number;
+  /** How long before the hit the music starts feeding the reverb, seconds (default 0.3). */
+  tailSendSeconds?: number;
+  /** How long the tail folders' dry sound takes to fade out from the hit, seconds (default 0.2). */
+  tailDryFadeSeconds?: number;
+  /** Brightness of the tail: low-pass frequency in Hz (default 5000; lower = darker, further back). */
+  tailToneHz?: number;
 }
 
 export interface CompressorSettings {

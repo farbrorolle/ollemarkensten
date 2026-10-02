@@ -1,4 +1,10 @@
+import { TAIL_DEFAULTS } from "../audio/AudioEngine.ts";
 import type { AudioEngine } from "../audio/AudioEngine.ts";
+
+const fmt = (v: number, unit: string): string =>
+  unit === "Hz" ? `${(v / 1000).toFixed(v < 10000 ? 2 : 1)} kHz` : unit === "dB" ? `${v} dB` : `${v.toFixed(2)} s`;
+const slider = (attr: string, label: string, min: number, max: number, step: number, value: number, unit: string): string =>
+  `<label class="tail-slider"><span>${label} <b data-out>${fmt(value, unit)}</b></span><input type="range" ${attr} data-unit="${unit}" min="${min}" max="${max}" step="${step}" value="${value}" /></label>`;
 
 const MUTE_BEFORE: [string, string][] = [
   ["4n", "1 beat"],
@@ -52,14 +58,17 @@ export function mountLogoPanel(root: HTMLElement, engine: AudioEngine): void {
         )
         .join("")}
     </div>
-    <div class="creator-grid" style="margin-top:10px">
-      <label><span>Reverb tail length</span>
-        <select data-tail-seconds>${[1.5, 2, 3, 4, 6].map((v) => `<option value="${v}"${v === (logo.tailSeconds ?? 3) ? " selected" : ""}>${v} s</option>`).join("")}</select>
-      </label>
-      <label><span>Reverb tail level under the logo</span>
-        <select data-tail-db>${[-12, -6, -3, 0, 3, 6, 9].map((v) => `<option value="${v}"${v === (logo.tailDb ?? 0) ? " selected" : ""}>${v > 0 ? "+" : ""}${v} dB</option>`).join("")}</select>
-      </label>
-    </div>
+    <details class="tail-settings">
+      <summary>Reverb tail settings <span>– advanced, the defaults are a good start</span></summary>
+      <div class="tail-grid">
+        ${slider("data-tail-db", "Level under the logo", -30, 0, 1, logo.tailDb ?? TAIL_DEFAULTS.db, "dB")}
+        ${slider("data-tail-seconds", "Length", 1, 6, 0.1, logo.tailSeconds ?? TAIL_DEFAULTS.seconds, "s")}
+        ${slider("data-tail-send", "Starts before the hit", 0.05, 1, 0.05, logo.tailSendSeconds ?? TAIL_DEFAULTS.sendSeconds, "s")}
+        ${slider("data-tail-dry", "Dry sound fades out over", 0.05, 1, 0.05, logo.tailDryFadeSeconds ?? TAIL_DEFAULTS.dryFadeSeconds, "s")}
+        ${slider("data-tail-tone", "Brightness", 1000, 12000, 250, logo.tailToneHz ?? TAIL_DEFAULTS.toneHz, "Hz")}
+      </div>
+      <button type="button" class="btn btn-small" data-tail-reset>Reset to the defaults</button>
+    </details>
     <div class="creator-grid" style="margin-top:12px">
       <label><span>Muted how long before the logo hit</span>
         <select data-before>${MUTE_BEFORE.map(([v, t]) => `<option value="${v}"${v === (logo.mute?.before ?? "1m") ? " selected" : ""}>${t}</option>`).join("")}</select>
@@ -85,8 +94,11 @@ export function mountLogoPanel(root: HTMLElement, engine: AudioEngine): void {
     engine.setLogoSettings({
       ringOut,
       tail,
-      tailSeconds: Number(q<HTMLSelectElement>("[data-tail-seconds]").value),
-      tailDb: Number(q<HTMLSelectElement>("[data-tail-db]").value),
+      tailSeconds: Number(q<HTMLInputElement>("[data-tail-seconds]").value),
+      tailDb: Number(q<HTMLInputElement>("[data-tail-db]").value),
+      tailSendSeconds: Number(q<HTMLInputElement>("[data-tail-send]").value),
+      tailDryFadeSeconds: Number(q<HTMLInputElement>("[data-tail-dry]").value),
+      tailToneHz: Number(q<HTMLInputElement>("[data-tail-tone]").value),
       mute: tracks.length ? { tracks, before: q<HTMLSelectElement>("[data-before]").value } : null,
       fadeMusic: fade || null,
       anchorSeconds: Math.max(0, Number(q<HTMLInputElement>("[data-anchor]").value) || 0),
@@ -94,4 +106,23 @@ export function mountLogoPanel(root: HTMLElement, engine: AudioEngine): void {
     });
   };
   root.addEventListener("change", apply);
+  // Show slider values while dragging (the change itself is applied on release).
+  root.querySelectorAll<HTMLInputElement>(".tail-slider input").forEach((input) => {
+    input.addEventListener("input", () => {
+      input.closest("label")!.querySelector("[data-out]")!.textContent = fmt(Number(input.value), input.dataset.unit ?? "");
+    });
+  });
+  q("[data-tail-reset]").addEventListener("click", () => {
+    const set = (sel: string, v: number): void => {
+      const input = q<HTMLInputElement>(sel);
+      input.value = String(v);
+      input.dispatchEvent(new Event("input"));
+    };
+    set("[data-tail-db]", TAIL_DEFAULTS.db);
+    set("[data-tail-seconds]", TAIL_DEFAULTS.seconds);
+    set("[data-tail-send]", TAIL_DEFAULTS.sendSeconds);
+    set("[data-tail-dry]", TAIL_DEFAULTS.dryFadeSeconds);
+    set("[data-tail-tone]", TAIL_DEFAULTS.toneHz);
+    apply();
+  });
 }

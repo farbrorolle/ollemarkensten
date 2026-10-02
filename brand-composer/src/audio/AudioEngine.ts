@@ -51,6 +51,7 @@ export class AudioEngine {
   /** Logo ending: folders set to "reverb tail" send their last moment into this reverb at the hit. */
   private readonly tailReverb: Tone.Reverb;
   private readonly tailLevel: Tone.Gain;
+  private readonly tailTone: Tone.Filter;
   private readonly tailSends = new Map<string, Tone.Gain>();
   /** Volume cues on the whole music ("Music volume" lane): after the master bus, before the compressor. */
   readonly musicCueGain: Tone.Gain;
@@ -106,8 +107,10 @@ export class AudioEngine {
     this.masterBus.connect(this.musicCueGain);
     // The logo's reverb tail joins the music before the music bus processing.
     this.tailReverb = new Tone.Reverb({ decay: 3, preDelay: 0.01, wet: 1 });
-    this.tailLevel = new Tone.Gain(1);
-    this.tailReverb.connect(this.tailLevel);
+    this.tailLevel = new Tone.Gain(Tone.dbToGain(TAIL_DEFAULTS.db));
+    this.tailTone = new Tone.Filter({ type: "lowpass", frequency: TAIL_DEFAULTS.toneHz, rolloff: -12 });
+    this.tailReverb.connect(this.tailTone);
+    this.tailTone.connect(this.tailLevel);
     this.tailLevel.connect(this.musicCueGain);
     this.musicCueGain.connect(this.compressor);
     this.compressor.connect(this.limiterDrive);
@@ -752,6 +755,13 @@ export class AudioEngine {
     for (const track of this.tracks.values()) track.resyncSectionTakes();
     this.arrangement.swellCutoffBeat = this.hasLogo ? this.logoConfig!.anchorBeat : 0;
     this.arrangement.swellEdits = { removed: [...this._swellEdits.removed], added: this._swellEdits.added.map((a) => ({ ...a })) };
+    const tailSet = new Set(this.logoConfig?.tail ?? []);
+    this.arrangement.logoTail = new Set(
+      Array.from(this.tracks.values())
+        .filter((t) => tailSet.has(t.id) || tailSet.has(t.busId))
+        .map((t) => t.id),
+    );
+    this.arrangement.logoTailDryFade = this.logoConfig?.tailDryFadeSeconds ?? TAIL_DEFAULTS.dryFadeSeconds;
     const ring = new Set(this.logoConfig?.ringOut ?? []);
     this.arrangement.logoRingOut = new Set(
       Array.from(this.tracks.values())
@@ -1074,19 +1084,21 @@ export class AudioEngine {
     // the last moment before the music stops rings on under the logo (their dry sound stops at the
     // hit as usual; nothing new is played).
     const tailIds = new Set(logo.tail ?? []);
-    this.tailLevel.gain.value = Tone.dbToGain(logo.tailDb ?? 0);
-    const decay = Math.max(0.5, Math.min(10, logo.tailSeconds ?? 3));
+    this.tailLevel.gain.value = Tone.dbToGain(logo.tailDb ?? TAIL_DEFAULTS.db);
+    this.tailTone.frequency.value = logo.tailToneHz ?? TAIL_DEFAULTS.toneHz;
+    const send = Math.max(0.05, Math.min(2, logo.tailSendSeconds ?? TAIL_DEFAULTS.sendSeconds));
+    const decay = Math.max(0.5, Math.min(10, logo.tailSeconds ?? TAIL_DEFAULTS.seconds));
     if (Math.abs(Number(this.tailReverb.decay) - decay) > 0.01) this.tailReverb.decay = decay;
     for (const track of this.tracks.values()) {
-      const send = this.tailSends.get(track.id);
-      if (!send) continue;
+      const sendGain = this.tailSends.get(track.id);
+      if (!sendGain) continue;
       if (!(tailIds.has(track.id) || tailIds.has(track.busId))) continue;
       this.envelopes.push(
-        new GainEnvelope(send.gain, 0, [
-          { t: anchor - 0.5, v: 0 },
-          { t: anchor - 0.2, v: 1 },
-          { t: anchor + 0.12, v: 1 },
-          { t: anchor + 0.3, v: 0 },
+        new GainEnvelope(sendGain.gain, 0, [
+          { t: anchor - send - 0.05, v: 0 },
+          { t: anchor - send, v: 1 },
+          { t: anchor + 0.1, v: 1 },
+          { t: anchor + 0.25, v: 0 },
         ]),
       );
     }
@@ -1121,7 +1133,9 @@ export class AudioEngine {
 
   /** Creator view: change the melody mute / fade settings and re-place everything. */
   setLogoSettings(
-    settings: Partial<Pick<LogoConfig, "mute" | "fadeMusic" | "anchorSeconds" | "anchorBeat" | "ringOut" | "tail" | "tailSeconds" | "tailDb">>,
+    settings: Partial<
+      Pick<LogoConfig, "mute" | "fadeMusic" | "anchorSeconds" | "anchorBeat" | "ringOut" | "tail" | "tailSeconds" | "tailDb" | "tailSendSeconds" | "tailDryFadeSeconds" | "tailToneHz">
+    >,
   ): void {
     if (!this.logoConfig) return;
     this.logoConfig = { ...this.logoConfig, ...settings };
@@ -1225,6 +1239,7 @@ export class AudioEngine {
     this.outputAnalyser.dispose();
     this.tailReverb.dispose();
     this.tailLevel.dispose();
+    this.tailTone.dispose();
   }
 }
 
@@ -1253,6 +1268,8 @@ export interface VolumeCue {
 }
 
 export const VOLUME_CUE_MUTE_DB = -40;
+/** Starting points for the logo's reverb tail (the composer can change them per project). */
+export const TAIL_DEFAULTS = { db: -12, seconds: 2.5, sendSeconds: 0.3, dryFadeSeconds: 0.2, toneHz: 5000 };
 /** The trackId of volume cues that set the level of the whole music. */
 export const MUSIC_CUE_TRACK = "__music";
 /** Seconds the level glides into a cue's new value (ending on the cue). */

@@ -4960,8 +4960,11 @@
       "f11",
       "f12"
     ],
-    "tailSeconds": 3,
-    "tailDb": 3
+    "tailSeconds": 2.5,
+    "tailDb": -12,
+    "tailSendSeconds": 0.3,
+    "tailDryFadeSeconds": 0.2,
+    "tailToneHz": 5000
   },
   "master": {
     "gain": 0,

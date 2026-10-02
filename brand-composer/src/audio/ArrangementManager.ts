@@ -165,6 +165,9 @@ export class ArrangementManager {
   swellCutoffBeat = 0;
   /** Tracks that may ring out under the logo (everything else stops at its hit). Set by AudioEngine. */
   logoRingOut = new Set<string>();
+  /** Tracks ending in the logo's reverb tail: their dry sound fades out over logoTailDryFade from the hit. */
+  logoTail = new Set<string>();
+  logoTailDryFade = 0.2;
 
   /** Transport seconds of the logo's hit, or null without a logo. */
   private logoHitSeconds(timing: ArrangementTiming): number | null {
@@ -415,7 +418,7 @@ export class ArrangementManager {
         const natural = Math.min(LOGO_RING_OUT_SECONDS, track.beatTails[sourceBeat - 1] ?? 0);
         const rings = this.logoRingOut.has(track.id) && natural > 0.05;
         end = hit;
-        ringOut = rings ? natural : Tone.Time(END_FADE).toSeconds();
+        ringOut = rings ? natural : this.logoTail.has(track.id) ? Math.max(0.03, this.logoTailDryFade) : Tone.Time(END_FADE).toSeconds();
         hold = rings ? 0.7 : 0;
         playPastEnd = Math.max(0, hit + ringOut - this.barStartSeconds(segment.endBar));
       }
