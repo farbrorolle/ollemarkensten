@@ -450,7 +450,7 @@ export function mountTimeline(
     if (!region) return;
     const regionLength = region[1] - region[0] + 1;
     if (seg.lengthBars >= regionLength) seg.sourceBar = region[0];
-    else if (fitRule(seg.sectionId)?.keep === "start") seg.sourceBar = region[0];
+    else if (fitRule(seg.sectionId)?.keep === "start" || engine.hasMelodyPickupInto(seg.sectionId)) seg.sourceBar = region[0];
     else seg.sourceBar = keepEndSourceBar(region, seg.lengthBars);
   };
 

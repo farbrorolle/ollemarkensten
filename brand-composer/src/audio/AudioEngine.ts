@@ -334,6 +334,18 @@ export class AudioEngine {
     return this.arrangement.arrangementSegments.find((s) => bar >= s.startBar && bar < s.endBar)?.sectionId ?? null;
   }
 
+  /**
+   * True when a melody track (the ones muted before the logo) has an upbeat into this section's
+   * first bar. Shortening such a part should keep its start, or the melody loses its pickup and
+   * begins mid-phrase.
+   */
+  hasMelodyPickupInto(sectionId: string): boolean {
+    const region = this.regions?.[sectionId];
+    if (!region) return false;
+    const melody = this.logoConfig?.mute?.tracks ?? [];
+    return melody.some((id) => (this.tracks.get(id)?.pickups[String(region[0])] ?? 0) > 0);
+  }
+
   sectionName(id: string): string {
     return this.sectionsById.get(id)?.name ?? id;
   }
