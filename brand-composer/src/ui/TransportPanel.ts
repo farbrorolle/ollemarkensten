@@ -27,7 +27,7 @@ export function mountTransportPanel(root: HTMLElement, engine: AudioEngine, onPl
       <span>BPM</span>
       <input data-bpm type="number" min="20" max="300" step="1" />
     </label>
-    <div class="position-display">
+    <div class="position-display creator-only">
       <span class="position-label">Bar:Beat</span>
       <span data-position class="position-value">1:1</span>
     </div>

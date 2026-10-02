@@ -4171,3 +4171,60 @@ body.view-creator .ws-side .track-row {
   font: inherit;
   font-size: 11.5px;
 }
+
+/* Customer view: no bar numbers (Bar:Beat display, the bar ruler, "· bar N" on the film). */
+.view-customer .timeline-ruler {
+  display: none;
+}
+
+/* "Film ends": centred on its line; right-aligned to it at the timeline's right edge. */
+.timeline-film-end-label {
+  right: auto;
+  left: 0;
+  transform: translateX(-50%);
+}
+.timeline-film-end-at-edge .timeline-film-end-label {
+  left: auto;
+  right: 5px;
+  transform: none;
+}
+
+/* Customer view: the output meter is just a small red bar of how much the limiter turns down. */
+.view-customer .output-bar .master-strip,
+.view-customer .master-strip {
+  height: auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+}
+.view-customer .master-strip::before {
+  content: "Limiter";
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+.view-customer .master-strip .ms-scale,
+.view-customer .master-strip .ms-meter[data-ms-ch],
+.view-customer .master-strip .ms-readout,
+.view-customer .master-strip .ms-label {
+  display: none;
+}
+.view-customer .master-strip .ms-gr {
+  width: 56px;
+  height: 6px;
+  margin: 0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.view-customer .master-strip .ms-gr .ms-fill {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: auto;
+  height: 100% !important;
+  width: calc(var(--gr, 0) * 100%);
+  background: #f33;
+}
+.view-customer .master-strip .ms-gr {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.12);
+}

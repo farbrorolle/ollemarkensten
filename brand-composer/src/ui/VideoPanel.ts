@@ -257,6 +257,7 @@ export function mountVideoPanel(
     return { fill: el.querySelector<HTMLElement>(".ms-fill")!, hold: el.querySelector<HTMLElement>(".ms-hold")!, level: -Infinity, holdDb: -Infinity, holdAt: 0 };
   });
   const grFill = q("[data-ms-gr]");
+  const strip = q(".master-strip");
   const peakEl = q("[data-ms-peak]");
   const grValEl = q("[data-ms-grv]");
   const lufsEls = [q("[data-ms-m]"), q("[data-ms-s]"), q("[data-ms-i]")];
@@ -286,6 +287,7 @@ export function mountVideoPanel(
     });
     const gr = Math.min(12, Math.abs(engine.outputLimiterReduction));
     grFill.style.height = `${(gr / 12) * 100}%`;
+    strip.style.setProperty("--gr", (gr / 12).toFixed(3));
     if (now - lastReadout > 200) {
       lastReadout = now;
       peakEl.textContent = fmtDb(maxPeak);
@@ -324,7 +326,9 @@ export function mountVideoPanel(
       const bar = Math.floor(intoMusic / engine.barSeconds) + 1;
       const sectionText =
         sectionId && intoMusic >= 0 && bar <= engine.arrangement.totalBars
-          ? `${sectionNameById.get(sectionId) ?? sectionId} · bar ${bar}`
+          ? document.body.classList.contains("view-creator")
+            ? `${sectionNameById.get(sectionId) ?? sectionId} · bar ${bar}`
+            : (sectionNameById.get(sectionId) ?? sectionId)
           : "";
       if (sectionText !== lastSection) {
         sectionEl.textContent = sectionText;

@@ -1603,6 +1603,10 @@ export function mountTimeline(
     const beyond = fraction > 1.0005;
     filmEnd.style.left = `${Math.min(1, fraction) * 100}%`;
     filmEnd.classList.toggle("timeline-film-end-beyond", beyond);
+    // The label sits on its line (centred), unless that would run off the timeline's right edge.
+    const laneWidth = filmEnd.parentElement?.clientWidth ?? 0;
+    const atEdge = beyond || Math.min(1, fraction) * laneWidth + filmEndLabel.offsetWidth / 2 + 4 > laneWidth;
+    filmEnd.classList.toggle("timeline-film-end-at-edge", atEdge);
     const endText = beyond ? `Film continues ${formatSeconds(info.duration - spanSeconds)} s →` : "Film ends";
     if (endText !== filmEndText) {
       filmEndLabel.textContent = endText;
