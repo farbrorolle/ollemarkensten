@@ -44,12 +44,9 @@ export function mountSidePanel(
 
   // --- Step 1: Fit the length ----------------------------------------------------------------
   const fit = document.createElement("section");
-  fit.className = "panel side-step side-fit fit-below";
+  fit.className = "panel side-step side-fit";
   fit.dataset.stepPanel = "fit";
   fit.innerHTML = `
-    <div class="fit-head"><h2>Fit the length</h2></div>
-    <div class="fit-cols">
-    <div class="fit-col fit-col-a">
     <div class="length-tip" data-length-tip hidden>
       <div class="length-tip-title">Try another length</div>
       <p>Drag the music's right edge in the timeline – the track re-arranges itself, always in time. Or add your film and it fits itself.</p>
@@ -64,15 +61,11 @@ export function mountSidePanel(
       <div class="logo-cut-row" data-logo-cut-row></div>
       <p class="side-note" data-logo-note></p>
     </div>
-    </div>
-    <div class="fit-col fit-col-b">
     <div class="side-group" data-arrange-group>
       <div class="side-label">How the music is arranged</div>
       <div class="arrange-cards" data-arrange-cards></div>
     </div>
     <div class="side-group side-switches" data-switches></div>
-    </div>
-    <div class="fit-col fit-col-c">
     <div class="side-links" data-links></div>
     <div class="side-group side-other-lengths">
       <div class="side-label">Other lengths <span class="side-optional">optional</span></div>
@@ -83,9 +76,7 @@ export function mountSidePanel(
       </form>
       <p class="side-note" data-length-note></p>
     </div>
-    <button type="button" class="btn side-next" data-goto-tune>Customize the arrangement: parts, melody &amp; swells →</button>
-    </div>
-    </div>`;
+    <button type="button" class="btn side-next" data-goto-tune>Customize the arrangement: parts, melody &amp; swells →</button>`;
 
   // --- Step 2: Fine-tune ---------------------------------------------------------------------
   const tune = document.createElement("section");
@@ -99,10 +90,7 @@ export function mountSidePanel(
   sideTabs.className = "side-tabs side-tabs-top";
   sideTabs.setAttribute("role", "tablist");
   sideTabs.innerHTML = `<button type="button" class="side-tab" data-side-tab="fit" role="tab">Fit the length</button><button type="button" class="side-tab" data-side-tab="levels" role="tab">Levels</button>`;
-  // Experiment (Olle): Fit the length sits under the timeline, laid out side by side; the right
-  // panel always shows Levels. (The tabs are kept in code but not shown.)
-  sideRoot.prepend(tune);
-  timelineRoot.closest(".panel-timeline")?.after(fit);
+  sideRoot.prepend(sideTabs, fit, tune);
   type SideTab = "fit" | "levels";
   const setSideTab = (t: SideTab): void => {
     document.body.classList.toggle("side-tab-fit", t === "fit");
@@ -313,6 +301,7 @@ export function mountSidePanel(
   let step: Step = "fit";
   function setStep(next: Step): void {
     step = next;
+    setSideTab(step === "fit" ? "fit" : "levels");
     document.body.classList.toggle("step-fit", step === "fit");
     document.body.classList.toggle("step-tune", step === "tune");
     stepperRoot.querySelectorAll<HTMLElement>("[data-step]").forEach((b) => {
