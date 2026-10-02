@@ -47,10 +47,7 @@ export function mountSidePanel(
   fit.className = "panel side-step side-fit";
   fit.dataset.stepPanel = "fit";
   fit.innerHTML = `
-    <div class="length-tip" data-length-tip hidden>
-      <div class="length-tip-title">Try another length</div>
-      <p>Drag the music's right edge in the timeline – the track re-arranges itself, always in time. Or add your film and it fits itself.</p>
-    </div>
+    <p class="length-hint" data-length-tip hidden><b>Try another length:</b> drag the music's right edge in the timeline – the track re-arranges itself, always in time. Or add your film and it fits itself.</p>
     <div class="aha-card" data-aha hidden>
       <div class="aha-head"><span class="aha-dot" aria-hidden="true">✓</span><span class="aha-title" data-aha-title></span></div>
       <p class="aha-text" data-aha-text></p>
@@ -138,7 +135,7 @@ export function mountSidePanel(
   if (autoBtn) cards.appendChild(autoBtn);
   if (fitAllBtn) {
     fitAllBtn.classList.add("switch-row");
-    fitAllBtn.innerHTML = `<span class="switch-text"><span class="switch-title">Use every part of the track</span><span class="switch-sub">All parts stay in, each shortened or stretched in proportion to the original (whole 4-bar phrases). Works with Auto arrange.</span></span><span class="switch" aria-hidden="true"></span>`;
+    fitAllBtn.innerHTML = `<span class="switch-text"><span class="switch-title">Use every part of the track</span><span class="switch-sub">All parts stay in, each shortened or stretched in proportion to the original (whole 4-bar phrases).</span></span><span class="switch" aria-hidden="true"></span>`;
     cards.appendChild(fitAllBtn);
   }
   arrangeSwitch?.remove();
